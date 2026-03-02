@@ -1,137 +1,99 @@
-# Product: Portfolio-Orchestrated Product Coordination System
+# Product: Portfolio-Orchestrated Coordination System
 
-## Purpose
+## 1. Purpose
 
-Provide a structured, machine-readable coordination layer that supports:
+Provide a deterministic, machine-readable workflow system for:
 
 - Single-repo libraries
-- Monorepos
 - Multi-repo distributed systems
-- Multiple products under a portfolio
-- Multiple identity profiles (work/personal)
-- Optional coordination storage modes
+- Team-based feature coordination
+- Portfolio-level aggregation
+- Profile isolation (work/personal)
 
-The system separates:
+The system governs:
 
-- Planning (Backlog + Views)
-- Execution (Features)
-- Architecture constraints
-- Repository topology
-- Storage location
+- Backlog management
+- Delivery views (MVP, phase-1, etc.)
+- Feature lifecycle
+- Repository mapping
+- State validation
+- Archiving
 
-This product is not a code runtime system.
-It is a deterministic workflow layer.
+This product does not execute application runtime logic.
+It orchestrates planning and execution metadata.
 
 ---
 
-## Core Concepts
+## 2. Core Model
 
 ### Portfolio
-
-A personal aggregation layer referencing multiple products.
+Personal aggregation of multiple products.
 
 ### Product
-
-A deployable system consisting of one or more repositories.
-Products are the team boundary.
+Team-scoped deployable system consisting of one or more repositories.
 
 ### Profile
-
-Identity + repo resolution configuration (git identity, SSH, root paths).
+Identity configuration (git identity, SSH, repo roots).
 
 ### Coordination Root
+Filesystem location where coordination artifacts live.
 
-Location where coordination files live:
-
+Modes:
 - standalone
-- control-repo
 - primary-repo
+- control-repo
 
 ### Backlog
-
-Canonical pool of candidate work items.
+Stable, ID-based pool of candidate work.
 
 ### Views
-
-Projections of backlog items (MVP, phase-1, etc).
+Explicit projections of backlog items for delivery phases.
 
 ### Feature
-
-Execution unit derived from a backlog item.
+Execution unit derived from backlog.
 Single owner.
 Maps to one or more repositories.
 
 ---
 
-## Non-Goals (MVP Scope)
-
-- No adversarial agent workflow
-- No automated merge orchestration
-- No distributed transaction management
-- No UI
-- No mandatory external issue tracker
-
----
-
-## Functional Requirements (MVP)
-
-1. Define products and their repositories.
-2. Support coordination storage modes.
-3. Define backlog items (machine-readable).
-4. Define delivery views (MVP, phase-1, etc).
-5. Promote backlog item → feature.
-6. Assign feature owner.
-7. Map feature to repositories + branches.
-8. Track feature state transitions.
-9. Archive completed features.
-10. Enforce validation rules via CI.
-
----
-
-## Feature Lifecycle (MVP)
+## 3. Feature Lifecycle
 
 1. Backlog item created.
-2. Added to a delivery view.
+2. Item added to delivery view.
 3. Promoted to feature.
 4. Owner assigned.
-5. PLAN.md generated.
-6. Feature marked `in-progress`.
-7. Work implemented in mapped repos.
-8. All PRs merged.
-9. Feature marked `done`.
-10. Feature moved to archive.
+5. Plan generated.
+6. State → in-progress.
+7. Code changes across mapped repos.
+8. All branches merged.
+9. State → done.
+10. Archived.
 
 ---
 
-## Coordination Modes
+## 4. MVP Scope
 
-- standalone
-- control-repo
-- primary-repo
+MVP implements the inner loop:
 
-Mode is fixed per product.
+- Product configuration
+- Backlog system
+- View system
+- Feature promotion
+- Feature state machine
+- Branch mapping
+- CI validation
+- Archiving
 
----
-
-## Backlog and Views
-
-Backlog items are stable and ID-based.
-Views reference items by ID.
-Ordering is handled per view file.
-
----
-
-## Release Strategy (Post-MVP)
-
-Release manifests may group completed features.
-Not required in MVP.
+No adversarial agents.
+No automated branch orchestration.
+No cross-product dependencies.
 
 ---
 
-## Success Criteria (MVP)
+## 5. Success Criteria
 
-- Works for single-repo library.
-- Works for multi-repo distributed system.
+- Works for single and multi-repo products.
 - Prevents duplicate feature ownership.
-- Prevents ambiguous backlog ordering.
-- Deterministic and CI-validatable.
+- Deterministic state transitions.
+- CI-enforced invariants.
+- Portable coordination root.

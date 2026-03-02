@@ -1,144 +1,196 @@
-# Architecture: Coordination System
+# Architecture: Coordination System Implementation
 
-## System Model
+## 1. Technology Stack
 
-The system is a filesystem-based deterministic workflow layer.
-
-Everything is product-scoped.
-
-Portfolio references products.
-Products reference repositories.
-Features reference repositories.
-Backlog is independent of repo topology.
+- Language: F#
+- CLI parsing: Argu
+- Testing: xUnit v3
+- Terminal UI: Spectre.Console
+- CI: GitHub Actions
+- LLM Harness Target: OpenCode
 
 ---
 
-## Directory Structure
+## 2. Architectural Style
 
-.product/
-  PRODUCT.md
-  ARCHITECTURE.md
+Stratified design with strict dependency direction.
 
-  BACKLOG/
-    items/
-    views/
+Layers:
 
-  FEATURES/
-    active/
-    archive/
+1. Domain
+   - Product model
+   - Backlog model
+   - Feature model
+   - State machine
+   - Validation rules
 
-  RELEASES/ (post-MVP)
+2. Application
+   - Use cases (PromoteFeature, ArchiveFeature, ValidateProduct, etc.)
+   - Orchestrates domain operations
 
----
+3. Adapters
+   - Filesystem IO
+   - Git interaction
+   - YAML serialization
+   - Environment/profile resolution
 
-## Product Configuration Schema
+4. Interfaces
+   - CLI
+   - TUI
+   - MCP
+   - Server (future)
 
-product.yaml
-
-id: string
-type: single-repo | multi-repo
-profile: string
-repos:
-  - name: string
-    path: string
-coordination:
-  mode: standalone | control-repo | primary-repo
-  repo: string (required if primary-repo)
-  path: string
-
----
-
-## Backlog Item Schema
-
-id: string
-title: string
-type: feature | tech-debt | spike | refactor
-status: backlog | rejected
-priority: low | medium | high
-repos: [string]
-summary: string
-acceptance_criteria: [string]
-constraints: [string]
-dependencies: [string]
-created_at: date
+Dependency rule:
+Outer layers depend inward only.
+Domain has zero infrastructure dependencies.
 
 ---
 
-## View Schema
+## 3. Project Structure
 
-id: string
-description: string
-items:
-  - backlog_item_id
+Repository layout:
 
-Rules:
-- Items must exist.
-- No duplicates.
-- Optional exclusivity for delivery views.
+src/
+  cli/
+  tui/
+  mcp/
+  server/
+  commands/
+  adapters/
 
----
-
-## Feature Schema
-
-feature.yaml
-
-id: string
-derived_from: backlog_item_id
-state: planned | in-progress | done | archived
-owner: string
-repos: [string]
-branches:
-  repo_name: branch_name
-merge_status:
-  repo_name: not-started | open | merged
-
-Rules:
-- Single owner.
-- State transitions validated.
-- All merge_status must be merged before state=done.
+tests/
+  acceptance/
+  building/
+  communication/
 
 ---
 
-## State Transitions
+## 4. Project Responsibilities
 
-Backlog → Feature(planned)
-planned → in-progress
-in-progress → done (all repos merged)
-done → archived
+### cli
+Command-line entry point.
+Uses Argu.
+Invokes shared commands.
 
-Invalid transitions fail CI.
+### tui
+Interactive terminal interface.
+Uses Spectre.Console.
+Invokes shared commands.
+
+### mcp
+Machine control protocol surface.
+For LLM-driven automation.
+
+### server
+Optional HTTP orchestration surface.
+Not required in MVP but structured for extension.
+
+### commands (shared)
+Application layer.
+Contains use cases.
+Shared by CLI, TUI, MCP, Server.
+
+### adapters
+Infrastructure layer:
+- Filesystem
+- YAML serialization
+- Git integration
+- Profile resolution
+
+No domain logic allowed here.
 
 ---
 
-## CI Validation Rules (MVP)
+## 5. Shared Command Model
 
-- Unique backlog IDs.
-- Unique feature IDs.
-- View items must exist.
-- No feature and backlog share same ID simultaneously.
-- Single owner per feature.
-- Feature repos must exist in product config.
-- All branches defined.
+All entry points (CLI, TUI, MCP, Server) call the same command handlers.
+
+Command handler pattern:
+
+- Parse input
+- Load product context
+- Execute use case
+- Persist changes
+- Return result model
+
+No entry point contains business logic.
+
+---
+
+## 6. Test Strategy
+
+Three test strata:
+
+### 1. Acceptance Tests
+End-to-end behavior.
+Filesystem + real YAML.
+Validate feature lifecycle and state machine.
+These define system correctness.
+
+### 2. Building Tests
+Low-level, exploratory, disposable.
+Used while shaping domain model.
+May be removed.
+
+### 3. Communication Tests
+Document domain rules and invariants.
+Readable specifications.
+Example:
+- "Cannot mark feature done unless all repos merged."
+
+---
+
+## 7. Domain Model Constraints
+
+- Feature ID unique.
+- Backlog ID unique.
+- No ID exists in both backlog and active features.
+- Feature must have exactly one owner.
 - Valid state transitions only.
+- All feature repos must exist in product config.
+
+State transitions enforced inside domain layer.
 
 ---
 
-## Scaling Characteristics
+## 8. GitHub Actions (CI)
 
-Single-repo:
+CI pipeline:
 
-- One repo in product config.
+1. Build solution
+2. Run tests
+3. Validate sample product fixtures
+4. Enforce formatting
+5. Optionally validate coordination roots in repository
 
-Multi-repo:
-
-- Feature maps to multiple repos.
-- Branch mapping required per repo.
-
-Architecture does not change.
+No deployment pipeline required in MVP.
 
 ---
 
-## Migration Safety
+## 9. LLM Harness: OpenCode
 
-Coordination root is relocatable.
-Structure remains identical across modes.
+Primary automation surface targets OpenCode.
+
+Design implications:
+
+- Deterministic command outputs
+- Machine-readable responses
+- Explicit error types
+- No hidden side effects
+- Idempotent operations
+
+CLI commands must support structured output mode (JSON).
+
+---
+
+## 10. Extensibility
+
+Designed to support:
+
+- Adversarial planning agents (future phase)
+- Cross-product orchestration
+- Release manifests
+- Conflict detection
+
+These are layered as additional application services,
+not domain rewrites.
