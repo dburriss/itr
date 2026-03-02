@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Itr.Server</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Library.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\commands\Itr.Commands.fsproj" />
+    <ProjectReference Include="..\adapters\Itr.Adapters.fsproj" />
+  </ItemGroup>
+
+</Project>

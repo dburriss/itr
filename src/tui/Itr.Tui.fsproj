@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Itr.Tui</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console" Version="0.49.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\commands\Itr.Commands.fsproj" />
+    <ProjectReference Include="..\adapters\Itr.Adapters.fsproj" />
+  </ItemGroup>
+
+</Project>
