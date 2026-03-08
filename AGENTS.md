@@ -7,13 +7,26 @@
 - Keep answers concise
 - Break solutions into small incremental steps
 - Do one step at a time
+- Do not move to implementation unless I say the word "implement"
 
 ## Tech stack
 
 - .NET 10
-- C# / F#
-- Entity Framework Core
+- F#
 - xUnit for testing
+- GitHub Actions for CI
+- Spectre.Console for TUI
+- Argu for CLI parsing
+- OpenCode for LLM harness
+- YAML for human-manageable configuration
+- `simple-exec` for shell commands
+- `Testably.Abstractions` for testable filesystem and process interactions
+
+## Tooling
+
+- Mise for tooling dependencies, tasks, and secret management
+- [Worktrunk](https://worktrunk.dev/) for branch management
+- [Git AI](https://usegitai.com/) for AI-assisted commit tracking
 
 ## Build and test
 
