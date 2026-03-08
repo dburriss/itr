@@ -112,6 +112,7 @@ type PortfolioError =
 ```
 
 **Invariants enforced in domain:**
+
 - `ProductId` must match `[a-z0-9][a-z0-9\-]*` (slug pattern)
 - Profile names are case-insensitive for lookup but stored as-given
 - A `Portfolio` with no profiles is valid (empty state)
@@ -465,6 +466,7 @@ tests/acceptance/
 ```
 
 New `.fsproj` files:
+
 - `src/domain/Itr.Domain.fsproj` — no project references, no packages
 - `src/commands/Itr.Commands.fsproj` — add `<ProjectReference>` to `Itr.Domain`
 

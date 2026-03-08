@@ -7,9 +7,11 @@
 
   <ItemGroup>
     <Compile Include="Library.fs" />
+    <Compile Include="PortfolioAdapter.fs" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\domain\Itr.Domain.fsproj" />
     <ProjectReference Include="..\commands\Itr.Commands.fsproj" />
   </ItemGroup>
 

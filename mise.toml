@@ -1,3 +1,15 @@
 [tools]
 dotnet = "latest"
 "npm:@fission-ai/openspec" = "latest"
+
+[tasks.build]
+run = "dotnet build"
+description = "Build the project using dotnet build."
+
+[tasks.test]
+run = "dotnet test"
+description = "Run tests using dotnet test."
+
+[tasks.portfolio]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- portfolio --profile work --output json"
+description = "Run the portfolio command using dotnet run."
