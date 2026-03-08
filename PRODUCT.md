@@ -27,29 +27,37 @@ It orchestrates planning and execution metadata.
 ## 2. Core Model
 
 ### Portfolio
+
 Personal aggregation of multiple products.
 
 ### Product
+
 Team-scoped deployable system consisting of one or more repositories.
 
 ### Profile
+
 Identity configuration (git identity, SSH, repo roots).
 
 ### Coordination Root
+
 Filesystem location where coordination artifacts live.
 
 Modes:
+
 - standalone
 - primary-repo
 - control-repo
 
 ### Backlog
+
 Stable, ID-based pool of candidate work.
 
 ### Views
+
 Explicit projections of backlog items for delivery phases.
 
 ### Feature
+
 Execution unit derived from backlog.
 Single owner.
 Maps to one or more repositories.
