@@ -71,6 +71,7 @@ tests/
 Command-line entry point.
 Uses Argu.
 Invokes shared commands.
+Follow noun-verb command pattern (e.g. "backlog add", "product init").
 
 ### tui
 Interactive terminal interface.
