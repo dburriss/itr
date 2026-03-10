@@ -1,6 +1,6 @@
 # Config Files
 
-## portfolio.yaml
+## itr.json
 
 Defines the **portfolio root**, profiles, and registered products.
 
@@ -419,7 +419,7 @@ created_at: 2026-03-08
 ## Directory Layout (for context)
 
 ```
-portfolio.yaml
+itr.json
 
 products/
   billing-system/
@@ -444,7 +444,7 @@ products/
 
 | File           | Purpose                                 |
 | -------------- | --------------------------------------- |
-| portfolio.yaml | portfolio + profiles + product registry |
+| itr.json       | portfolio + profiles + product registry |
 | product.yaml   | product + repo configuration            |
 | backlog item   | planning artifact                       |
 | backlog view   | backlog projection                      |
