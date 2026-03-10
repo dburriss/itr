@@ -1,0 +1,24 @@
+id: backlog-view-create
+
+title: Create backlog views
+
+type: feature
+
+priority: medium
+
+repos:
+  - itr
+
+summary: >
+  Allow users to create named backlog views that group backlog items for delivery
+  planning.
+
+acceptance_criteria:
+  - A command creates a view YAML file with id, optional description, and items
+  - Duplicate view ids are rejected
+  - Empty views can be created
+
+dependencies:
+  - product-init
+
+created_at: 2026-03-10

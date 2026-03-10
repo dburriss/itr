@@ -1,0 +1,28 @@
+id: profile-selection
+
+title: Resolve the active profile consistently
+
+type: feature
+
+priority: high
+
+repos:
+  - itr
+
+summary: >
+  Standardize active profile selection so all commands resolve profiles the same
+  way across flags, environment, and persisted defaults.
+
+acceptance_criteria:
+  - Active profile precedence is --profile then ITR_PROFILE then default_profile
+  - Missing resolved profiles return a clear error
+  - Behavior is covered by acceptance and domain-facing tests
+
+constraints:
+  - Do not persist a current_profile setting
+  - Do not write to shell environment configuration
+
+dependencies:
+  - settings-bootstrap
+
+created_at: 2026-03-10

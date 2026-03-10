@@ -1,0 +1,27 @@
+id: product-register
+
+title: Register an existing product in itr settings
+
+type: feature
+
+priority: high
+
+repos:
+  - itr
+
+summary: >
+  Add an existing product to itr.json so itr can locate and manage it under a
+  selected profile.
+
+acceptance_criteria:
+  - A command registers an existing product path in itr.json
+  - Registration can target the active profile or an explicitly chosen profile
+  - Product ids are validated and duplicates are rejected
+  - Registration does not require creating product files on disk
+
+dependencies:
+  - settings-bootstrap
+  - profile-add
+  - profile-selection
+
+created_at: 2026-03-10

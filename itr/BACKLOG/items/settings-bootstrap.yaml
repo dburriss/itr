@@ -1,0 +1,26 @@
+id: settings-bootstrap
+
+title: Bootstrap itr.json when settings are missing
+
+type: feature
+
+priority: high
+
+repos:
+  - itr
+
+summary: >
+  Ensure itr can start from a clean machine by creating a default itr.json
+  automatically when a command needs settings and the file does not yet exist.
+
+acceptance_criteria:
+  - Commands that require settings create a default itr.json if it is missing
+  - Default settings file is written to the resolved itr config location
+  - Bootstrap behavior is idempotent and does not overwrite an existing file
+  - Structured errors are returned when bootstrap cannot write the file
+
+constraints:
+  - Use itr.json rather than portfolio.json
+  - Do not mutate shell profiles or environment files
+
+created_at: 2026-03-10

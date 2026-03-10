@@ -1,0 +1,31 @@
+id: product-init
+
+title: Initialize a new product interactively
+
+type: feature
+
+priority: high
+
+repos:
+  - itr
+
+summary: >
+  Provide an interactive product initialization flow that creates product
+  structure, starter docs, and optionally registers the product in itr settings.
+
+acceptance_criteria:
+  - An init flow creates product.yaml and coordination directories
+  - Init creates starter PRODUCT.md and ARCHITECTURE.md content
+  - Init asks whether to register the product with the active profile or another profile
+  - Init can skip registration when requested
+
+constraints:
+  - Keep interactive prompts deterministic and reviewable
+
+dependencies:
+  - settings-bootstrap
+  - profile-add
+  - profile-selection
+  - product-register
+
+created_at: 2026-03-10

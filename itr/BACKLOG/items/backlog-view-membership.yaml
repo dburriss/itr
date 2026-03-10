@@ -1,0 +1,26 @@
+id: backlog-view-membership
+
+title: Move backlog items between views
+
+type: feature
+
+priority: medium
+
+repos:
+  - itr
+
+summary: >
+  Manage backlog item membership in views while enforcing the rule that an item
+  can belong to at most one view at a time.
+
+acceptance_criteria:
+  - A command adds an item to a target view
+  - If the item is already in another view it is removed from that view
+  - A clear error is returned when the item or view does not exist
+  - Moving an item does not modify the backlog item file itself
+
+dependencies:
+  - backlog-item-create
+  - backlog-view-create
+
+created_at: 2026-03-10

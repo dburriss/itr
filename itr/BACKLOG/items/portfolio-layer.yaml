@@ -1,0 +1,29 @@
+id: portfolio-layer
+
+title: Introduce the portfolio layer
+
+type: feature
+
+priority: high
+
+repos:
+  - itr
+
+summary: >
+  Add a shared portfolio layer so itr can load portfolio configuration, resolve the
+  active profile, and locate product coordination roots consistently across CLI,
+  TUI, MCP, and server entry points.
+
+acceptance_criteria:
+  - itr loads portfolio configuration from the resolved portfolio config path
+  - Active profile selection follows --profile then ITR_PROFILE then configured default
+  - Product resolution returns the expected .itr coordination root for standalone, primary-repo, and control-repo modes
+  - Invalid config, missing profiles, missing products, and missing coordination roots return clear structured errors
+  - Shared portfolio resolution logic is covered by communication and acceptance tests
+
+constraints:
+  - Keep portfolio domain and command logic free of direct I/O
+  - Resolve the portfolio config path from ITR_HOME or the default user config location
+  - Ignore unknown config fields for forward compatibility
+
+created_at: 2026-03-10

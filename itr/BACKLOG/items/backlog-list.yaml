@@ -1,0 +1,27 @@
+id: backlog-list
+
+title: List backlog items with optional view filtering
+
+type: feature
+
+priority: medium
+
+repos:
+  - itr
+
+summary: >
+  Provide a listing command for backlog items with optional filtering by view so
+  users can inspect planned work quickly.
+
+acceptance_criteria:
+  - A command lists all backlog items for a product
+  - The list can be filtered by a specific view
+  - Items not assigned to a view can still be listed
+  - Output supports human-readable and structured modes
+
+dependencies:
+  - backlog-item-create
+  - backlog-view-create
+  - backlog-view-membership
+
+created_at: 2026-03-10
