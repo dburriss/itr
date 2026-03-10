@@ -97,6 +97,10 @@ id: string
 
 profile: profile-id (optional)
 
+docs:
+  product: path (optional)
+  architecture: path (optional)
+
 repos:
   <repo-id>:
     path: path
@@ -124,6 +128,34 @@ Must match the portfolio registration.
 #### profile
 
 Optional override of portfolio profile.
+
+---
+
+#### docs
+
+Optional references to product-level documentation files.
+
+#### docs.product
+
+Path to the primary product definition document.
+
+Usually:
+
+```
+PRODUCT.md
+```
+
+---
+
+#### docs.architecture
+
+Path to the system architecture document.
+
+Usually:
+
+```
+ARCHITECTURE.md
+```
 
 ---
 
@@ -205,6 +237,10 @@ Usually:
 id: billing-system
 
 profile: work
+
+docs:
+  product: PRODUCT.md
+  architecture: ARCHITECTURE.md
 
 repos:
   billing-api:
