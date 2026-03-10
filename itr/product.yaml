@@ -1,0 +1,13 @@
+id: itr
+
+profile: personal
+
+repos:
+  itr:
+    path: ../
+    url: git@github.com:dburriss/itr.git
+
+coordination:
+  mode: primary-repo
+  repo: itr
+  path: itr/
