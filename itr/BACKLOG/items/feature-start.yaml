@@ -1,0 +1,25 @@
+id: feature-start
+
+title: Start implementing a feature
+
+type: feature
+
+priority: high
+
+repos:
+  - itr
+
+summary: >
+  Allow users to move a feature into active implementation once planning is complete
+  and approved.
+
+acceptance_criteria:
+  - A command transitions a feature from planned to in-progress
+  - Starting a feature requires an approved plan
+  - The feature state transition is recorded in feature coordination data
+  - Invalid transitions return clear structured errors
+
+dependencies:
+  - feature-plan-approval
+
+created_at: 2026-03-10

@@ -1,0 +1,28 @@
+id: feature-promotion
+
+title: Promote backlog items into features
+
+type: feature
+
+priority: high
+
+repos:
+  - itr
+
+summary: >
+  Allow users to promote a backlog item into a feature so simple one-to-one work can
+  start immediately while still supporting multiple features derived from the same
+  backlog item over time.
+
+acceptance_criteria:
+  - A command creates a feature coordination directory and feature.yaml from a backlog item
+  - A promoted feature records its source backlog item and a unique feature id
+  - A backlog item can be promoted more than once to create multiple features
+  - If a backlog item maps to a single repo with no existing child features the backlog id can be used as the default feature id
+  - Promotion validates that the selected repo exists in product.yaml
+
+dependencies:
+  - product-init
+  - backlog-item-create
+
+created_at: 2026-03-10

@@ -1,0 +1,25 @@
+id: feature-plan
+
+title: Generate a plan for a feature
+
+type: feature
+
+priority: high
+
+repos:
+  - itr
+
+summary: >
+  Allow users to generate a plan artifact for a feature so planning happens per
+  execution slice and a feature becomes planned when it has a plan.
+
+acceptance_criteria:
+  - A command generates a plan artifact such as plan.md inside a feature directory
+  - A feature is considered planned when its plan artifact exists
+  - The generated plan references the source backlog item and the feature's scoped repo work
+  - Re-running planning updates the plan artifact without losing feature identity metadata
+
+dependencies:
+  - feature-promotion
+
+created_at: 2026-03-10

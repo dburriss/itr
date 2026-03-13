@@ -1,0 +1,25 @@
+id: feature-list
+
+title: List features with lifecycle status
+
+type: feature
+
+priority: high
+
+repos:
+  - itr
+
+summary: >
+  Provide a listing command for features so users can see active execution work,
+  lifecycle state, and planning readiness across a product.
+
+acceptance_criteria:
+  - A command lists all active features for a product
+  - Output includes feature id, source backlog item, repo, state, and plan approval status
+  - Output supports human-readable and structured modes
+  - The list can be filtered by backlog item, repo, or lifecycle state
+
+dependencies:
+  - feature-promotion
+
+created_at: 2026-03-10

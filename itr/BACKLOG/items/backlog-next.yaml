@@ -1,0 +1,29 @@
+id: backlog-next
+
+title: Pull the next unfinished backlog item from a view
+
+type: feature
+
+priority: high
+
+repos:
+  - itr
+
+summary: >
+  Provide a command that pulls the next unfinished backlog item from a backlog view
+  so teams can work through a delivery queue in order and remove selected items from
+  the active view.
+
+acceptance_criteria:
+  - A command selects the next unfinished backlog item from a specified backlog view
+  - The selected item is removed from that backlog view when it is pulled
+  - Items already considered done are skipped when selecting the next item
+  - The result explains why the item was chosen and why other items were skipped
+  - Output supports human-readable and structured modes
+
+dependencies:
+  - backlog-item-create
+  - backlog-view-membership
+  - feature-done
+
+created_at: 2026-03-10
