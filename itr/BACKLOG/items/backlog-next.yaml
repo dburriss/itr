@@ -11,19 +11,15 @@ repos:
 
 summary: >
   Provide a command that pulls the next unfinished backlog item from a backlog view
-  so teams can work through a delivery queue in order and remove selected items from
-  the active view.
+  so teams can work through a delivery queue in order.
 
 acceptance_criteria:
-  - A command selects the next unfinished backlog item from a specified backlog view
-  - The selected item is removed from that backlog view when it is pulled
-  - Items already considered done are skipped when selecting the next item
-  - The result explains why the item was chosen and why other items were skipped
+  - A command selects the next item from a specified backlog view where not all linked features are archived
+  - Items with no linked features are not considered done and are eligible for selection
+  - Items where all linked features are archived are skipped
   - Output supports human-readable and structured modes
+  - A verbose flag enables explanation of why the item was chosen and why others were skipped
 
-dependencies:
-  - backlog-item-create
-  - backlog-view-membership
-  - feature-done
+dependencies: []
 
 created_at: 2026-03-10
