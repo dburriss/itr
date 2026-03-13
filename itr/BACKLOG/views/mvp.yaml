@@ -1,0 +1,14 @@
+id: mvp
+
+description: Initial feature workflow for promoting, planning, executing, and archiving work.
+
+items:
+  - backlog-next
+  - feature-promotion
+  - feature-list
+  - feature-info
+  - feature-plan
+  - feature-plan-approval
+  - feature-start
+  - feature-done
+  - feature-archive
