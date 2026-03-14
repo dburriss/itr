@@ -368,7 +368,7 @@ items:
 Location:
 
 ```
-.itr/TASKS/<task-id>/tasks.yaml
+.itr/TASKS/<backlog-id>/<task-id>-task.yaml
 ```
 
 Schema:
@@ -385,8 +385,9 @@ state: planning | planned | approved | in-progress | implemented | validated | a
 
 created_at: date
 updated_at: date (optional)
----
-# another task
+
+depends_on:
+  - task-id (optional)
 ```
 
 ---
