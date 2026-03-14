@@ -57,7 +57,22 @@ A task is created when a backlog item is taken with `backlog take`. Each task is
 | `implemented` | `task validate` | `validated` | Completion checks must pass |
 | `validated` | `task archive` | `archived` | Task state must be `validated` |
 
-### Diagram
+### Diagrams
+
+**Backlog item state** (calculated from tasks):
+
+```mermaid
+stateDiagram-v2
+    [*] --> unstarted : item created
+
+    unstarted --> in_progress : backlog take
+    in_progress --> in_progress : backlog take
+    in_progress --> done : all tasks archived
+
+    in_progress : in-progress
+```
+
+**Task state** (stored in task.yaml):
 
 ```mermaid
 stateDiagram-v2

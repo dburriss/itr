@@ -368,7 +368,7 @@ items:
 Location:
 
 ```
-.itr/TASKS/<task-id>/task.yaml
+.itr/TASKS/<task-id>/tasks.yaml
 ```
 
 Schema:
@@ -385,11 +385,13 @@ state: planning | planned | approved | in-progress | implemented | validated | a
 
 created_at: date
 updated_at: date (optional)
+---
+# another task
 ```
 
 ---
 
-### Example: task.yaml
+### Example: tasks.yaml
 
 ```yaml
 id: invoice-retry
@@ -438,6 +440,6 @@ products/
 | product.yaml   | product + repo configuration            |
 | backlog item   | planning artifact                       |
 | backlog view   | backlog projection                      |
-| task.yaml      | execution coordination                  |
+| tasks.yaml     | execution coordination                  |
 
 ---
