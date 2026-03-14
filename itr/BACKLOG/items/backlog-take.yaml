@@ -12,16 +12,16 @@ repos:
 summary: >
   Allow users to take a backlog item and begin work on it by creating one task per
   repo listed on the item. Each task is scoped to exactly one repo and starts in
-  the planning state. For single-repo items, the backlog id is used as the default
-  task id.
+  the planning state. The backlog id is used as the default task id.
 
 acceptance_criteria:
   - A command creates one task per repo listed on the backlog item
+  - Task ids are unique within the backlog backlog item and repo
   - Each created task records its source backlog item, a unique task id, and a single repo
   - Each created task starts in the planning state (no plan artifact yet)
   - For a single-repo item with no existing tasks the backlog id is used as the default task id
   - Taking validates that all repos listed on the item exist in product.yaml
-  - Taking the same backlog item more than once is supported (creates additional tasks)
+  - Taking the same backlog item more than once is supported (creates additional tasks to break the backlog item into smaller pieces)
 
 dependencies:
   - product-init
