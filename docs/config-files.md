@@ -357,18 +357,18 @@ description: Initial product capability
 items:
   - product-config
   - backlog-system
-  - feature-promotion
-  - feature-state-machine
+  - task-promotion
+  - task-state-machine
 ```
 
 ---
 
-## feature.yaml
+## task.yaml
 
 Location:
 
 ```
-.product/FEATURES/active/<feature-id>/feature.yaml
+.itr/TASKS/active/<task-id>/task.yaml
 ```
 
 Schema:
@@ -379,13 +379,9 @@ id: string
 source:
   backlog: backlog-id
 
-state: planned | in-progress | done
+repo: repo-id
 
-repos:
-  - repo-id
-
-repo_status:
-  <repo-id>: not-started | in-progress | complete
+state: requested | planned | approved | in-progress | implemented | validated | archived
 
 created_at: date
 updated_at: date (optional)
@@ -393,7 +389,7 @@ updated_at: date (optional)
 
 ---
 
-### Example: feature.yaml
+### Example: task.yaml
 
 ```yaml
 id: invoice-retry
@@ -401,15 +397,9 @@ id: invoice-retry
 source:
   backlog: invoice-retry
 
+repo: billing-api
+
 state: in-progress
-
-repos:
-  - billing-api
-  - billing-worker
-
-repo_status:
-  billing-api: complete
-  billing-worker: in-progress
 
 created_at: 2026-03-08
 ```
@@ -428,12 +418,12 @@ products/
     billing-api/
     billing-worker/
 
-    .product/
+    .itr/
       BACKLOG/
         items/
         views/
 
-      FEATURES/
+      TASKS/
         active/
         archive/
 ```
@@ -448,6 +438,6 @@ products/
 | product.yaml   | product + repo configuration            |
 | backlog item   | planning artifact                       |
 | backlog view   | backlog projection                      |
-| feature.yaml   | execution coordination                  |
+| task.yaml      | execution coordination                  |
 
 ---

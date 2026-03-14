@@ -1,0 +1,25 @@
+id: task-start
+
+title: Start implementing a task
+
+type: feature
+
+priority: high
+
+repos:
+  - itr
+
+summary: >
+  Allow users to move a task into active implementation once planning is complete
+  and approved. Starting a task triggers the agent to begin work on the scoped repo.
+
+acceptance_criteria:
+  - A command transitions a task from approved to in-progress
+  - Starting a task requires an approved plan
+  - The task state transition is recorded in task coordination data
+  - Invalid transitions return clear structured errors
+
+dependencies:
+  - task-plan-approval
+
+created_at: 2026-03-10

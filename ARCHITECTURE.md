@@ -20,7 +20,7 @@ Layers:
 1. Domain
    - Product model
    - Backlog model
-   - Feature model
+   - Task model
    - State machine
    - Validation rules
 
@@ -125,7 +125,7 @@ Three test strata:
 ### 1. Acceptance Tests
 End-to-end behavior.
 Filesystem + real YAML.
-Validate feature lifecycle and state machine.
+Validate task lifecycle and state machine.
 These define system correctness.
 
 ### 2. Building Tests
@@ -137,7 +137,7 @@ May be removed.
 Document domain rules and invariants.
 Readable specifications.
 Example:
-- "Cannot mark feature done unless all repos merged."
+- "Cannot mark task implemented unless branch is merged."
 
 ---
 
@@ -145,10 +145,10 @@ Example:
 
 - Feature ID unique.
 - Backlog ID unique.
-- No ID exists in both backlog and active features.
+- No ID exists in both backlog and active tasks.
 - Feature must have exactly one owner.
 - Valid state transitions only.
-- All feature repos must exist in product config.
+- All task repos must exist in product config.
 
 State transitions enforced inside domain layer.
 

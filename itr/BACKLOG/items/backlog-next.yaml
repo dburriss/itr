@@ -14,9 +14,9 @@ summary: >
   so teams can work through a delivery queue in order.
 
 acceptance_criteria:
-  - A command selects the next item from a specified backlog view where not all linked features are archived
-  - Items with no linked features are not considered done and are eligible for selection
-  - Items where all linked features are archived are skipped
+  - A command selects the next item from a specified backlog view where not all linked tasks are archived
+  - Items with no linked tasks are not considered done and are eligible for selection
+  - Items where all linked tasks are archived are skipped
   - Output supports human-readable and structured modes
   - A verbose flag enables explanation of why the item was chosen and why others were skipped
 

@@ -1,0 +1,25 @@
+id: task-archive
+
+title: Archive completed tasks
+
+type: feature
+
+priority: high
+
+repos:
+  - itr
+
+summary: >
+  Allow users to archive validated tasks so active work stays focused while the
+  execution history remains available for traceability.
+
+acceptance_criteria:
+  - A command moves a validated task from TASKS/active to TASKS/archive
+  - Archiving is rejected when a task is not yet validated
+  - Archived task metadata remains readable after the move
+  - Archive operations preserve the task's source backlog traceability
+
+dependencies:
+  - task-validate
+
+created_at: 2026-03-10

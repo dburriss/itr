@@ -1,0 +1,24 @@
+id: task-done
+
+title: Mark a task as implemented
+
+type: feature
+
+priority: high
+
+repos:
+  - itr
+
+summary: >
+  Allow users to mark a task as implemented when dev work in the scoped repo is
+  complete.
+
+acceptance_criteria:
+  - A command transitions a task from in-progress to implemented
+  - Implemented status is visible in task list and task detail output
+  - Invalid transitions return clear structured errors
+
+dependencies:
+  - task-start
+
+created_at: 2026-03-10

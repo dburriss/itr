@@ -1,0 +1,25 @@
+id: task-plan-approval
+
+title: Approve a task plan
+
+type: feature
+
+priority: high
+
+repos:
+  - itr
+
+summary: >
+  Allow users to explicitly approve a task plan so planning has a clear handoff
+  before implementation begins.
+
+acceptance_criteria:
+  - A command marks an existing task plan as approved
+  - Approval metadata is recorded in task coordination data
+  - Approval is rejected when a task does not yet have a plan artifact
+  - Approved status is visible in task list and task detail output
+
+dependencies:
+  - task-plan
+
+created_at: 2026-03-10

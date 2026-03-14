@@ -6,7 +6,7 @@ Provide a deterministic, machine-readable workflow system for:
 
 - Single-repo libraries
 - Multi-repo distributed systems
-- Team-based feature coordination
+- Team-based task coordination
 - Portfolio-level aggregation
 - Profile isolation (work/personal)
 
@@ -56,26 +56,29 @@ Stable, ID-based pool of candidate work.
 
 Explicit projections of backlog items for delivery phases.
 
-### Feature
+### Task
 
 Execution unit derived from backlog.
 Single owner.
-Maps to one or more repositories.
+Maps to exactly one repository.
+A backlog item may produce one or more tasks (via promotion or split).
 
 ---
 
-## 3. Feature Lifecycle
+## 3. Task Lifecycle
 
 1. Backlog item created.
 2. Item added to delivery view.
-3. Promoted to feature.
+3. Promoted to task (one task per repo).
 4. Owner assigned.
 5. Plan generated.
-6. State → in-progress.
-7. Code changes across mapped repos.
-8. All branches merged.
-9. State → done.
-10. Archived.
+6. Plan approved.
+7. State → in-progress.
+8. Code changes in mapped repo.
+9. Branch merged.
+10. State → implemented.
+11. State → validated.
+12. Archived.
 
 ---
 
@@ -86,8 +89,8 @@ MVP implements the inner loop:
 - Product configuration
 - Backlog system
 - View system
-- Feature promotion
-- Feature state machine
+- Task promotion
+- Task state machine
 - Branch mapping
 - CI validation
 - Archiving
@@ -101,7 +104,7 @@ No cross-product dependencies.
 ## 5. Success Criteria
 
 - Works for single and multi-repo products.
-- Prevents duplicate feature ownership.
+- Prevents duplicate task ownership.
 - Deterministic state transitions.
 - CI-enforced invariants.
 - Portable coordination root.
