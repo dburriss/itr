@@ -368,7 +368,7 @@ items:
 Location:
 
 ```
-.itr/TASKS/active/<task-id>/task.yaml
+.itr/TASKS/<task-id>/task.yaml
 ```
 
 Schema:
@@ -381,7 +381,7 @@ source:
 
 repo: repo-id
 
-state: requested | planned | approved | in-progress | implemented | validated | archived
+state: planning | planned | approved | in-progress | implemented | validated | archived
 
 created_at: date
 updated_at: date (optional)

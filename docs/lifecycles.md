@@ -4,16 +4,39 @@ Developer reference for the state machines and setup sequences in `itr`.
 
 ---
 
-## 1. Task Lifecycle
+## 1. Backlog Item Lifecycle
 
-A backlog item can be promoted into one or more tasks. Each task is scoped to exactly one repo. When a backlog item spans multiple repos, use `task split` to create one task per repo.
+Backlog item state is **calculated** — no state field is stored in the item's YAML. State is derived from the tasks linked to the item.
 
 ### States
 
 | State | Meaning |
 |---|---|
-| `requested` | Candidate work in the backlog. No commitment or planning yet. |
-| `planned` | Promoted to a task. A plan artifact exists inside the task directory. |
+| `unstarted` | No tasks exist for this backlog item. |
+| `in-progress` | At least one task exists and not all tasks are archived. |
+| `done` | All linked tasks are archived. |
+
+### How state is derived
+
+```
+tasks for item = []           → unstarted
+tasks for item = [...] AND
+  any task NOT archived       → in-progress
+all tasks archived            → done
+```
+
+---
+
+## 2. Task Lifecycle
+
+A task is created when a backlog item is taken with `backlog take`. Each task is scoped to exactly one repo. A backlog item with multiple repos produces one task per repo.
+
+### States
+
+| State | Meaning |
+|---|---|
+| `planning` | Task created, no plan artifact exists yet. |
+| `planned` | A plan artifact exists. Re-runnable — `task plan` updates the plan without changing state. |
 | `approved` | Plan has been explicitly signed off. Ready to begin implementation. |
 | `in-progress` | Active implementation underway in the scoped repo. |
 | `implemented` | Dev work complete. Branch exists and work is done. |
@@ -24,8 +47,10 @@ A backlog item can be promoted into one or more tasks. Each task is scoped to ex
 
 | From | Command | To | Guard |
 |---|---|---|---|
-| `requested` | `task promote` | `planned` | Scoped repo exists in product config |
-| `planned` | `task plan` | `planned` | Re-runnable. Creates or updates the plan artifact. |
+| _(backlog item taken)_ | `backlog take` | `planning` | Repos exist in product config |
+| `planning` or `planned` | `task split` | _(replaced by new tasks)_ | Task not yet approved |
+| `planning` | `task plan` | `planned` | — |
+| `planned` | `task plan` | `planned` | Re-runnable. Creates or updates plan artifact. |
 | `planned` | `task approve` | `approved` | Plan artifact must exist |
 | `approved` | `task start` | `in-progress` | — |
 | `in-progress` | `task done` | `implemented` | — |
@@ -36,9 +61,10 @@ A backlog item can be promoted into one or more tasks. Each task is scoped to ex
 
 ```mermaid
 stateDiagram-v2
-    [*] --> requested : backlog item created
+    [*] --> planning : backlog take
 
-    requested --> planned : task promote
+    planning --> planning : task split
+    planning --> planned : task plan
     planned --> planned : task plan
     planned --> approved : task approve
     approved --> in_progress : task start
@@ -53,7 +79,7 @@ stateDiagram-v2
 
 ---
 
-## 2. Portfolio and Product Setup
+## 3. Portfolio and Product Setup
 
 This is a setup sequence, not a state machine. The commands below initialise the system from nothing to a fully resolved product context.
 

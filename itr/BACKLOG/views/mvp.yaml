@@ -1,10 +1,10 @@
 id: mvp
 
-description: Initial task workflow for promoting, planning, executing, and archiving work.
+description: Initial task workflow for taking, planning, executing, and archiving work.
 
 items:
   - backlog-next
-  - task-promotion
+  - backlog-take
   - task-split
   - task-list
   - task-info
