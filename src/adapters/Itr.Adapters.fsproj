@@ -8,10 +8,15 @@
   <ItemGroup>
     <Compile Include="Library.fs" />
     <Compile Include="PortfolioAdapter.fs" />
+    <Compile Include="YamlAdapter.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\domain\Itr.Domain.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
 
 </Project>

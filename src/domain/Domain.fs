@@ -123,3 +123,80 @@ module Portfolio =
                 Some profile
             else
                 None)
+
+// ---------------------------------------------------------------------------
+// Backlog / Task domain types
+// ---------------------------------------------------------------------------
+
+type BacklogId = private BacklogId of string
+
+type TaskId = private TaskId of string
+
+type RepoId = RepoId of string
+
+type TaskState =
+    | Planning
+    | InProgress
+    | Implemented
+    | Validated
+
+type BacklogItem =
+    { Id: BacklogId
+      Title: string
+      Repos: RepoId list }
+
+type ItrTask =
+    { Id: TaskId
+      SourceBacklog: BacklogId
+      Repo: RepoId
+      State: TaskState
+      CreatedAt: System.DateOnly }
+
+type RepoConfig = { Path: string; Url: string option }
+
+type ProductConfig =
+    { Id: ProductId
+      Repos: Map<RepoId, RepoConfig> }
+
+type TakeError =
+    | ProductConfigNotFound of coordRoot: string
+    | ProductConfigParseError of path: string * message: string
+    | BacklogItemNotFound of BacklogId
+    | RepoNotInProduct of RepoId
+    | TaskIdConflict of TaskId
+    | TaskIdOverrideRequiresSingleRepo
+
+[<RequireQualifiedAccess>]
+module BacklogId =
+    let private slugRegex = Regex("^[a-z0-9][a-z0-9-]*$", RegexOptions.Compiled)
+    let private rules = "must match [a-z0-9][a-z0-9-]*"
+
+    let tryCreate (value: string) : Result<BacklogId, TakeError> =
+        if System.String.IsNullOrWhiteSpace(value) then
+            Error(BacklogItemNotFound(BacklogId value))
+        elif slugRegex.IsMatch(value) then
+            Ok(BacklogId value)
+        else
+            Error(BacklogItemNotFound(BacklogId value))
+
+    let value (BacklogId v) = v
+
+[<RequireQualifiedAccess>]
+module TaskId =
+    let private slugRegex = Regex("^[a-z0-9][a-z0-9-]*$", RegexOptions.Compiled)
+
+    let tryCreate (value: string) : Result<TaskId, TakeError> =
+        if System.String.IsNullOrWhiteSpace(value) then
+            Error(TaskIdConflict(TaskId value))
+        elif slugRegex.IsMatch(value) then
+            Ok(TaskId value)
+        else
+            Error(TaskIdConflict(TaskId value))
+
+    let create (value: string) : TaskId = TaskId value
+
+    let value (TaskId v) = v
+
+[<RequireQualifiedAccess>]
+module RepoId =
+    let value (RepoId v) = v

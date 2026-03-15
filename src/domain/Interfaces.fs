@@ -44,3 +44,20 @@ type IGitService =
     abstract CurrentBranch: unit -> string
     /// Check if a branch has been merged to main/master
     abstract IsBranchMerged: branch: string -> bool
+
+/// Capability interface for loading product configuration from product.yaml
+type IProductConfig =
+    /// Load product config from <coordRoot>/product.yaml
+    abstract LoadProductConfig: coordRoot: string -> Result<ProductConfig, TakeError>
+
+/// Capability interface for loading backlog items
+type IBacklogStore =
+    /// Load a backlog item from <coordRoot>/BACKLOG/items/<backlog-id>.yaml
+    abstract LoadBacklogItem: coordRoot: string -> backlogId: BacklogId -> Result<BacklogItem, TakeError>
+
+/// Capability interface for reading and writing task files
+type ITaskStore =
+    /// List all tasks for a given backlog id from <coordRoot>/TASKS/<backlog-id>/
+    abstract ListTasks: coordRoot: string -> backlogId: BacklogId -> Result<ItrTask list, TakeError>
+    /// Write a task file to <coordRoot>/TASKS/<backlog-id>/<task-id>-task.yaml
+    abstract WriteTask: coordRoot: string -> task: ItrTask -> Result<unit, TakeError>

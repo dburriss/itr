@@ -7,6 +7,7 @@
 
   <ItemGroup>
     <Compile Include="Portfolio/PortfolioUsecase.fs" />
+    <Compile Include="Task/TaskUsecase.fs" />
   </ItemGroup>
 
   <ItemGroup>

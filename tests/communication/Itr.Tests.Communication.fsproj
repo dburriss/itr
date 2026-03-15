@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <Compile Include="PortfolioDomainTests.fs" />
+    <Compile Include="TaskDomainTests.fs" />
     <Compile Include="Tests.fs" />
   </ItemGroup>
 
