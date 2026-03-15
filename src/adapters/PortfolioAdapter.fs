@@ -8,16 +8,6 @@ open System.Text.RegularExpressions
 open System.Collections.Generic
 open Itr.Domain
 
-module Env =
-    let readVar (name: string) : string option =
-        match Environment.GetEnvironmentVariable(name) with
-        | null -> None
-        | value when String.IsNullOrWhiteSpace(value) -> None
-        | value -> Some value
-
-module Fs =
-    let dirExists (path: string) : bool = Directory.Exists(path)
-
 [<CLIMutable>]
 type ProductRefDto =
     { id: string
@@ -77,8 +67,6 @@ type CoordinationRootConfigConverter() =
 
         writer.WriteEndObject()
 
-let private homeDir () = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
-
 let private expandUnixEnvVars (value: string) =
     let replaceToken (matchValue: Match) =
         let name =
@@ -93,35 +81,33 @@ let private expandUnixEnvVars (value: string) =
 
     Regex.Replace(value, "\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)", MatchEvaluator replaceToken)
 
-let expandPath (value: string) : string =
+let expandPath (homeDir: string) (value: string) : string =
     if String.IsNullOrWhiteSpace(value) then
         value
     else
         let expandedHome =
-            if value = "~" then homeDir ()
-            elif value.StartsWith("~/", StringComparison.Ordinal) then Path.Combine(homeDir (), value.Substring(2))
-            else value
+            if value = "~" then
+                homeDir
+            elif value.StartsWith("~/", StringComparison.Ordinal) then
+                Path.Combine(homeDir, value.Substring(2))
+            else
+                value
 
         expandedHome |> expandUnixEnvVars |> Environment.ExpandEnvironmentVariables
 
-let configPath () : string =
-    match Env.readVar "ITR_HOME" with
-    | Some itrHome -> Path.Combine(expandPath itrHome, "portfolio.json")
-    | None -> Path.Combine(homeDir (), ".config", "itr", "portfolio.json")
-
-let private normalizeCoordRootPath rootConfig =
+let private normalizeCoordRootPath homeDir rootConfig =
     match rootConfig with
-    | StandaloneConfig dir -> StandaloneConfig(expandPath dir)
-    | PrimaryRepoConfig repoDir -> PrimaryRepoConfig(expandPath repoDir)
-    | ControlRepoConfig repoDir -> ControlRepoConfig(expandPath repoDir)
+    | StandaloneConfig dir -> StandaloneConfig(expandPath homeDir dir)
+    | PrimaryRepoConfig repoDir -> PrimaryRepoConfig(expandPath homeDir repoDir)
+    | ControlRepoConfig repoDir -> ControlRepoConfig(expandPath homeDir repoDir)
 
-let private mapProduct (dto: ProductRefDto) =
+let private mapProduct homeDir (dto: ProductRefDto) =
     ProductId.tryCreate dto.id
     |> Result.map (fun productId ->
         { Id = productId
-          Root = normalizeCoordRootPath dto.root })
+          Root = normalizeCoordRootPath homeDir dto.root })
 
-let private mapProfile (name: string) (dto: ProfileDto) =
+let private mapProfile homeDir (name: string) (dto: ProfileDto) =
     let products = if isNull dto.products then [||] else dto.products
 
     products
@@ -129,15 +115,14 @@ let private mapProfile (name: string) (dto: ProfileDto) =
     |> List.fold
         (fun state productDto ->
             state
-            |> Result.bind (fun acc ->
-                mapProduct productDto |> Result.map (fun product -> product :: acc)))
+            |> Result.bind (fun acc -> mapProduct homeDir productDto |> Result.map (fun product -> product :: acc)))
         (Ok [])
     |> Result.map (fun products ->
         { Name = ProfileName.create name
           Products = List.rev products
           GitIdentity = dto.gitIdentity })
 
-let private mapPortfolio (dto: PortfolioDto) =
+let private mapPortfolio homeDir (dto: PortfolioDto) =
     if isNull dto.profiles then
         Error(ConfigParseError("<memory>", "Missing required object 'profiles'."))
     else
@@ -147,14 +132,15 @@ let private mapPortfolio (dto: PortfolioDto) =
             (fun state kvp ->
                 state
                 |> Result.bind (fun acc ->
-                    mapProfile kvp.Key kvp.Value |> Result.map (fun profile -> profile :: acc)))
+                    mapProfile homeDir kvp.Key kvp.Value
+                    |> Result.map (fun profile -> profile :: acc)))
             (Ok [])
         |> Result.bind (fun profiles ->
             let defaultProfile = dto.defaultProfile |> Option.map ProfileName.create
             Portfolio.tryCreate defaultProfile (List.rev profiles))
 
-let readConfig (path: string) : Result<Portfolio, PortfolioError> =
-    let resolvedPath = expandPath path
+let readConfig (homeDir: string) (path: string) : Result<Portfolio, PortfolioError> =
+    let resolvedPath = expandPath homeDir path
 
     if not (File.Exists(resolvedPath)) then
         Error(ConfigNotFound resolvedPath)
@@ -173,14 +159,21 @@ let readConfig (path: string) : Result<Portfolio, PortfolioError> =
             match dto with
             | None -> Error(ConfigParseError(resolvedPath, "Config file was empty or invalid."))
             | Some model ->
-                mapPortfolio model
+                mapPortfolio homeDir model
                 |> Result.mapError (function
                     | ConfigParseError(_, message) -> ConfigParseError(resolvedPath, message)
                     | other -> other)
         with ex ->
             Error(ConfigParseError(resolvedPath, ex.Message))
 
-let register () =
-    Itr.Commands.Portfolio.Runtime.configure configPath readConfig
+/// Create a PortfolioConfigAdapter that implements IPortfolioConfig
+type PortfolioConfigAdapter(env: IEnvironment) =
+    let homeDir = env.HomeDirectory()
 
-do register ()
+    interface IPortfolioConfig with
+        member _.ConfigPath() =
+            match env.GetEnvVar "ITR_HOME" with
+            | Some itrHome -> Path.Combine(expandPath homeDir itrHome, "portfolio.json")
+            | None -> Path.Combine(homeDir, ".config", "itr", "portfolio.json")
+
+        member _.LoadConfig path = readConfig homeDir path

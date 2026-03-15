@@ -12,7 +12,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\domain\Itr.Domain.fsproj" />
-    <ProjectReference Include="..\commands\Itr.Commands.fsproj" />
   </ItemGroup>
 
 </Project>

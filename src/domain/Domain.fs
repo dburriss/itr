@@ -20,9 +20,7 @@ type CoordinationRootConfig =
     | PrimaryRepoConfig of string
     | ControlRepoConfig of string
 
-type GitIdentity =
-    { Name: string
-      Email: string option }
+type GitIdentity = { Name: string; Email: string option }
 
 type ProductId = private ProductId of string
 
@@ -90,7 +88,7 @@ module Portfolio =
             |> List.tryFind (fun (_, products) -> products.Length > 1)
 
         match dupes with
-        | Some (_, products) -> Error(duplicateProductIdError profile.Name products.Head.Id)
+        | Some(_, products) -> Error(duplicateProductIdError profile.Name products.Head.Id)
         | None -> Ok profile
 
     let tryCreate (defaultProfile: ProfileName option) (profiles: Profile list) : Result<Portfolio, PortfolioError> =
@@ -100,14 +98,16 @@ module Portfolio =
             |> List.tryFind (fun (_, grouped) -> grouped.Length > 1)
 
         match duplicateProfiles with
-        | Some (_, first :: _) -> Error(duplicateProfileNameError first.Name)
+        | Some(_, first :: _) -> Error(duplicateProfileNameError first.Name)
         | _ ->
-            let distinctProductsCheck = profiles |> List.map tryEnsureDistinctProducts |> List.tryFind Result.isError
+            let distinctProductsCheck =
+                profiles |> List.map tryEnsureDistinctProducts |> List.tryFind Result.isError
 
             match distinctProductsCheck with
-            | Some (Error error) -> Error error
+            | Some(Error error) -> Error error
             | _ ->
-                let profilesMap = profiles |> List.map (fun profile -> profile.Name, profile) |> Map.ofList
+                let profilesMap =
+                    profiles |> List.map (fun profile -> profile.Name, profile) |> Map.ofList
 
                 Ok
                     { DefaultProfile = defaultProfile
@@ -119,4 +119,7 @@ module Portfolio =
         portfolio.Profiles
         |> Map.toSeq
         |> Seq.tryPick (fun (profileName, profile) ->
-            if ProfileName.normalize profileName = normalized then Some profile else None)
+            if ProfileName.normalize profileName = normalized then
+                Some profile
+            else
+                None)

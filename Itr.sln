@@ -5,9 +5,9 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "commands", "commands", "{50C0B65E-5734-6D84-4B56-C247D2A1D164}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "features", "features", "{50C0B65E-5734-6D84-4B56-C247D2A1D164}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Itr.Commands", "src\commands\Itr.Commands.fsproj", "{170D92A0-52BA-4E62-B375-F969804DD97E}"
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Itr.Features", "src\features\Itr.Features.fsproj", "{170D92A0-52BA-4E62-B375-F969804DD97E}"
 EndProject
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Itr.Adapters", "src\adapters\Itr.Adapters.fsproj", "{D3F7FB7E-482A-43F6-BC89-F77CA60F6DAE}"
 EndProject

@@ -18,10 +18,13 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="Testably.Abstractions" Version="10.1.0" />
+    <PackageReference Include="Testably.Abstractions.Testing" Version="5.3.1" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\commands\Itr.Commands.fsproj" />
+    <ProjectReference Include="..\..\src\features\Itr.Features.fsproj" />
+    <ProjectReference Include="..\..\src\adapters\Itr.Adapters.fsproj" />
   </ItemGroup>
 
 </Project>
