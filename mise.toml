@@ -7,9 +7,23 @@ run = "dotnet build"
 description = "Build the project using dotnet build."
 
 [tasks.test]
-run = "dotnet test"
+run = "dotnet test --no-build"
+depends = ["format-check"]
 description = "Run tests using dotnet test."
 
 [tasks.portfolio]
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- portfolio --profile work --output json"
 description = "Run the portfolio command using dotnet run."
+
+[tasks.format]
+run = "dotnet fantomas src/ tests/"
+description = "Format all F# source files in-place using Fantomas."
+
+[tasks.format-check]
+run = "dotnet fantomas --check src/ tests/"
+depends = ["build"]
+description = "Check F# formatting without modifying files (used in CI)."
+
+[tasks.verify]
+depends = ["test"]
+description = "Full pre-push verification: build, format check, test."

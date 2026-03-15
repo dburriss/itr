@@ -34,6 +34,8 @@
 - Build: `dotnet build`
 - Test: `dotnet test`
 - Clean: `dotnet clean`
+- Verify (pre-push): `mise run verify`
+- Format: `mise run format`
 
 ## Structure
 
