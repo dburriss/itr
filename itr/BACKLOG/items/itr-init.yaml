@@ -1,0 +1,19 @@
+id: itr-init
+title: Initialize itr settings
+type: feature
+priority: high
+repos:
+  - itr
+summary: >
+  Initialise itr.json with settings, either interactively or with submitted values.
+
+acceptance_criteria:
+  - A command initializes itr.json with provided settings when values are submitted
+  - A command interactively prompts for settings and initializes itr.json when no values are submitted
+  - The command validates submitted settings and returns clear errors for invalid input
+  - The command does not overwrite existing itr.json without confirmation
+  - The command detects if in an existing repository and prompts to add current repository as a product repository
+  - The command can create a local settings file or a global settings file based on user choice
+
+dependencies: []
+created_at: 2026-03-20
