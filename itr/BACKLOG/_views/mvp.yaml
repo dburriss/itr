@@ -3,7 +3,12 @@ id: mvp
 description: Initial task workflow for taking, planning, executing, and archiving work.
 
 items:
-  - backlog-next
+  - portfolio-layer
+  - settings-bootstrap
+  - profile-add
+  - product-register
+  - backlog-item-create
+  - backlog-list
   - backlog-take
   - task-split
   - task-list
@@ -14,3 +19,4 @@ items:
   - task-done
   - task-validate
   - task-archive
+  - backlog-item-archive (draft)
