@@ -110,6 +110,11 @@ let private formatTakeError (err: TakeError) : string =
     | TaskIdConflict id -> $"Task id '{TaskId.value id}' already exists"
     | TaskIdOverrideRequiresSingleRepo -> "--task-id can only be used with single-repo backlog items"
 
+let private formatPortfolioError (err: PortfolioError) : string =
+    match err with
+    | BootstrapWriteError(path, msg) -> $"Could not create itr.json at {path}: {msg}"
+    | other -> $"%A{other}"
+
 // ---------------------------------------------------------------------------
 // backlog take handler
 // ---------------------------------------------------------------------------
@@ -199,44 +204,57 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
     let profile = results.TryGetResult Profile
     let outputJson = results.TryGetResult Output |> Option.exists (fun v -> v = "json")
 
-    match results.TryGetResult Backlog with
-    | Some backlogResults ->
-        match backlogResults.TryGetResult Take with
-        | Some takeArgs ->
-            // Resolve the product to get the coordination root
-            let portfolioResult =
-                Portfolio.loadPortfolio None |> Effect.run deps
-                |> Result.mapError (fun e -> $"%A{e}")
-                |> Result.bind (fun portfolio ->
-                    Portfolio.resolveActiveProfile portfolio profile |> Effect.run deps
-                    |> Result.mapError (fun e -> $"%A{e}"))
+    // Resolve config path once and run bootstrap before any portfolio operation
+    let configPath = (deps :> IPortfolioConfig).ConfigPath()
 
-            match portfolioResult with
-            | Error msg -> Error msg
-            | Ok profile ->
-                // For now take the first product from the profile
-                match profile.Products with
-                | [] -> Error "No products in active profile"
-                | productRef :: _ ->
-                    let portfolioProductResult =
-                        Portfolio.resolveProduct profile (productRef.Id |> ProductId.value) |> Effect.run deps
-                        |> Result.mapError (fun e -> $"%A{e}")
+    let bootstrapResult =
+        Portfolio.bootstrapIfMissing configPath |> Effect.run deps
+        |> Result.mapError formatPortfolioError
 
-                    match portfolioProductResult with
-                    | Error msg -> Error msg
-                    | Ok resolved ->
-                        handleBacklogTake deps resolved.CoordRoot.AbsolutePath takeArgs outputJson
+    match bootstrapResult with
+    | Error msg -> Error msg
+    | Ok wasCreated ->
+        if wasCreated then
+            printfn "Created default config at %s. Run 'itr init' to configure profiles and products." configPath
 
-        | None -> Error "Specify a backlog subcommand (e.g. backlog take <id>)"
+        match results.TryGetResult Backlog with
+        | Some backlogResults ->
+            match backlogResults.TryGetResult Take with
+            | Some takeArgs ->
+                // Resolve the product to get the coordination root
+                let portfolioResult =
+                    Portfolio.loadPortfolio (Some configPath) |> Effect.run deps
+                    |> Result.mapError (fun e -> $"%A{e}")
+                    |> Result.bind (fun portfolio ->
+                        Portfolio.resolveActiveProfile portfolio profile |> Effect.run deps
+                        |> Result.mapError (fun e -> $"%A{e}"))
 
-    | None ->
-        // Legacy behaviour: just load portfolio
-        let loadResult = Portfolio.loadPortfolio None |> Effect.run deps
+                match portfolioResult with
+                | Error msg -> Error msg
+                | Ok profile ->
+                    // For now take the first product from the profile
+                    match profile.Products with
+                    | [] -> Error "No products in active profile"
+                    | productRef :: _ ->
+                        let portfolioProductResult =
+                            Portfolio.resolveProduct profile (productRef.Id |> ProductId.value) |> Effect.run deps
+                            |> Result.mapError (fun e -> $"%A{e}")
 
-        loadResult
-        |> Result.bind (fun portfolio -> Portfolio.resolveActiveProfile portfolio profile |> Effect.run deps)
-        |> Result.map (fun _ -> printfn "itr cli")
-        |> Result.mapError (fun e -> $"%A{e}")
+                        match portfolioProductResult with
+                        | Error msg -> Error msg
+                        | Ok resolved ->
+                            handleBacklogTake deps resolved.CoordRoot.AbsolutePath takeArgs outputJson
+
+            | None -> Error "Specify a backlog subcommand (e.g. backlog take <id>)"
+
+        | None ->
+            // Legacy behaviour: just load portfolio
+            let loadResult = Portfolio.loadPortfolio (Some configPath) |> Effect.run deps
+
+            loadResult
+            |> Result.bind (fun portfolio -> Portfolio.resolveActiveProfile portfolio profile |> Effect.run deps)
+            |> Result.map (fun _ -> printfn "itr cli")
+            |> Result.mapError (fun e -> $"%A{e}")
 
 [<EntryPoint>]
 let main argv =

@@ -42,7 +42,7 @@ type TestFixture() =
     let root =
         Path.Combine(Path.GetTempPath(), $"itr-portfolio-tests-{Guid.NewGuid():N}")
 
-    let portfolioPath = Path.Combine(root, "portfolio.json")
+    let portfolioPath = Path.Combine(root, "itr.json")
     let standalone = Path.Combine(root, "standalone")
     let primary = Path.Combine(root, "primary")
     let control = Path.Combine(root, "control")
@@ -102,7 +102,7 @@ let ``full pipeline resolves to ResolvedProduct`` () =
 [<Fact>]
 let ``readConfig returns ConfigNotFound when file is absent`` () =
     let missing =
-        Path.Combine(Path.GetTempPath(), $"itr-missing-{Guid.NewGuid():N}", "portfolio.json")
+        Path.Combine(Path.GetTempPath(), $"itr-missing-{Guid.NewGuid():N}", "itr.json")
 
     let homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
 
@@ -117,7 +117,7 @@ let ``readConfig returns ConfigParseError for malformed JSON`` () =
     let homeDir = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
 
     try
-        let path = Path.Combine(dir, "portfolio.json")
+        let path = Path.Combine(dir, "itr.json")
         File.WriteAllText(path, "{ invalid json")
 
         match readConfig homeDir path with
@@ -144,3 +144,79 @@ let ``all coordination modes resolve to dir/.itr`` () =
             FeaturePortfolio.resolveProduct profile id |> Effect.run deps |> getResult
 
         Assert.EndsWith(".itr", resolved.CoordRoot.AbsolutePath))
+
+// ---------------------------------------------------------------------------
+// Bootstrap acceptance tests
+// ---------------------------------------------------------------------------
+
+/// Minimal IFileSystem that always fails writes with IoException
+type FailingWriteFsDeps(failMsg: string) =
+    interface IFileSystem with
+        member _.ReadFile path =
+            if File.Exists(path) then
+                Ok(File.ReadAllText(path))
+            else
+                Error(FileNotFound path)
+
+        member _.WriteFile path _ = Error(IoException(path, failMsg))
+        member _.FileExists path = File.Exists(path)
+        member _.DirectoryExists path = Directory.Exists(path)
+
+[<Fact>]
+let ``bootstrapIfMissing creates file and parent directory when both absent`` () =
+    let root = Path.Combine(Path.GetTempPath(), $"itr-bootstrap-{Guid.NewGuid():N}")
+
+    try
+        let configPath = Path.Combine(root, "subdir", "itr.json")
+        let deps = TestDeps(configPath)
+
+        let result = FeaturePortfolio.bootstrapIfMissing configPath |> Effect.run deps
+
+        match result with
+        | Ok wasCreated ->
+            Assert.True(wasCreated, "Expected wasCreated = true for a new file")
+            Assert.True(File.Exists(configPath), $"Expected config file at: {configPath}")
+            let content = File.ReadAllText(configPath)
+            Assert.Contains("profiles", content)
+        | Error e -> failwithf "expected Ok, got %A" e
+    finally
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
+
+[<Fact>]
+let ``bootstrapIfMissing is idempotent when file already exists`` () =
+    let root = Path.Combine(Path.GetTempPath(), $"itr-bootstrap-idempotent-{Guid.NewGuid():N}")
+
+    try
+        Directory.CreateDirectory(root) |> ignore
+        let configPath = Path.Combine(root, "itr.json")
+        let originalContent = """{"defaultProfile": "work", "profiles": {}}"""
+        File.WriteAllText(configPath, originalContent)
+
+        let deps = TestDeps(configPath)
+        let result = FeaturePortfolio.bootstrapIfMissing configPath |> Effect.run deps
+
+        match result with
+        | Ok wasCreated ->
+            Assert.False(wasCreated, "Expected wasCreated = false when file already exists")
+            let content = File.ReadAllText(configPath)
+            Assert.Equal(originalContent, content)
+        | Error e -> failwithf "expected Ok, got %A" e
+    finally
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
+
+[<Fact>]
+let ``bootstrapIfMissing returns BootstrapWriteError when write fails`` () =
+    let root = Path.Combine(Path.GetTempPath(), $"itr-bootstrap-fail-{Guid.NewGuid():N}")
+    // Use a path that does not exist so FileExists returns false, then the write fails
+    let configPath = Path.Combine(root, "itr.json")
+    let deps = FailingWriteFsDeps("Permission denied")
+
+    let result = FeaturePortfolio.bootstrapIfMissing configPath |> Effect.run deps
+
+    match result with
+    | Error(BootstrapWriteError(path, msg)) ->
+        Assert.Equal(configPath, path)
+        Assert.Contains("Permission denied", msg)
+    | other -> failwithf "expected BootstrapWriteError, got %A" other

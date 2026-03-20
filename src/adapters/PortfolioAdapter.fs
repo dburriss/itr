@@ -173,7 +173,7 @@ type PortfolioConfigAdapter(env: IEnvironment) =
     interface IPortfolioConfig with
         member _.ConfigPath() =
             match env.GetEnvVar "ITR_HOME" with
-            | Some itrHome -> Path.Combine(expandPath homeDir itrHome, "portfolio.json")
-            | None -> Path.Combine(homeDir, ".config", "itr", "portfolio.json")
+            | Some itrHome -> Path.Combine(expandPath homeDir itrHome, "itr.json")
+            | None -> Path.Combine(homeDir, ".config", "itr", "itr.json")
 
         member _.LoadConfig path = readConfig homeDir path

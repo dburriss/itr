@@ -24,6 +24,10 @@ description = "Check F# formatting without modifying files (used in CI)."
 depends = ["test"]
 description = "Full pre-push verification: build, format check, test."
 
+[tasks.backlog]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog"
+description = "Run the backlog command using dotnet run."
+
 [tasks.portfolio]
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- portfolio --profile work --output json"
 description = "Run the portfolio command using dotnet run."

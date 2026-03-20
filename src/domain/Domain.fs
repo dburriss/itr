@@ -51,6 +51,7 @@ type PortfolioError =
     | ProfileNotFound of profileName: string
     | ProductNotFound of productId: string
     | CoordRootNotFound of productId: string * expectedPath: string
+    | BootstrapWriteError of path: string * message: string
 
 [<RequireQualifiedAccess>]
 module ProductId =
