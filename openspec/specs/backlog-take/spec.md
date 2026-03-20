@@ -3,7 +3,7 @@ When the user runs `itr backlog take <backlog-id>`, the system SHALL read the na
 
 #### Scenario: Single-repo item with no existing tasks uses backlog id as task id
 - **WHEN** `itr backlog take feature-x` is run and the backlog item has one repo and no tasks exist yet
-- **THEN** one task file is written at `<coordRoot>/TASKS/feature-x/feature-x-task.yaml` with `id: feature-x`
+- **THEN** one task file is written at `<coordRoot>/BACKLOG/feature-x/tasks/feature-x/task.yaml` with `id: feature-x`
 
 #### Scenario: Single-repo item re-taken uses repo-prefixed id
 - **WHEN** `itr backlog take feature-x` is run and a task for that backlog id already exists
@@ -11,14 +11,14 @@ When the user runs `itr backlog take <backlog-id>`, the system SHALL read the na
 
 #### Scenario: Multi-repo item uses repo-prefixed ids
 - **WHEN** `itr backlog take feature-x` is run and the backlog item lists two repos
-- **THEN** two task files are written, each with id `<repo-id>-feature-x`
+- **THEN** two task files are written, each with id `<repo-id>-feature-x`, under `<coordRoot>/BACKLOG/feature-x/tasks/<repo-id>-feature-x/task.yaml`
 
 ### Requirement: Task id override for single-repo items
 The system SHALL accept an optional `--task-id <id>` flag when taking a single-repo backlog item to override the derived task id.
 
 #### Scenario: Custom task id is used when provided
 - **WHEN** `itr backlog take feature-x --task-id my-task` is run on a single-repo item
-- **THEN** the task file is written with `id: my-task`
+- **THEN** the task file is written with `id: my-task` at `<coordRoot>/BACKLOG/feature-x/tasks/my-task/task.yaml`
 
 #### Scenario: Custom task id that already exists is rejected
 - **WHEN** `--task-id` is provided but a task file with that id already exists
