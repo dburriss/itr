@@ -2,88 +2,126 @@
 
 ## itr.json
 
-Defines the **portfolio root**, profiles, and registered products.
+Defines the global portfolio config, profiles, and each profile's registered products.
 
-```yaml
-portfolio:
-  default_profile: string
-
-profiles:
-  <profile-id>:
-    repo_root: path
-    git_user: string (optional)
-    git_email: string (optional)
-
-products:
-  <product-id>:
-    path: path
-    profile: profile-id (optional)
+```json
+{
+  "defaultProfile": "work",
+  "profiles": {
+    "work": {
+      "products": [
+        {
+          "id": "billing-system",
+          "root": {
+            "mode": "primary-repo",
+            "repoDir": "~/dev/work/billing-system"
+          }
+        }
+      ],
+      "gitIdentity": {
+        "name": "Jane Dev",
+        "email": "jane@company.com"
+      }
+    }
+  }
+}
 ```
 
 ### Field meanings: Portfolio
 
-#### portfolio.default_profile
+#### defaultProfile
 
-Default profile used when a product does not specify one.
+Optional default profile used when no `--profile` flag or `ITR_PROFILE` environment variable is provided.
 
 #### profiles
 
-Defines environment contexts such as `work` or `personal`.
+Required object keyed by profile name, such as `work` or `personal`. This object may be empty.
 
-#### profiles.<id>.repo_root
+#### profiles.<id>.products
 
-Root directory where repositories live.
+List of products registered under that profile.
 
-Example:
+#### profiles.<id>.products[].id
 
-```bash
-~/dev/work
-~/dev/personal
-```
+Product identifier. Must match the slug pattern `[a-z0-9][a-z0-9-]*`.
 
-#### products
+#### profiles.<id>.products[].root
 
-Registers products known to the portfolio.
+Coordination root configuration for the product.
 
-#### products.<id>.path
+#### profiles.<id>.products[].root.mode
 
-Filesystem path to the product root.
-
-This can be:
+Supported values:
 
 ```
-~/dev/work/billing-system
-~/projects/my-library
+standalone
+primary-repo
+control-repo
 ```
 
-#### products.<id>.profile
+#### profiles.<id>.products[].root.dir
 
-Overrides the portfolio default profile.
+Used only when `mode` is `standalone`.
+
+#### profiles.<id>.products[].root.repoDir
+
+Used when `mode` is `primary-repo` or `control-repo`.
+
+#### profiles.<id>.gitIdentity
+
+Optional git identity override for work done under that profile.
+
+#### profiles.<id>.gitIdentity.name
+
+Display name for git commits.
+
+#### profiles.<id>.gitIdentity.email
+
+Optional email for git commits.
 
 ---
 
 ### Example
 
-```yaml
-portfolio:
-  default_profile: personal
-
-profiles:
-  personal:
-    repo_root: ~/dev/personal
-
-  work:
-    repo_root: ~/dev/work
-    git_user: Jane Dev
-    git_email: jane@company.com
-
-products:
-  billing-system:
-    path: ~/dev/work/billing-system
-    profile: work
-
-  portfolio-tool:
-    path: ~/dev/personal/portfolio-tool
+```json
+{
+  "defaultProfile": "personal",
+  "profiles": {
+    "personal": {
+      "products": [
+        {
+          "id": "portfolio-tool",
+          "root": {
+            "mode": "standalone",
+            "dir": "~/dev/personal/portfolio-tool"
+          }
+        }
+      ]
+    },
+    "work": {
+      "products": [
+        {
+          "id": "billing-system",
+          "root": {
+            "mode": "primary-repo",
+            "repoDir": "~/dev/work/billing-system"
+          }
+        },
+        {
+          "id": "infra-control",
+          "root": {
+            "mode": "control-repo",
+            "repoDir": "~/dev/work/infra-control"
+          }
+        }
+      ],
+      "gitIdentity": {
+        "name": "Jane Dev",
+        "email": "jane@company.com"
+      }
+    }
+  }
+}
 ```
 
 ---
@@ -448,7 +486,7 @@ products/
 
 | File           | Purpose                                 |
 | -------------- | --------------------------------------- |
-| itr.json       | portfolio + profiles + product registry |
+| itr.json       | portfolio + profiles + per-profile products |
 | product.yaml   | product + repo configuration            |
 | backlog item   | planning artifact                       |
 | backlog view   | backlog projection                      |

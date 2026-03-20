@@ -104,8 +104,8 @@ This is a setup sequence, not a state machine. The commands below initialise the
 
 The portfolio config path is resolved in order:
 
-1. `$ITR_HOME/portfolio.json` — if `ITR_HOME` is set and non-empty
-2. `~/.config/itr/portfolio.json` — default fallback
+1. `$ITR_HOME/itr.json` — if `ITR_HOME` is set and non-empty
+2. `~/.config/itr/itr.json` — default fallback
 
 ### Profile selection precedence
 
@@ -113,7 +113,7 @@ When resolving the active profile, the following order applies (first match wins
 
 1. `--profile` CLI flag
 2. `ITR_PROFILE` environment variable
-3. `defaultProfile` field in `portfolio.json`
+3. `defaultProfile` field in `itr.json`
 4. Error — `ProfileNotFound`
 
 ### Coordination root modes
@@ -129,7 +129,7 @@ A product's `.itr/` directory is located by appending `/.itr` to the configured 
 ### Setup sequence
 
 ```
-1. itr settings bootstrap    Create ~/.config/itr/portfolio.json if missing
+1. itr settings bootstrap    Create ~/.config/itr/itr.json if missing
 2. itr profile add           Register a profile (e.g. work, personal)
 3. itr product init          Initialise a product and its .itr/ directory
 4. itr product register      Register an existing product into the active profile
