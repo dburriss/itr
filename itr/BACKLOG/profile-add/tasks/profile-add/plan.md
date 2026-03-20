@@ -8,7 +8,7 @@
 
 ## Description
 
-Add a `profile add` CLI command that inserts a new named profile into `itr.json`. A profile captures a `repo_root` path (the coordination root config) and an optional git identity (name + email). Duplicate profile names must be rejected with a clear error.
+Add a `profile add` CLI command that inserts a new named profile into `itr.json`. A profile may include an optional git identity. Products registered later under that profile persist their own coordination root config (`mode` plus `dir` or `repoDir`). Duplicate profile names must be rejected with a clear error.
 
 ---
 
@@ -28,7 +28,7 @@ No new domain types required. The existing `Profile`, `GitIdentity`, `Coordinati
 
 Add a new function `addProfile` to `PortfolioUsecase.fs`:
 
-- Accepts: `profileName: string`, `repoRoot: CoordinationRootConfig`, `gitIdentity: GitIdentity option`, `setAsDefault: bool`
+- Accepts: `profileName: string`, `gitIdentity: GitIdentity option`, `setAsDefault: bool`
 - Reads current `itr.json` via `IPortfolioConfig.LoadConfig`
 - Constructs the new `Profile` record
 - Determines `defaultProfile`: if `setAsDefault` is true use the new name, otherwise preserve existing value
@@ -49,25 +49,23 @@ type IPortfolioStore =
     abstract SaveConfig: path: string -> portfolio: Portfolio -> Result<unit, PortfolioError>
 ```
 
-Or alternatively, accept a raw `IFileSystem` write at the entry point — prefer the interface approach for testability.
+Or alternatively, accept a raw `IFileSystem` write at the entry point - prefer the interface approach for testability.
 
 ### 4. CLI entry point (`Itr.Cli` / `Program.fs`)
 
 Add new Argu argument DUs for a `profile add` subcommand:
 
 ```
-itr profile add <name> --repo-root <path> [--mode <standalone|primary-repo|control-repo>] [--git-name <name>] [--git-email <email>] [--default]
+itr profile add <name> [--git-name <name>] [--git-email <email>] [--default]
 ```
 
-- `--mode` defaults to `primary-repo` when omitted.
 - `--default` sets the new profile as the portfolio's `defaultProfile`.
 
 Wire the handler:
 1. Bootstrap config if missing.
-2. If `--repo-root` directory does not exist, print a warning to stderr but continue.
-3. Call `Portfolio.addProfile` effect.
-4. Serialize updated portfolio and write to config path.
-5. Print confirmation or JSON output.
+2. Call `Portfolio.addProfile` effect.
+3. Serialize updated portfolio and write to config path.
+4. Print confirmation or JSON output.
 
 ### 5. `AppDeps` (`Program.fs`)
 
@@ -78,7 +76,7 @@ Implement `IPortfolioStore` (or the save capability) in `AppDeps`.
 ## Dependencies / Prerequisites
 
 - `settings-bootstrap` must be complete (it is; `bootstrapIfMissing` exists and is wired).
-- `itr.json` serialization round-trip must be lossless — verify `saveConfig` preserves existing profiles.
+- `itr.json` serialization round-trip must be lossless - verify `saveConfig` preserves existing profiles.
 
 ---
 
@@ -97,11 +95,9 @@ No existing usecases or domain functions are modified.
 
 ## Acceptance Criteria
 
-- `itr profile add <name> --repo-root <path> [--mode ...]` writes the new profile to `itr.json`.
-- `--mode` defaults to `primary-repo` when omitted.
+- `itr profile add <name>` writes the new profile to `itr.json`.
 - `--default` sets `defaultProfile` to the new profile name in `itr.json`.
-- If `--repo-root` directory does not exist, a warning is printed to stderr; the profile is still added.
-- Profile includes `repo_root` and optional git identity fields.
+- Profile includes optional `gitIdentity` fields.
 - Re-running the same command with the same name returns a clear error (e.g. `Profile 'work' already exists`).
 - The new profile can be selected via `--profile <name>` in subsequent commands.
 - Running `itr profile add` with missing required args prints usage help.
@@ -128,13 +124,10 @@ No existing usecases or domain functions are modified.
 | Risk | Mitigation |
 |---|---|
 | JSON serialization loses `defaultProfile` or existing entries | Write a round-trip test before implementing `saveConfig` |
-| `CoordinationRootConfig` discriminated union serialization via custom converter must work symmetrically | Reuse existing `CoordinationRootConfigConverter` for write path; already tested for read |
-| CLI `--mode` flag mapping to `CoordinationRootConfig` DU cases | Use an explicit string-to-DU mapping with clear error for unknown modes |
+| CLI optional args drift from the persisted JSON shape | Keep docs and tests aligned to `gitIdentity` and per-profile product registration |
 
 ---
 
 ## Open Questions
 
-~~1. Should `profile add` also accept `--set-default` to mark the new profile as the portfolio default?~~ **Resolved: yes, via `--default` flag.**  
-~~2. Is the `--repo-root` flag a directory path, or should it also accept a full `mode`+`path` JSON blob for scripting?~~ **Resolved: separate `--mode` flag, defaulting to `primary-repo`.**  
-~~3. Should the command also validate that the given `repo_root` directory exists on disk?~~ **Resolved: warn to stderr but do not fail.**
+~~1. Should `profile add` also accept `--set-default` to mark the new profile as the portfolio default?~~ **Resolved: yes, via `--default` flag.**

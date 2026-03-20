@@ -14,7 +14,7 @@ summary: >
   way across flags, environment, and persisted defaults.
 
 acceptance_criteria:
-  - Active profile precedence is --profile then ITR_PROFILE then default_profile
+  - Active profile precedence is --profile then ITR_PROFILE then defaultProfile
   - Missing resolved profiles return a clear error
   - Behavior is covered by acceptance and domain-facing tests
 
