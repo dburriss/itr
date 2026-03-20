@@ -41,7 +41,7 @@ A task is created when a backlog item is taken with `backlog take`. Each task is
 | `in-progress` | Active implementation underway in the scoped repo. |
 | `implemented` | Dev work complete. Branch exists and work is done. |
 | `validated` | Explicitly validated and accepted. Completion checks have passed. |
-| `archived` | Moved to `TASKS/archive/`. Historical record only. |
+    | `archived` | Moved to `BACKLOG/<backlog-id>/tasks/<date>-<task-id>/`. Historical record only. |
 
 ### Transitions
 
@@ -55,7 +55,9 @@ A task is created when a backlog item is taken with `backlog take`. Each task is
 | `approved` | `task start` | `in-progress` | — |
 | `in-progress` | `task done` | `implemented` | — |
 | `implemented` | `task validate` | `validated` | Completion checks must pass |
-| `validated` | `task archive` | `archived` | Task state must be `validated` |
+    | `validated` | `task archive` | `archived` | Task state must be `validated` |
+
+When a task is archived, its folder is renamed from `BACKLOG/<backlog-id>/tasks/<task-id>/` to `BACKLOG/<backlog-id>/tasks/<date>-<task-id>/`.
 
 ### Diagrams
 

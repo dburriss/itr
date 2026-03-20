@@ -262,10 +262,10 @@ coordination:
 
 ## backlog item
 
-Each backlog item is a file:
+Each backlog item is a directory:
 
 ```
-.product/BACKLOG/items/<id>.yaml
+.product/BACKLOG/<id>/item.yaml
 ```
 
 Schema:
@@ -368,7 +368,7 @@ items:
 Location:
 
 ```
-.itr/TASKS/<backlog-id>/<task-id>-task.yaml
+.itr/BACKLOG/<backlog-id>/tasks/<task-id>/task.yaml
 ```
 
 Schema:
@@ -423,12 +423,23 @@ products/
 
     .itr/
       BACKLOG/
-        items/
-        views/
-
-      TASKS/
-        active/
+        <backlog-id>/
+          item.yaml
+          tasks/
+            <task-id>/
+              task.yaml
+              plan.md
+            <date>-<task-id>/      (completed task)
+              task.yaml
+              plan.md
         archive/
+          <date>-<backlog-id>/     (archived backlog item)
+            item.yaml
+            tasks/
+              <date>-<task-id>/
+                task.yaml
+                plan.md
+        views/
 ```
 
 ---

@@ -52,12 +52,16 @@ type IProductConfig =
 
 /// Capability interface for loading backlog items
 type IBacklogStore =
-    /// Load a backlog item from <coordRoot>/BACKLOG/items/<backlog-id>.yaml
+    /// Load a backlog item from <coordRoot>/BACKLOG/<backlog-id>/item.yaml
     abstract LoadBacklogItem: coordRoot: string -> backlogId: BacklogId -> Result<BacklogItem, TakeError>
+    /// Archive a backlog item by moving <coordRoot>/BACKLOG/<backlog-id>/ to <coordRoot>/BACKLOG/archive/<date>-<backlog-id>/
+    abstract ArchiveBacklogItem: coordRoot: string -> backlogId: BacklogId -> date: string -> Result<unit, TakeError>
 
 /// Capability interface for reading and writing task files
 type ITaskStore =
-    /// List all tasks for a given backlog id from <coordRoot>/TASKS/<backlog-id>/
+    /// List all tasks for a given backlog id from <coordRoot>/BACKLOG/<backlog-id>/tasks/
     abstract ListTasks: coordRoot: string -> backlogId: BacklogId -> Result<ItrTask list, TakeError>
-    /// Write a task file to <coordRoot>/TASKS/<backlog-id>/<task-id>-task.yaml
+    /// Write a task file to <coordRoot>/BACKLOG/<backlog-id>/tasks/<task-id>/task.yaml
     abstract WriteTask: coordRoot: string -> task: ItrTask -> Result<unit, TakeError>
+    /// Archive a task by renaming <coordRoot>/BACKLOG/<backlog-id>/tasks/<task-id>/ to <coordRoot>/BACKLOG/<backlog-id>/tasks/<date>-<task-id>/
+    abstract ArchiveTask: coordRoot: string -> backlogId: BacklogId -> taskId: TaskId -> date: string -> Result<unit, TakeError>

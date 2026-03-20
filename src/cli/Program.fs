@@ -90,12 +90,18 @@ type AppDeps() =
         member _.LoadBacklogItem coordRoot backlogId =
             (backlogStoreAdapter :> IBacklogStore).LoadBacklogItem coordRoot backlogId
 
+        member _.ArchiveBacklogItem coordRoot backlogId date =
+            (backlogStoreAdapter :> IBacklogStore).ArchiveBacklogItem coordRoot backlogId date
+
     interface ITaskStore with
         member _.ListTasks coordRoot backlogId =
             (taskStoreAdapter :> ITaskStore).ListTasks coordRoot backlogId
 
         member _.WriteTask coordRoot task =
             (taskStoreAdapter :> ITaskStore).WriteTask coordRoot task
+
+        member _.ArchiveTask coordRoot backlogId taskId date =
+            (taskStoreAdapter :> ITaskStore).ArchiveTask coordRoot backlogId taskId date
 
 // ---------------------------------------------------------------------------
 // Error formatting
@@ -166,7 +172,7 @@ let private handleBacklogTake
                                 taskStore.WriteTask coordRoot task
                                 |> Result.map (fun () ->
                                     let taskId = TaskId.value task.Id
-                                    let path = System.IO.Path.Combine(coordRoot, "TASKS", BacklogId.value backlogId, $"{taskId}-task.yaml")
+                                    let path = System.IO.Path.Combine(coordRoot, "BACKLOG", BacklogId.value backlogId, "tasks", taskId, "task.yaml")
                                     (taskId, path))
                                 |> Result.mapError formatTakeError)
 

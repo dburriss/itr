@@ -16,7 +16,8 @@ type TaskFixture() =
 
     do
         Directory.CreateDirectory(coordRoot) |> ignore
-        Directory.CreateDirectory(Path.Combine(coordRoot, "BACKLOG", "items")) |> ignore
+        Directory.CreateDirectory(Path.Combine(coordRoot, "BACKLOG", "my-feature")) |> ignore
+        Directory.CreateDirectory(Path.Combine(coordRoot, "BACKLOG", "cross-feature")) |> ignore
 
         // product.yaml
         let productYaml =
@@ -37,7 +38,7 @@ repos:
 """
 
         File.WriteAllText(
-            Path.Combine(coordRoot, "BACKLOG", "items", "my-feature.yaml"),
+            Path.Combine(coordRoot, "BACKLOG", "my-feature", "item.yaml"),
             singleRepoItem
         )
 
@@ -51,7 +52,7 @@ repos:
 """
 
         File.WriteAllText(
-            Path.Combine(coordRoot, "BACKLOG", "items", "cross-feature.yaml"),
+            Path.Combine(coordRoot, "BACKLOG", "cross-feature", "item.yaml"),
             multiRepoItem
         )
 
@@ -132,7 +133,7 @@ let ``take single-repo item creates task file with correct YAML content`` () =
         Assert.Equal(Planning, task.State)
 
         // Check file exists on disk
-        let taskPath = Path.Combine(coordRoot, "TASKS", "my-feature", "my-feature-task.yaml")
+        let taskPath = Path.Combine(coordRoot, "BACKLOG", "my-feature", "tasks", "my-feature", "task.yaml")
         Assert.True(File.Exists(taskPath), $"Expected task file at: {taskPath}")
 
         // Check YAML content
@@ -166,7 +167,7 @@ let ``re-take produces additional task file with repo-prefixed id`` () =
         Assert.Equal("main-repo-my-feature", TaskId.value secondTasks.[0].Id)
 
         // Both files should exist
-        let first = Path.Combine(coordRoot, "TASKS", "my-feature", "my-feature-task.yaml")
-        let second = Path.Combine(coordRoot, "TASKS", "my-feature", "main-repo-my-feature-task.yaml")
+        let first = Path.Combine(coordRoot, "BACKLOG", "my-feature", "tasks", "my-feature", "task.yaml")
+        let second = Path.Combine(coordRoot, "BACKLOG", "my-feature", "tasks", "main-repo-my-feature", "task.yaml")
         Assert.True(File.Exists(first), $"first task file missing: {first}")
         Assert.True(File.Exists(second), $"second task file missing: {second}")

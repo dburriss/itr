@@ -19,9 +19,9 @@ a backlog item together with all its tasks once work is complete.
 ```
 <coordRoot>/
   BACKLOG/
-    views/
+    _views/
       *.yaml                              (unchanged)
-    archive/
+    _archive/
       <date>-<backlog-id>/                ← atomically archived backlog item
         item.yaml
         tasks/
@@ -101,7 +101,7 @@ writing — it will not exist for a freshly taken item.
 New operation (not yet implemented):
 
 - **Trigger**: all task folders under `<backlog-id>/tasks/` have a date prefix (i.e. none are active)
-- **Action**: move `BACKLOG/<backlog-id>/` → `BACKLOG/archive/<date>-<backlog-id>/` where `<date>` is today's date (the date the archive command is run)
+- **Action**: move `BACKLOG/<backlog-id>/` → `BACKLOG/_archive/<date>-<backlog-id>/` where `<date>` is today's date (the date the archive command is run)
 - Expose via `ITaskStore` or a new `IBacklogStore.ArchiveBacklogItem` member
 
 ### 4. Update `plan.md` slash command
@@ -120,7 +120,7 @@ File: `docs/config-files.md`
 - Update path examples: `BACKLOG/items/<id>.yaml` → `BACKLOG/<id>/item.yaml` and `TASKS/<backlog-id>/<task-id>-task.yaml` → `BACKLOG/<backlog-id>/tasks/<task-id>/task.yaml`
 
 File: `docs/lifecycles.md`
-- Update `TASKS/archive/` path references to the new `BACKLOG/<id>/tasks/<date>-<task-id>/` convention
+- Update `TASKS/archive/` path references to the new `BACKLOG/_archive/<id>/tasks/<date>-<task-id>/` convention
 
 ---
 
@@ -134,13 +134,13 @@ File: `docs/lifecycles.md`
 ## Acceptance Criteria
 
 - All 22 existing backlog item YAMLs are accessible at `BACKLOG/<id>/item.yaml`
-- The three archived tasks are at `BACKLOG/archive/<date>-<id>/tasks/<date>-<id>/task.yaml` and `plan.md`
+- The three archived tasks are at `BACKLOG/_archive/<date>-<id>/tasks/<date>-<id>/task.yaml` and `plan.md`
 - `BACKLOG/items/` directory is removed
 - `TASKS/` directory is removed
 - `itr backlog take <id>` writes task file to `BACKLOG/<id>/tasks/<task-id>/task.yaml`
 - `itr task plan <id>` writes plan to `BACKLOG/<backlog-id>/tasks/<task-id>/plan.md`
 - Completing a task renames `tasks/<task-id>/` to `tasks/<date>-<task-id>/`
-- Once all tasks are completed, `itr task archive <backlog-id>` moves the whole backlog item folder to `BACKLOG/archive/<date>-<backlog-id>/`
+- Once all tasks are completed, `itr task archive <backlog-id>` moves the whole backlog item folder to `BACKLOG/_archive/<date>-<backlog-id>/`
 - Existing tests pass after path changes
 - `plan.md` command references correct paths
 - `docs/config-files.md` directory layout and path examples reflect the new structure

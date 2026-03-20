@@ -173,7 +173,7 @@ type BacklogStoreAdapter() =
     interface IBacklogStore with
         member _.LoadBacklogItem(coordRoot: string) (backlogId: BacklogId) =
             let id = BacklogId.value backlogId
-            let path = Path.Combine(coordRoot, "BACKLOG", "items", $"{id}.yaml")
+            let path = Path.Combine(coordRoot, "BACKLOG", id, "item.yaml")
 
             if not (File.Exists(path)) then
                 Error(BacklogItemNotFound backlogId)
@@ -194,6 +194,22 @@ type BacklogStoreAdapter() =
                 with ex ->
                     Error(ProductConfigParseError(path, ex.Message))
 
+        member _.ArchiveBacklogItem(coordRoot: string) (backlogId: BacklogId) (date: string) =
+            let id = BacklogId.value backlogId
+            let sourcePath = Path.Combine(coordRoot, "BACKLOG", id)
+            let archiveDir = Path.Combine(coordRoot, "BACKLOG", "archive")
+            let destPath = Path.Combine(archiveDir, $"{date}-{id}")
+
+            if not (Directory.Exists(sourcePath)) then
+                Error(BacklogItemNotFound backlogId)
+            else
+                try
+                    Directory.CreateDirectory(archiveDir) |> ignore
+                    Directory.Move(sourcePath, destPath)
+                    Ok()
+                with ex ->
+                    Error(ProductConfigParseError(sourcePath, ex.Message))
+
 // ---------------------------------------------------------------------------
 // ITaskStore implementation
 // ---------------------------------------------------------------------------
@@ -201,17 +217,20 @@ type BacklogStoreAdapter() =
 type TaskStoreAdapter() =
     interface ITaskStore with
         member _.ListTasks(coordRoot: string) (backlogId: BacklogId) =
-            let dir = Path.Combine(coordRoot, "TASKS", BacklogId.value backlogId)
+            let dir = Path.Combine(coordRoot, "BACKLOG", BacklogId.value backlogId, "tasks")
 
             if not (Directory.Exists(dir)) then
                 Ok []
             else
                 try
-                    let files = Directory.GetFiles(dir, "*-task.yaml")
+                    let subdirs = Directory.GetDirectories(dir)
 
                     let results =
-                        files
+                        subdirs
                         |> Array.toList
+                        |> List.choose (fun subdir ->
+                            let taskFile = Path.Combine(subdir, "task.yaml")
+                            if File.Exists(taskFile) then Some taskFile else None)
                         |> List.map (fun path ->
                             let content = File.ReadAllText(path)
 
@@ -230,12 +249,11 @@ type TaskStoreAdapter() =
         member _.WriteTask(coordRoot: string) (task: ItrTask) =
             let taskId = TaskId.value task.Id
             let backlogId = BacklogId.value task.SourceBacklog
-            let dir = Path.Combine(coordRoot, "TASKS", backlogId)
-            let path = Path.Combine(dir, $"{taskId}-task.yaml")
+            let taskDir = Path.Combine(coordRoot, "BACKLOG", backlogId, "tasks", taskId)
+            let path = Path.Combine(taskDir, "task.yaml")
 
             try
-                if not (Directory.Exists(dir)) then
-                    Directory.CreateDirectory(dir) |> ignore
+                Directory.CreateDirectory(taskDir) |> ignore
 
                 let dto = taskToDto task
                 let yaml = serializeYaml dto
@@ -243,3 +261,18 @@ type TaskStoreAdapter() =
                 Ok()
             with ex ->
                 Error(ProductConfigParseError(path, ex.Message))
+
+        member _.ArchiveTask(coordRoot: string) (backlogId: BacklogId) (taskId: TaskId) (date: string) =
+            let bid = BacklogId.value backlogId
+            let tid = TaskId.value taskId
+            let sourcePath = Path.Combine(coordRoot, "BACKLOG", bid, "tasks", tid)
+            let destPath = Path.Combine(coordRoot, "BACKLOG", bid, "tasks", $"{date}-{tid}")
+
+            if not (Directory.Exists(sourcePath)) then
+                Error(ProductConfigParseError(sourcePath, $"Task folder not found: {sourcePath}"))
+            else
+                try
+                    Directory.Move(sourcePath, destPath)
+                    Ok()
+                with ex ->
+                    Error(ProductConfigParseError(sourcePath, ex.Message))
