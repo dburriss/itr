@@ -1,0 +1,36 @@
+id: task-under-backlog
+
+title: Reorganise coordination directory — tasks nested under backlog items
+
+type: chore
+
+priority: medium
+
+repos:
+  - itr
+
+summary: >
+  Restructure the coordination directory so that tasks live under their parent
+  backlog item folder rather than in a separate top-level TASKS/ tree. The new
+  layout is BACKLOG/<id>/ containing item.yaml and a tasks/ subfolder with one
+  folder per task. Completed tasks gain a date prefix on their folder name.
+  Whole backlog items are atomically archived under BACKLOG/archive/<date>-<id>/
+  once all their tasks are completed.
+
+acceptance_criteria:
+  - Backlog items are stored at BACKLOG/<id>/item.yaml
+  - Tasks are stored at BACKLOG/<backlog-id>/tasks/<task-id>/task.yaml
+  - Plans are stored at BACKLOG/<backlog-id>/tasks/<task-id>/plan.md
+  - Completed tasks are renamed to BACKLOG/<backlog-id>/tasks/<date>-<task-id>/
+  - Archived backlog items (all tasks completed) move to BACKLOG/archive/<date>-<id>/
+  - BACKLOG/views/ remains unchanged
+  - All existing backlog item YAMLs are migrated to the new layout
+  - All existing archived tasks are migrated to the new layout with correct dates
+  - YamlAdapter.fs path construction is updated for all four path operations
+  - The plan.md slash command is updated to reference the new paths
+
+dependencies:
+  - backlog-take
+  - task-archive
+
+created_at: 2026-03-20
