@@ -1,0 +1,31 @@
+id: product-config-ownership
+
+title: Make product.yaml the canonical product definition
+
+type: chore
+
+priority: high
+
+repos:
+  - itr
+
+summary: >
+  Rework config ownership so itr.json stores machine-local profile and product
+  root registrations, while product.yaml becomes the canonical source for
+  product identity, repos, docs, and coordination layout. See docs/config-files.md for details.
+
+acceptance_criteria:
+  - itr.json stores registered product root directories under profiles rather than duplicating product ids or coordination root settings
+  - Product resolution loads product.yaml from each registered product root directory and uses product.yaml as the source of truth for product id and coordination layout
+  - Duplicate product registration is detected using the canonical product id loaded from product.yaml
+  - Product registration and init flows write and read the new path-based itr.json shape consistently
+  - The checked-in itr product definition and user-facing config docs are updated to reflect the new ownership model
+
+constraints:
+  - Store product root directories in itr.json rather than direct product.yaml file paths
+  - Do not keep duplicated product identity or coordination fields across itr.json and product.yaml
+
+dependencies:
+  - settings-bootstrap
+
+created_at: 2026-03-21
