@@ -327,3 +327,173 @@ let ``addProfile returns InvalidProfileName for invalid name`` () =
     match FeaturePortfolio.addProfile "/stub/itr.json" input |> Effect.run deps with
     | Error(InvalidProfileName(value, _)) -> Assert.Equal("My Work", value)
     | other -> failwithf "expected InvalidProfileName, got %A" other
+
+// ---------------------------------------------------------------------------
+// initProduct use-case tests
+// ---------------------------------------------------------------------------
+
+/// Test deps for initProduct.
+/// dirExists: controls IFileSystem.DirectoryExists
+/// fileExists: controls IFileSystem.FileExists
+/// writtenFiles: mutable set tracking written paths
+type TestInitDeps
+    (
+        dirExists: string -> bool,
+        fileExists: string -> bool,
+        writtenFiles: System.Collections.Generic.List<string * string>,
+        portfolio: Portfolio
+    ) =
+    interface IFileSystem with
+        member _.ReadFile _ = Error(FileNotFound "not implemented")
+
+        member _.WriteFile path content =
+            writtenFiles.Add((path, content))
+            Ok()
+
+        member _.FileExists path = fileExists path
+        member _.DirectoryExists path = dirExists path
+
+    interface IPortfolioConfig with
+        member _.ConfigPath() = "/stub/itr.json"
+        member _.LoadConfig _ = Ok portfolio
+
+        member _.SaveConfig _ _ = Ok()
+
+let private mkInitPortfolio () =
+    let profile =
+        { Name = ProfileName.create "default"
+          Products = []
+          GitIdentity = None }
+
+    DomainPortfolio.tryCreate (Some(ProfileName.create "default")) [ profile ]
+    |> Result.defaultWith (fun e -> failwithf "failed to build test portfolio: %A" e)
+
+let private defaultInitInput idStr path =
+    { Portfolio.InitProductInput.Id = idStr
+      Portfolio.InitProductInput.Path = path
+      Portfolio.InitProductInput.RepoId = "my-repo"
+      Portfolio.InitProductInput.CoordPath = ".itr"
+      Portfolio.InitProductInput.CoordinationMode = "primary-repo"
+      Portfolio.InitProductInput.RegisterProfile = None }
+
+[<Fact>]
+let ``initProduct with valid inputs and RegisterProfile=None writes all files and returns None`` () =
+    let path = "/tmp/test-product"
+    let written = System.Collections.Generic.List<string * string>()
+    let portfolio = mkInitPortfolio ()
+
+    let deps =
+        TestInitDeps((fun _ -> true), (fun _ -> false), written, portfolio)
+
+    let input = defaultInitInput "my-product" path
+
+    match FeaturePortfolio.initProduct "/stub/itr.json" input |> Effect.run deps with
+    | Ok None ->
+        let paths = written |> Seq.map fst |> Seq.toList
+        Assert.Contains(IO.Path.Combine(path, "product.yaml"), paths)
+        Assert.Contains(IO.Path.Combine(path, ".itr", ".gitkeep"), paths)
+        Assert.Contains(IO.Path.Combine(path, "PRODUCT.md"), paths)
+        Assert.Contains(IO.Path.Combine(path, "ARCHITECTURE.md"), paths)
+    | other -> failwithf "expected Ok None, got %A" other
+
+[<Fact>]
+let ``initProduct with RegisterProfile=Some writes files and returns Some updatedPortfolio`` () =
+    let path = IO.Path.GetFullPath("/tmp/test-product-reg")
+    let written = System.Collections.Generic.List<string * string>()
+    let portfolio = mkInitPortfolio ()
+
+    let deps =
+        TestInitDeps((fun _ -> true), (fun _ -> false), written, portfolio)
+
+    let input =
+        { defaultInitInput "my-product" path with
+            RegisterProfile = Some "default" }
+
+    match FeaturePortfolio.initProduct "/stub/itr.json" input |> Effect.run deps with
+    | Ok(Some updatedPortfolio) ->
+        let paths = written |> Seq.map fst |> Seq.toList
+        Assert.Contains(IO.Path.Combine(path, "product.yaml"), paths)
+
+        let profile =
+            updatedPortfolio.Profiles |> Map.find (ProfileName.create "default")
+
+        Assert.Equal(1, profile.Products.Length)
+    | other -> failwithf "expected Ok Some, got %A" other
+
+[<Fact>]
+let ``initProduct when product.yaml already exists returns ProductConfigError and no files written`` () =
+    let path = "/tmp/test-product-exists"
+    let written = System.Collections.Generic.List<string * string>()
+    let portfolio = mkInitPortfolio ()
+
+    let fileExistsStub p =
+        p = IO.Path.Combine(path, "product.yaml")
+
+    let deps =
+        TestInitDeps((fun _ -> true), fileExistsStub, written, portfolio)
+
+    let input = defaultInitInput "my-product" path
+
+    match FeaturePortfolio.initProduct "/stub/itr.json" input |> Effect.run deps with
+    | Error(ProductConfigError _) -> Assert.Empty(written)
+    | other -> failwithf "expected ProductConfigError, got %A" other
+
+[<Fact>]
+let ``initProduct when path directory does not exist returns ProductConfigError`` () =
+    let path = "/tmp/nonexistent"
+    let written = System.Collections.Generic.List<string * string>()
+    let portfolio = mkInitPortfolio ()
+
+    let deps =
+        TestInitDeps((fun _ -> false), (fun _ -> false), written, portfolio)
+
+    let input = defaultInitInput "my-product" path
+
+    match FeaturePortfolio.initProduct "/stub/itr.json" input |> Effect.run deps with
+    | Error(ProductConfigError _) -> Assert.Empty(written)
+    | other -> failwithf "expected ProductConfigError, got %A" other
+
+[<Fact>]
+let ``initProduct with invalid id returns InvalidProductId`` () =
+    let path = "/tmp/test-product"
+    let written = System.Collections.Generic.List<string * string>()
+    let portfolio = mkInitPortfolio ()
+
+    let deps =
+        TestInitDeps((fun _ -> true), (fun _ -> false), written, portfolio)
+
+    let input = defaultInitInput "INVALID_ID" path
+
+    match FeaturePortfolio.initProduct "/stub/itr.json" input |> Effect.run deps with
+    | Error(InvalidProductId(value, _)) ->
+        Assert.Equal("INVALID_ID", value)
+        Assert.Empty(written)
+    | other -> failwithf "expected InvalidProductId, got %A" other
+
+[<Fact>]
+let ``initProduct with CoordinationMode=standalone writes yaml without coordination.repo`` () =
+    let path = "/tmp/test-standalone"
+    let written = System.Collections.Generic.List<string * string>()
+    let portfolio = mkInitPortfolio ()
+
+    let deps =
+        TestInitDeps((fun _ -> true), (fun _ -> false), written, portfolio)
+
+    let input =
+        { defaultInitInput "my-product" path with
+            CoordinationMode = "standalone" }
+
+    match FeaturePortfolio.initProduct "/stub/itr.json" input |> Effect.run deps with
+    | Ok None ->
+        let yamlPath = IO.Path.Combine(path, "product.yaml")
+
+        let yamlContent =
+            written
+            |> Seq.tryFind (fun (p, _) -> p = yamlPath)
+            |> Option.map snd
+            |> Option.defaultValue ""
+
+        Assert.Contains("mode: standalone", yamlContent)
+        Assert.DoesNotContain("coordination.repo", yamlContent)
+        Assert.DoesNotContain("repo: my-repo", yamlContent)
+    | other -> failwithf "expected Ok None, got %A" other

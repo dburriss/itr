@@ -2,6 +2,7 @@ module Itr.Cli.Program
 
 open System
 open Argu
+open Spectre.Console
 open Itr.Domain
 open Itr.Features
 open Itr.Adapters
@@ -54,11 +55,42 @@ type ProfilesArgs =
             match this with
             | Add _ -> "add a new profile to the portfolio"
 
+[<CliPrefix(CliPrefix.DoubleDash)>]
+type ProductInitArgs =
+    | [<MainCommand; Mandatory>] Path of path: string
+    | Id of id: string
+    | Repo_Id of repo_id: string
+    | Coord_Path of coord_path: string
+    | Coord_Mode of coord_mode: string
+    | Register_Profile of register_profile: string
+    | No_Register
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Path _ -> "target directory for the new product"
+            | Id _ -> "product id (slug: [a-z0-9][a-z0-9-]*)"
+            | Repo_Id _ -> "repo id (defaults to product id)"
+            | Coord_Path _ -> "coordination directory path (default: .itr)"
+            | Coord_Mode _ -> "coordination mode: primary-repo or standalone (default: primary-repo)"
+            | Register_Profile _ -> "register the new product in this portfolio profile"
+            | No_Register -> "skip registration in itr.json"
+
+[<CliPrefix(CliPrefix.DoubleDash)>]
+type ProductArgs =
+    | [<CliPrefix(CliPrefix.None)>] Init of ParseResults<ProductInitArgs>
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Init _ -> "scaffold a new product"
+
 type CliArgs =
     | [<AltCommandLine("-p")>] Profile of string
     | Output of string
     | [<CliPrefix(CliPrefix.None)>] Backlog of ParseResults<BacklogArgs>
     | [<CliPrefix(CliPrefix.None)>] Profiles of ParseResults<ProfilesArgs>
+    | [<CliPrefix(CliPrefix.None)>] Product of ParseResults<ProductArgs>
 
     interface IArgParserTemplate with
         member this.Usage =
@@ -67,6 +99,7 @@ type CliArgs =
             | Output _ -> "set output mode (for example: json)"
             | Backlog _ -> "backlog commands"
             | Profiles _ -> "profile management commands"
+            | Product _ -> "product management commands"
 
 // ---------------------------------------------------------------------------
 // Composition root
@@ -150,6 +183,8 @@ let private formatPortfolioError (err: PortfolioError) : string =
     | BootstrapWriteError(path, msg) -> $"Could not create itr.json at {path}: {msg}"
     | DuplicateProfileName name -> $"Profile '{name}' already exists."
     | InvalidProfileName(value, rules) -> $"Invalid profile name '{value}': {rules}"
+    | InvalidProductId(value, rules) -> $"Invalid product id '{value}': {rules}"
+    | ProductConfigError(root, msg) -> $"Product config error at '{root}': {msg}"
     | other -> $"%A{other}"
 
 // ---------------------------------------------------------------------------
@@ -359,6 +394,69 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                 | None -> Error "Specify a profiles subcommand (e.g. profiles add <name>)"
 
             | None ->
+                match results.TryGetResult Product with
+                | Some productResults ->
+                    match productResults.TryGetResult Init with
+                    | Some initArgs ->
+                        let rawPath = initArgs.GetResult ProductInitArgs.Path
+
+                        // 2.4 Interactive prompt for missing id
+                        let rawId =
+                            match initArgs.TryGetResult ProductInitArgs.Id with
+                            | Some id -> id
+                            | None -> AnsiConsole.Ask<string>("Product id:")
+
+                        // 2.5 Interactive prompt for missing repo-id
+                        let rawRepoId =
+                            match initArgs.TryGetResult ProductInitArgs.Repo_Id with
+                            | Some repoId -> repoId
+                            | None ->
+                                let answer = AnsiConsole.Ask<string>($"Repo id (default: same as id):")
+                                if String.IsNullOrWhiteSpace(answer) then rawId else answer
+
+                        let coordPath = initArgs.TryGetResult ProductInitArgs.Coord_Path |> Option.defaultValue ".itr"
+                        let coordMode = initArgs.TryGetResult ProductInitArgs.Coord_Mode |> Option.defaultValue "primary-repo"
+
+                        // 2.6 Interactive prompt for registration profile
+                        let registerProfile =
+                            if initArgs.Contains ProductInitArgs.No_Register then
+                                None
+                            else
+                                match initArgs.TryGetResult ProductInitArgs.Register_Profile with
+                                | Some p -> Some p
+                                | None ->
+                                    let answer = AnsiConsole.Ask<string>("Register in profile (leave blank to skip):")
+                                    if String.IsNullOrWhiteSpace(answer) then None else Some answer
+
+                        let input: Portfolio.InitProductInput =
+                            { Id = rawId
+                              Path = rawPath
+                              RepoId = rawRepoId
+                              CoordPath = coordPath
+                              CoordinationMode = coordMode
+                              RegisterProfile = registerProfile }
+
+                        let result =
+                            Portfolio.initProduct configPath input
+                            |> Effect.run deps
+                            |> Result.mapError formatPortfolioError
+
+                        match result with
+                        | Error msg -> Error msg
+                        | Ok maybePortfolio ->
+                            // 2.7 Success message
+                            printfn "Initialized product '%s' at %s." rawId rawPath
+
+                            // 2.8 Registration success message
+                            match maybePortfolio, registerProfile with
+                            | Some _, Some prof -> printfn "Registered in profile '%s'." prof
+                            | _ -> ()
+
+                            Ok()
+
+                    | None -> Error "Specify a product subcommand (e.g. product init <path>)"
+
+                | None ->
                 // Legacy behaviour: just load portfolio
                 let loadResult = Portfolio.loadPortfolio (Some configPath) |> Effect.run deps
 

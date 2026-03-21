@@ -511,3 +511,140 @@ let ``profiles add git-email without git-name is caught by CLI validation`` () =
     finally
         if Directory.Exists(root) then
             Directory.Delete(root, true)
+
+// ---------------------------------------------------------------------------
+// initProduct acceptance tests
+// ---------------------------------------------------------------------------
+
+/// Helper: create an itr.json with a single "default" profile
+let private makeItrJson (portfolioPath: string) =
+    File.WriteAllText(portfolioPath, """{"defaultProfile": "default", "profiles": {"default": {"products": []}}}""")
+
+let private defaultInitInput idStr (path: string) : Portfolio.InitProductInput =
+    { Id = idStr
+      Path = path
+      RepoId = "my-repo"
+      CoordPath = ".itr"
+      CoordinationMode = "primary-repo"
+      RegisterProfile = None }
+
+[<Fact>]
+let ``initProduct creates all expected files and itr.json updated when registered`` () =
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-init-product-{Guid.NewGuid():N}")
+
+    try
+        Directory.CreateDirectory(root) |> ignore
+        let portfolioPath = Path.Combine(root, "itr.json")
+        makeItrJson portfolioPath
+
+        let productPath = Path.Combine(root, "my-product")
+        Directory.CreateDirectory(productPath) |> ignore
+
+        let deps = TestDeps(portfolioPath)
+
+        let input =
+            { defaultInitInput "my-product" productPath with
+                RegisterProfile = Some "default" }
+
+        match FeaturePortfolio.initProduct portfolioPath input |> Effect.run deps with
+        | Error e -> failwithf "expected Ok, got %A" e
+        | Ok result ->
+            Assert.True(File.Exists(Path.Combine(productPath, "product.yaml")), "product.yaml missing")
+            Assert.True(File.Exists(Path.Combine(productPath, ".itr", ".gitkeep")), ".gitkeep missing")
+            Assert.True(File.Exists(Path.Combine(productPath, "PRODUCT.md")), "PRODUCT.md missing")
+            Assert.True(File.Exists(Path.Combine(productPath, "ARCHITECTURE.md")), "ARCHITECTURE.md missing")
+
+            Assert.True(result.IsSome, "expected Some updatedPortfolio")
+
+            let portfolioConfig = deps :> IPortfolioConfig
+
+            match portfolioConfig.LoadConfig portfolioPath with
+            | Error e -> failwithf "LoadConfig failed: %A" e
+            | Ok loaded ->
+                let profile = loaded.Profiles |> Map.find (ProfileName.create "default")
+                Assert.Equal(1, profile.Products.Length)
+
+            let yaml = File.ReadAllText(Path.Combine(productPath, "product.yaml"))
+            Assert.Contains("id: my-product", yaml)
+            Assert.Contains("mode: primary-repo", yaml)
+            Assert.Contains("repo: my-repo", yaml)
+
+            let productMd = File.ReadAllText(Path.Combine(productPath, "PRODUCT.md"))
+            Assert.Contains("# Product: my-product", productMd)
+            Assert.Contains("## Purpose", productMd)
+
+            let archMd = File.ReadAllText(Path.Combine(productPath, "ARCHITECTURE.md"))
+            Assert.Contains("# Architecture: my-product", archMd)
+            Assert.Contains("## Technology Stack", archMd)
+    finally
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
+
+[<Fact>]
+let ``initProduct skip registration leaves itr.json unchanged`` () =
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-init-noreg-{Guid.NewGuid():N}")
+
+    try
+        Directory.CreateDirectory(root) |> ignore
+        let portfolioPath = Path.Combine(root, "itr.json")
+        makeItrJson portfolioPath
+        let originalContent = File.ReadAllText(portfolioPath)
+
+        let productPath = Path.Combine(root, "my-product")
+        Directory.CreateDirectory(productPath) |> ignore
+
+        let deps = TestDeps(portfolioPath)
+        let input = defaultInitInput "my-product" productPath
+
+        match FeaturePortfolio.initProduct portfolioPath input |> Effect.run deps with
+        | Error e -> failwithf "expected Ok, got %A" e
+        | Ok result ->
+            Assert.True(result.IsNone, "expected None when RegisterProfile=None")
+            Assert.Equal(originalContent, File.ReadAllText(portfolioPath))
+            Assert.True(File.Exists(Path.Combine(productPath, "product.yaml")))
+    finally
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
+
+[<Fact>]
+let ``initProduct duplicate product root in profile returns error and itr.json unchanged`` () =
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-init-dup-{Guid.NewGuid():N}")
+
+    try
+        Directory.CreateDirectory(root) |> ignore
+        let portfolioPath = Path.Combine(root, "itr.json")
+
+        let productPath = Path.GetFullPath(Path.Combine(root, "my-product"))
+        Directory.CreateDirectory(productPath) |> ignore
+
+        // Register productPath once
+        makeItrJson portfolioPath
+
+        let deps = TestDeps(portfolioPath)
+
+        let input1 =
+            { defaultInitInput "my-product" productPath with
+                RegisterProfile = Some "default" }
+
+        match FeaturePortfolio.initProduct portfolioPath input1 |> Effect.run deps with
+        | Error e -> failwithf "first init expected Ok, got %A" e
+        | Ok _ ->
+            let afterFirst = File.ReadAllText(portfolioPath)
+
+            // Try to register the same root again
+            let regInput: Portfolio.RegisterProductInput =
+                { Path = productPath
+                  Profile = "default" }
+
+            let deps2 = TestDeps(portfolioPath)
+
+            match Portfolio.registerProduct portfolioPath regInput |> Effect.run deps2 with
+            | Error _ ->
+                Assert.Equal(afterFirst, File.ReadAllText(portfolioPath))
+            | Ok _ -> failwith "expected error for duplicate registration"
+    finally
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
