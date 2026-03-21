@@ -130,3 +130,52 @@ let bootstrapIfMissing<'deps when 'deps :> IFileSystem>
                     | DirectoryNotFound p -> $"Directory not found: {p}"
 
                 BootstrapWriteError(configPath, msg)))
+
+// ---------------------------------------------------------------------------
+// addProfile use-case input type
+// ---------------------------------------------------------------------------
+
+type AddProfileInput =
+    { Name: string
+      GitIdentity: GitIdentity option
+      SetAsDefault: bool }
+
+/// Add a new named profile to the portfolio.
+/// Validates the profile name, checks for duplicates, builds and returns the updated Portfolio.
+/// The caller is responsible for persisting via SaveConfig.
+let addProfile<'deps when 'deps :> IPortfolioConfig>
+    (configPath: string)
+    (input: AddProfileInput)
+    : EffectResult<'deps, DomainPortfolio, PortfolioError> =
+    Effect(fun (deps: 'deps) ->
+        let config = deps :> IPortfolioConfig
+
+        ProfileName.tryCreate input.Name
+        |> Result.bind (fun profileName ->
+            config.LoadConfig configPath
+            |> Result.bind (fun portfolio ->
+                let nameStr = ProfileName.value profileName
+                let normalizedNew = nameStr.Trim().ToLowerInvariant()
+
+                let isDuplicate =
+                    portfolio.Profiles
+                    |> Map.exists (fun k _ -> ProfileName.normalize k = normalizedNew)
+
+                if isDuplicate then
+                    Error(DuplicateProfileName nameStr)
+                else
+                    let newProfile =
+                        { Name = profileName
+                          Products = []
+                          GitIdentity = input.GitIdentity }
+
+                    let updatedProfiles = portfolio.Profiles |> Map.add profileName newProfile
+
+                    let updatedDefault =
+                        if input.SetAsDefault then Some profileName
+                        else portfolio.DefaultProfile
+
+                    Ok
+                        { portfolio with
+                            Profiles = updatedProfiles
+                            DefaultProfile = updatedDefault })))

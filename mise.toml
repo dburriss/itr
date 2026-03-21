@@ -2,6 +2,7 @@
 dotnet = "latest"
 "npm:@fission-ai/openspec" = "latest"
 
+# Define tasks for building, testing, formatting, and running the project.
 [tasks.build]
 run = "dotnet build"
 description = "Build the project using dotnet build."
@@ -23,6 +24,23 @@ description = "Check F# formatting without modifying files (used in CI)."
 [tasks.verify]
 depends = ["test"]
 description = "Full pre-push verification: build, format check, test."
+
+# Define tasks for running specific CLI commands using dotnet run.
+[tasks.profile-add]
+description = "Run the profiles add command using dotnet run."
+usage = '''
+arg "<name>" help="Name of the profile to add."
+flag "--git-name <git-name>" help="Git user name to associate with the profile."
+flag "--git-email <git-email>" help="Git email to associate with the profile."
+flag "--default" help="Set the new profile as the default profile."
+'''
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+EXTRA_ARGS=()
+if [ "${usage_default:-false}" = "true" ]; then EXTRA_ARGS+=("--set-default"); fi
+dotnet run --project src/cli/Itr.Cli.fsproj -- profiles add "${usage_name?}" --git-name "${usage_git_name?}" --git-email "${usage_git_email?}" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+'''
 
 [tasks.backlog]
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog"

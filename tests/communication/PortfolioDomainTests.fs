@@ -50,6 +50,48 @@ type TestFsDeps(dirExists: string -> bool, productDefs: Map<string, ProductDefin
             | None -> Error(ProductConfigError(root, "product.yaml not found (test stub)"))
 
 // ---------------------------------------------------------------------------
+// ProfileName slug validation
+// ---------------------------------------------------------------------------
+
+[<Theory>]
+[<InlineData("my-profile")>]
+[<InlineData("work")>]
+[<InlineData("dev2")>]
+[<InlineData("a")>]
+let ``ProfileName.tryCreate accepts valid slugs`` name =
+    match ProfileName.tryCreate name with
+    | Ok parsed -> Assert.Equal(name, ProfileName.value parsed)
+    | Error e -> failwithf "expected valid, got error: %A" e
+
+[<Theory>]
+[<InlineData("")>]
+[<InlineData("   ")>]
+let ``ProfileName.tryCreate rejects blank names`` name =
+    match ProfileName.tryCreate name with
+    | Ok _ -> failwith "expected invalid slug"
+    | Error(InvalidProfileName(value, _)) -> Assert.Equal(name, value)
+    | Error other -> failwithf "expected InvalidProfileName, got %A" other
+
+[<Theory>]
+[<InlineData("MyProfile")>]
+[<InlineData("WORK")>]
+let ``ProfileName.tryCreate rejects uppercase names`` name =
+    match ProfileName.tryCreate name with
+    | Ok _ -> failwith "expected invalid slug"
+    | Error(InvalidProfileName(value, _)) -> Assert.Equal(name, value)
+    | Error other -> failwithf "expected InvalidProfileName, got %A" other
+
+[<Theory>]
+[<InlineData("my profile")>]
+[<InlineData("my_profile")>]
+[<InlineData("-bad")>]
+let ``ProfileName.tryCreate rejects names with spaces or special characters`` name =
+    match ProfileName.tryCreate name with
+    | Ok _ -> failwith "expected invalid slug"
+    | Error(InvalidProfileName(value, _)) -> Assert.Equal(name, value)
+    | Error other -> failwithf "expected InvalidProfileName, got %A" other
+
+// ---------------------------------------------------------------------------
 // ProductId slug validation
 // ---------------------------------------------------------------------------
 
@@ -215,3 +257,73 @@ let ``resolveProduct returns DuplicateProductId when two roots share same canoni
         Assert.Equal("work", profileName)
         Assert.Equal("same-id", productId)
     | other -> failwithf "expected DuplicateProductId, got %A" other
+
+// ---------------------------------------------------------------------------
+// addProfile use-case tests
+// ---------------------------------------------------------------------------
+
+/// Stub IPortfolioConfig that returns a fixed portfolio for LoadConfig,
+/// with no-op SaveConfig.
+type StubPortfolioConfig(portfolio: Portfolio) =
+    interface IPortfolioConfig with
+        member _.ConfigPath() = "/stub/itr.json"
+        member _.LoadConfig _ = Ok portfolio
+        member _.SaveConfig _ _ = Ok()
+
+let private mkPortfolio (defaultProfileName: string option) (profiles: Profile list) =
+    DomainPortfolio.tryCreate (defaultProfileName |> Option.map ProfileName.create) profiles
+    |> Result.defaultWith (fun e -> failwithf "failed to build portfolio: %A" e)
+
+[<Fact>]
+let ``addProfile returns updated portfolio with new profile`` () =
+    let existing = mkProfile "work" []
+    let portfolio = mkPortfolio (Some "work") [ existing ]
+    let deps = StubPortfolioConfig(portfolio)
+
+    let input: FeaturePortfolio.AddProfileInput =
+        { Name = "personal"; GitIdentity = None; SetAsDefault = false }
+
+    match FeaturePortfolio.addProfile "/stub/itr.json" input |> Effect.run deps with
+    | Ok updated ->
+        Assert.True(updated.Profiles |> Map.containsKey (ProfileName.create "personal"))
+        Assert.True(updated.Profiles |> Map.containsKey (ProfileName.create "work"))
+    | Error e -> failwithf "expected Ok, got %A" e
+
+[<Fact>]
+let ``addProfile returns DuplicateProfileName for existing name`` () =
+    let existing = mkProfile "work" []
+    let portfolio = mkPortfolio (Some "work") [ existing ]
+    let deps = StubPortfolioConfig(portfolio)
+
+    let input: FeaturePortfolio.AddProfileInput =
+        { Name = "work"; GitIdentity = None; SetAsDefault = false }
+
+    match FeaturePortfolio.addProfile "/stub/itr.json" input |> Effect.run deps with
+    | Error(DuplicateProfileName name) -> Assert.Equal("work", name)
+    | other -> failwithf "expected DuplicateProfileName, got %A" other
+
+[<Fact>]
+let ``addProfile with setAsDefault updates DefaultProfile`` () =
+    let existing = mkProfile "work" []
+    let portfolio = mkPortfolio (Some "work") [ existing ]
+    let deps = StubPortfolioConfig(portfolio)
+
+    let input: FeaturePortfolio.AddProfileInput =
+        { Name = "personal"; GitIdentity = None; SetAsDefault = true }
+
+    match FeaturePortfolio.addProfile "/stub/itr.json" input |> Effect.run deps with
+    | Ok updated ->
+        Assert.Equal(Some "personal", updated.DefaultProfile |> Option.map ProfileName.value)
+    | Error e -> failwithf "expected Ok, got %A" e
+
+[<Fact>]
+let ``addProfile returns InvalidProfileName for invalid name`` () =
+    let portfolio = mkPortfolio None []
+    let deps = StubPortfolioConfig(portfolio)
+
+    let input: FeaturePortfolio.AddProfileInput =
+        { Name = "My Work"; GitIdentity = None; SetAsDefault = false }
+
+    match FeaturePortfolio.addProfile "/stub/itr.json" input |> Effect.run deps with
+    | Error(InvalidProfileName(value, _)) -> Assert.Equal("My Work", value)
+    | other -> failwithf "expected InvalidProfileName, got %A" other

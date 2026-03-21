@@ -59,6 +59,7 @@ type PortfolioError =
     | ConfigNotFound of expectedPath: string
     | ConfigParseError of path: string * message: string
     | InvalidProductId of value: string * rules: string
+    | InvalidProfileName of value: string * rules: string
     | DuplicateProfileName of profileName: string
     | DuplicateProductId of profileName: string * productId: string
     | ProfileNotFound of profileName: string
@@ -84,6 +85,17 @@ module ProductId =
 
 [<RequireQualifiedAccess>]
 module ProfileName =
+    let private slugRegex = Regex("^[a-z0-9][a-z0-9-]*$", RegexOptions.Compiled)
+    let private rules = "must match [a-z0-9][a-z0-9-]*"
+
+    let tryCreate (value: string) : Result<ProfileName, PortfolioError> =
+        if System.String.IsNullOrWhiteSpace(value) then
+            Error(InvalidProfileName(value, rules))
+        elif slugRegex.IsMatch(value) then
+            Ok(ProfileName value)
+        else
+            Error(InvalidProfileName(value, rules))
+
     let value (ProfileName value) = value
     let normalize (ProfileName value) = value.Trim().ToLowerInvariant()
     let create value = ProfileName value

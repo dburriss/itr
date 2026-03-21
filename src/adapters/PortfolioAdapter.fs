@@ -1,7 +1,6 @@
 module Itr.Adapters.PortfolioAdapter
 
 open System
-open System.IO
 open System.Text.Json
 open System.Text.Json.Serialization
 open System.Text.RegularExpressions
@@ -40,7 +39,7 @@ let expandPath (homeDir: string) (value: string) : string =
             if value = "~" then
                 homeDir
             elif value.StartsWith("~/", StringComparison.Ordinal) then
-                Path.Combine(homeDir, value.Substring(2))
+                System.IO.Path.Combine(homeDir, value.Substring(2))
             else
                 value
 
@@ -77,29 +76,37 @@ let private jsonOptions () =
     options.DefaultIgnoreCondition <- JsonIgnoreCondition.WhenWritingNull
     options
 
-let readConfig (homeDir: string) (path: string) : Result<Portfolio, PortfolioError> =
+let readConfig (fs: IFileSystem) (homeDir: string) (path: string) : Result<Portfolio, PortfolioError> =
     let resolvedPath = expandPath homeDir path
 
-    if not (File.Exists(resolvedPath)) then
+    if not (fs.FileExists(resolvedPath)) then
         Error(ConfigNotFound resolvedPath)
     else
-        try
-            let json = File.ReadAllText(resolvedPath)
+        match fs.ReadFile(resolvedPath) with
+        | Error ioErr ->
+            let msg =
+                match ioErr with
+                | IoException(_, m) -> m
+                | FileNotFound p -> $"File not found: {p}"
+                | DirectoryNotFound p -> $"Directory not found: {p}"
 
-            let dto =
-                JsonSerializer.Deserialize<PortfolioDto>(json, jsonOptions ()) |> Option.ofObj
+            Error(ConfigParseError(resolvedPath, msg))
+        | Ok json ->
+            try
+                let dto =
+                    JsonSerializer.Deserialize<PortfolioDto>(json, jsonOptions ()) |> Option.ofObj
 
-            match dto with
-            | None -> Error(ConfigParseError(resolvedPath, "Config file was empty or invalid."))
-            | Some model ->
-                mapPortfolio homeDir model
-                |> Result.mapError (function
-                    | ConfigParseError(_, message) -> ConfigParseError(resolvedPath, message)
-                    | other -> other)
-        with ex ->
-            Error(ConfigParseError(resolvedPath, ex.Message))
+                match dto with
+                | None -> Error(ConfigParseError(resolvedPath, "Config file was empty or invalid."))
+                | Some model ->
+                    mapPortfolio homeDir model
+                    |> Result.mapError (function
+                        | ConfigParseError(_, message) -> ConfigParseError(resolvedPath, message)
+                        | other -> other)
+            with ex ->
+                Error(ConfigParseError(resolvedPath, ex.Message))
 
-let writeConfig (homeDir: string) (path: string) (portfolio: Portfolio) : Result<unit, PortfolioError> =
+let writeConfig (fs: IFileSystem) (homeDir: string) (path: string) (portfolio: Portfolio) : Result<unit, PortfolioError> =
     let resolvedPath = expandPath homeDir path
 
     try
@@ -122,25 +129,32 @@ let writeConfig (homeDir: string) (path: string) (portfolio: Portfolio) : Result
             { defaultProfile = portfolio.DefaultProfile |> Option.map ProfileName.value
               profiles = profiles }
 
-        let json = JsonSerializer.Serialize(dto, jsonOptions ())
-        let dir = Path.GetDirectoryName(resolvedPath)
+        let writeOptions = jsonOptions ()
+        writeOptions.WriteIndented <- true
+        let json = JsonSerializer.Serialize(dto, writeOptions)
 
-        if not (String.IsNullOrEmpty(dir)) then
-            Directory.CreateDirectory(dir) |> ignore
+        fs.WriteFile resolvedPath json
+        |> Result.mapError (fun ioErr ->
+            let msg =
+                match ioErr with
+                | IoException(_, m) -> m
+                | FileNotFound p -> $"File not found: {p}"
+                | DirectoryNotFound p -> $"Directory not found: {p}"
 
-        File.WriteAllText(resolvedPath, json)
-        Ok()
+            ConfigParseError(resolvedPath, msg))
     with ex ->
         Error(ConfigParseError(resolvedPath, ex.Message))
 
 /// Create a PortfolioConfigAdapter that implements IPortfolioConfig
-type PortfolioConfigAdapter(env: IEnvironment) =
+type PortfolioConfigAdapter(env: IEnvironment, fs: IFileSystem) =
     let homeDir = env.HomeDirectory()
 
     interface IPortfolioConfig with
         member _.ConfigPath() =
             match env.GetEnvVar "ITR_HOME" with
-            | Some itrHome -> Path.Combine(expandPath homeDir itrHome, "itr.json")
-            | None -> Path.Combine(homeDir, ".config", "itr", "itr.json")
+            | Some itrHome -> System.IO.Path.Combine(expandPath homeDir itrHome, "itr.json")
+            | None -> System.IO.Path.Combine(homeDir, ".config", "itr", "itr.json")
 
-        member _.LoadConfig path = readConfig homeDir path
+        member _.LoadConfig path = readConfig fs homeDir path
+
+        member _.SaveConfig path portfolio = writeConfig fs homeDir path portfolio

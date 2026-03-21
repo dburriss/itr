@@ -30,6 +30,8 @@ type IPortfolioConfig =
     abstract ConfigPath: unit -> string
     /// Load portfolio from a config file path
     abstract LoadConfig: path: string -> Result<Portfolio, PortfolioError>
+    /// Save portfolio to a config file path
+    abstract SaveConfig: path: string -> portfolio: Portfolio -> Result<unit, PortfolioError>
 
 /// Capability interface for YAML serialization (placeholder for future)
 type IYamlService =

@@ -30,10 +30,35 @@ type BacklogArgs =
             match this with
             | Take _ -> "take a backlog item and create task files"
 
+[<CliPrefix(CliPrefix.DoubleDash)>]
+type ProfilesAddArgs =
+    | [<MainCommand; Mandatory>] Name of name: string
+    | Git_Name of git_name: string
+    | Git_Email of git_email: string
+    | Set_Default
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Name _ -> "profile name (slug: [a-z0-9][a-z0-9-]*)"
+            | Git_Name _ -> "git user name for this profile"
+            | Git_Email _ -> "git user email for this profile"
+            | Set_Default -> "set this profile as the default"
+
+[<CliPrefix(CliPrefix.DoubleDash)>]
+type ProfilesArgs =
+    | [<CliPrefix(CliPrefix.None)>] Add of ParseResults<ProfilesAddArgs>
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Add _ -> "add a new profile to the portfolio"
+
 type CliArgs =
     | [<AltCommandLine("-p")>] Profile of string
     | Output of string
     | [<CliPrefix(CliPrefix.None)>] Backlog of ParseResults<BacklogArgs>
+    | [<CliPrefix(CliPrefix.None)>] Profiles of ParseResults<ProfilesArgs>
 
     interface IArgParserTemplate with
         member this.Usage =
@@ -41,6 +66,7 @@ type CliArgs =
             | Profile _ -> "select active portfolio profile"
             | Output _ -> "set output mode (for example: json)"
             | Backlog _ -> "backlog commands"
+            | Profiles _ -> "profile management commands"
 
 // ---------------------------------------------------------------------------
 // Composition root
@@ -50,7 +76,7 @@ type CliArgs =
 type AppDeps() =
     let envAdapter = EnvironmentAdapter()
     let fsAdapter = FileSystemAdapter()
-    let portfolioConfigAdapter = PortfolioAdapter.PortfolioConfigAdapter(envAdapter)
+    let portfolioConfigAdapter = PortfolioAdapter.PortfolioConfigAdapter(envAdapter, fsAdapter)
     let productConfigAdapter = YamlAdapter.ProductConfigAdapter()
     let backlogStoreAdapter = YamlAdapter.BacklogStoreAdapter()
     let taskStoreAdapter = YamlAdapter.TaskStoreAdapter()
@@ -81,6 +107,9 @@ type AppDeps() =
 
         member _.LoadConfig path =
             (portfolioConfigAdapter :> IPortfolioConfig).LoadConfig path
+
+        member _.SaveConfig path portfolio =
+            (portfolioConfigAdapter :> IPortfolioConfig).SaveConfig path portfolio
 
     interface IProductConfig with
         member _.LoadProductConfig productRoot =
@@ -119,6 +148,8 @@ let private formatTakeError (err: TakeError) : string =
 let private formatPortfolioError (err: PortfolioError) : string =
     match err with
     | BootstrapWriteError(path, msg) -> $"Could not create itr.json at {path}: {msg}"
+    | DuplicateProfileName name -> $"Profile '{name}' already exists."
+    | InvalidProfileName(value, rules) -> $"Invalid profile name '{value}': {rules}"
     | other -> $"%A{other}"
 
 // ---------------------------------------------------------------------------
@@ -288,13 +319,53 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
             | None -> Error "Specify a backlog subcommand (e.g. backlog take <id>)"
 
         | None ->
-            // Legacy behaviour: just load portfolio
-            let loadResult = Portfolio.loadPortfolio (Some configPath) |> Effect.run deps
+            match results.TryGetResult Profiles with
+            | Some profilesResults ->
+                match profilesResults.TryGetResult Add with
+                | Some addArgs ->
+                    let name = addArgs.GetResult ProfilesAddArgs.Name
+                    let gitName = addArgs.TryGetResult ProfilesAddArgs.Git_Name
+                    let gitEmail = addArgs.TryGetResult ProfilesAddArgs.Git_Email
+                    let setDefault = addArgs.Contains ProfilesAddArgs.Set_Default
 
-            loadResult
-            |> Result.bind (fun portfolio -> Portfolio.resolveActiveProfile portfolio profile |> Effect.run deps)
-            |> Result.map (fun _ -> printfn "itr cli")
-            |> Result.mapError (fun e -> $"%A{e}")
+                    // Validate: --git-email requires --git-name
+                    match gitEmail, gitName with
+                    | Some _, None ->
+                        Error "--git-email requires --git-name to also be specified"
+                    | _ ->
+                        let gitIdentity =
+                            gitName
+                            |> Option.map (fun gn -> { Name = gn; Email = gitEmail })
+
+                        let input: Portfolio.AddProfileInput =
+                            { Name = name
+                              GitIdentity = gitIdentity
+                              SetAsDefault = setDefault }
+
+                        let result =
+                            Portfolio.addProfile configPath input
+                            |> Effect.run deps
+                            |> Result.mapError formatPortfolioError
+
+                        match result with
+                        | Error msg -> Error msg
+                        | Ok updatedPortfolio ->
+                            let portfolioConfig = deps :> IPortfolioConfig
+
+                            portfolioConfig.SaveConfig configPath updatedPortfolio
+                            |> Result.mapError formatPortfolioError
+                            |> Result.map (fun () -> printfn "Added profile '%s'." name)
+
+                | None -> Error "Specify a profiles subcommand (e.g. profiles add <name>)"
+
+            | None ->
+                // Legacy behaviour: just load portfolio
+                let loadResult = Portfolio.loadPortfolio (Some configPath) |> Effect.run deps
+
+                loadResult
+                |> Result.bind (fun portfolio -> Portfolio.resolveActiveProfile portfolio profile |> Effect.run deps)
+                |> Result.map (fun _ -> printfn "itr cli")
+                |> Result.mapError (fun e -> $"%A{e}")
 
 [<EntryPoint>]
 let main argv =
