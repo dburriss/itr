@@ -42,6 +42,8 @@ Reader-style computation expression threads a dependency environment through use
    - Usecases are pure pipelines using `effectResult { }` CE
    - Depend only on Core
    - No direct IO
+   - Usecases cannot depend on each other; they are independent entry points into the domain logic. Coordination is done at the entry point layer, not between usecases.
+   - Each entry point uses at most one usecase. If functionality is needed in more than one entry point, it is pulled out the usecase and shared across them. This keeps usecases focused and reusable without coupling them together. A usecase represents a usage of a capability in a specific context, not a reusable library function.
 
 3. **Adapters** (`Itr.Adapters`)
    - Concrete implementations of Core interfaces
