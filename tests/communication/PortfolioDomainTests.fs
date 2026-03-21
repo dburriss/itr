@@ -1,10 +1,10 @@
 module Itr.Tests.Communication.PortfolioDomainTests
 
 open System
+open System.IO
 open Xunit
 open Itr.Domain
 open Itr.Features
-open Itr.Adapters
 
 module DomainPortfolio = Itr.Domain.Portfolio
 module FeaturePortfolio = Itr.Features.Portfolio
@@ -14,10 +14,8 @@ let private getResult =
     | Ok value -> value
     | Error error -> failwithf "expected Ok, got %A" error
 
-let private mkProduct id root =
-    match ProductId.tryCreate id with
-    | Ok productId -> { Id = productId; Root = root }
-    | Error e -> failwithf "invalid test product id: %A" e
+/// Build a ProductRef with a bare root path.
+let private mkProductRef root = { Root = ProductRoot root }
 
 let private mkProfile name products =
     { Name = ProfileName.create name
@@ -32,8 +30,10 @@ type TestEnvDeps(envVars: Map<string, string>) =
         member _.HomeDirectory() =
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
 
-/// Test deps for filesystem operations
-type TestFsDeps(dirExists: string -> bool) =
+/// Test deps for filesystem + product-config operations.
+/// dirExists controls IFileSystem.DirectoryExists.
+/// productDefs maps root path → ProductDefinition (for IProductConfig).
+type TestFsDeps(dirExists: string -> bool, productDefs: Map<string, ProductDefinition>) =
     interface IFileSystem with
         member _.ReadFile _ = Error(FileNotFound "not implemented")
 
@@ -42,6 +42,16 @@ type TestFsDeps(dirExists: string -> bool) =
 
         member _.FileExists _ = false
         member _.DirectoryExists path = dirExists path
+
+    interface IProductConfig with
+        member _.LoadProductConfig root =
+            match Map.tryFind root productDefs with
+            | Some def -> Ok def
+            | None -> Error(ProductConfigError(root, "product.yaml not found (test stub)"))
+
+// ---------------------------------------------------------------------------
+// ProductId slug validation
+// ---------------------------------------------------------------------------
 
 [<Theory>]
 [<InlineData("abc")>]
@@ -63,18 +73,9 @@ let ``ProductId rejects invalid slugs`` id =
     | Error(InvalidProductId(value, _)) -> Assert.Equal(id, value)
     | Error other -> failwithf "expected InvalidProductId, got %A" other
 
-[<Fact>]
-let ``Portfolio rejects duplicate ProductId within profile`` () =
-    let productA = mkProduct "same-id" (StandaloneConfig "~/a")
-    let productB = mkProduct "same-id" (StandaloneConfig "~/b")
-    let profile = mkProfile "work" [ productA; productB ]
-
-    match DomainPortfolio.tryCreate None [ profile ] with
-    | Ok _ -> failwith "expected duplicate product error"
-    | Error(DuplicateProductId(profileName, productId)) ->
-        Assert.Equal("work", profileName)
-        Assert.Equal("same-id", productId)
-    | Error other -> failwithf "unexpected error: %A" other
+// ---------------------------------------------------------------------------
+// resolveActiveProfile
+// ---------------------------------------------------------------------------
 
 [<Fact>]
 let ``resolveActiveProfile precedence flag over env over default and error when unresolved`` () =
@@ -128,21 +129,52 @@ let ``resolveActiveProfile lookup is case-insensitive`` () =
     | Ok profile -> Assert.Equal("work", profile.Name |> ProfileName.value)
     | Error e -> failwithf "expected success, got %A" e
 
+// ---------------------------------------------------------------------------
+// Helpers to build a ProductDefinition for test stubs
+// ---------------------------------------------------------------------------
+
+let private mkDefinition idStr root =
+    let productId =
+        ProductId.tryCreate idStr |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+    let coordRoot =
+        { Mode = Standalone
+          AbsolutePath = Path.Combine(root, ".itr") }
+
+    { Id = productId
+      Repos = Map.empty
+      Docs = Map.empty
+      Coordination =
+        { Mode = "standalone"
+          Repo = None
+          Path = None }
+      CoordRoot = coordRoot }
+
+// ---------------------------------------------------------------------------
+// resolveProduct
+// ---------------------------------------------------------------------------
+
 [<Fact>]
-let ``resolveProduct succeeds when dirExists returns true`` () =
-    let profile = mkProfile "work" [ mkProduct "api" (StandaloneConfig "/tmp/api") ]
-    let deps = TestFsDeps(fun _ -> true)
+let ``resolveProduct succeeds when coordRoot dir exists`` () =
+    let root = "/tmp/api"
+
+    let definition = mkDefinition "api" root
+
+    let profile = mkProfile "work" [ mkProductRef root ]
+
+    let deps = TestFsDeps((fun _ -> true), Map.ofList [ root, definition ])
 
     match FeaturePortfolio.resolveProduct profile "api" |> Effect.run deps with
-    | Ok resolved ->
-        Assert.Equal("api", ProductId.value resolved.Product.Id)
-        Assert.EndsWith(".itr", resolved.CoordRoot.AbsolutePath)
+    | Ok resolved -> Assert.EndsWith(".itr", resolved.CoordRoot.AbsolutePath)
     | Error e -> failwithf "expected success, got %A" e
 
 [<Fact>]
 let ``resolveProduct returns CoordRootNotFound when dir missing`` () =
-    let profile = mkProfile "work" [ mkProduct "api" (StandaloneConfig "/tmp/api") ]
-    let deps = TestFsDeps(fun _ -> false)
+    let root = "/tmp/api"
+    let definition = mkDefinition "api" root
+    let profile = mkProfile "work" [ mkProductRef root ]
+
+    let deps = TestFsDeps((fun _ -> false), Map.ofList [ root, definition ])
 
     match FeaturePortfolio.resolveProduct profile "api" |> Effect.run deps with
     | Error(CoordRootNotFound(productId, path)) ->
@@ -152,9 +184,34 @@ let ``resolveProduct returns CoordRootNotFound when dir missing`` () =
 
 [<Fact>]
 let ``resolveProduct returns ProductNotFound for unknown id`` () =
-    let profile = mkProfile "work" [ mkProduct "api" (StandaloneConfig "/tmp/api") ]
-    let deps = TestFsDeps(fun _ -> true)
+    let root = "/tmp/api"
+    let definition = mkDefinition "api" root
+    let profile = mkProfile "work" [ mkProductRef root ]
+
+    let deps = TestFsDeps((fun _ -> true), Map.ofList [ root, definition ])
 
     match FeaturePortfolio.resolveProduct profile "web" |> Effect.run deps with
     | Error(ProductNotFound productId) -> Assert.Equal("web", productId)
     | other -> failwithf "expected ProductNotFound, got %A" other
+
+// ---------------------------------------------------------------------------
+// Duplicate product id detection (use-case level)
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``resolveProduct returns DuplicateProductId when two roots share same canonical id`` () =
+    let rootA = "/tmp/product-a"
+    let rootB = "/tmp/product-b"
+
+    let defA = mkDefinition "same-id" rootA
+    let defB = mkDefinition "same-id" rootB
+
+    let profile = mkProfile "work" [ mkProductRef rootA; mkProductRef rootB ]
+
+    let deps = TestFsDeps((fun _ -> true), Map.ofList [ rootA, defA; rootB, defB ])
+
+    match FeaturePortfolio.resolveProduct profile "same-id" |> Effect.run deps with
+    | Error(DuplicateProductId(profileName, productId)) ->
+        Assert.Equal("work", profileName)
+        Assert.Equal("same-id", productId)
+    | other -> failwithf "expected DuplicateProductId, got %A" other

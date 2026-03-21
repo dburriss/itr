@@ -83,8 +83,8 @@ type AppDeps() =
             (portfolioConfigAdapter :> IPortfolioConfig).LoadConfig path
 
     interface IProductConfig with
-        member _.LoadProductConfig coordRoot =
-            (productConfigAdapter :> IProductConfig).LoadProductConfig coordRoot
+        member _.LoadProductConfig productRoot =
+            (productConfigAdapter :> IProductConfig).LoadProductConfig productRoot
 
     interface IBacklogStore with
         member _.LoadBacklogItem coordRoot backlogId =
@@ -122,15 +122,26 @@ let private formatPortfolioError (err: PortfolioError) : string =
     | other -> $"%A{other}"
 
 // ---------------------------------------------------------------------------
+// Project ProductDefinition to ProductConfig for task use case
+// ---------------------------------------------------------------------------
+
+let private toProductConfig (def: ProductDefinition) : ProductConfig =
+    let repos =
+        def.Repos |> Map.toSeq |> Seq.map (fun (k, v) -> RepoId k, v) |> Map.ofSeq
+
+    { Id = def.Id; Repos = repos }
+
+// ---------------------------------------------------------------------------
 // backlog take handler
 // ---------------------------------------------------------------------------
 
 let private handleBacklogTake
     (deps: AppDeps)
-    (coordRoot: string)
+    (resolved: ResolvedProduct)
     (takeArgs: ParseResults<TakeArgs>)
     (outputJson: bool)
     : Result<unit, string> =
+    let coordRoot = resolved.CoordRoot.AbsolutePath
     let rawBacklogId = takeArgs.GetResult Backlog_Id
     let taskIdOverride = takeArgs.TryGetResult Task_Id
 
@@ -140,14 +151,11 @@ let private handleBacklogTake
     | Error _ -> Error $"Invalid backlog id '{rawBacklogId}': must match [a-z0-9][a-z0-9-]*"
     | Ok backlogId ->
 
-    let productStore = deps :> IProductConfig
-    let backlogStore = deps :> IBacklogStore
-    let taskStore = deps :> ITaskStore
+        let productConfig = toProductConfig resolved.Definition
+        let backlogStore = deps :> IBacklogStore
+        let taskStore = deps :> ITaskStore
 
-    let result =
-        productStore.LoadProductConfig coordRoot
-        |> Result.mapError formatTakeError
-        |> Result.bind (fun productConfig ->
+        let result =
             backlogStore.LoadBacklogItem coordRoot backlogId
             |> Result.mapError formatTakeError
             |> Result.bind (fun backlogItem ->
@@ -163,44 +171,59 @@ let private handleBacklogTake
                     Task.takeBacklogItem productConfig backlogItem existingTasks input today
                     |> Result.mapError formatTakeError
                     |> Result.bind (fun newTasks ->
-                        // Re-read existing ids before writing to guard against TOCTOU
-                        let freshExistingResult = taskStore.ListTasks coordRoot backlogId
-
                         let writeResults =
                             newTasks
                             |> List.map (fun task ->
                                 taskStore.WriteTask coordRoot task
                                 |> Result.map (fun () ->
                                     let taskId = TaskId.value task.Id
-                                    let path = System.IO.Path.Combine(coordRoot, "BACKLOG", BacklogId.value backlogId, "tasks", taskId, "task.yaml")
+
+                                    let path =
+                                        System.IO.Path.Combine(
+                                            coordRoot,
+                                            "BACKLOG",
+                                            BacklogId.value backlogId,
+                                            "tasks",
+                                            taskId,
+                                            "task.yaml"
+                                        )
+
                                     (taskId, path))
                                 |> Result.mapError formatTakeError)
 
                         let errors =
-                            writeResults |> List.choose (function | Error e -> Some e | Ok _ -> None)
+                            writeResults
+                            |> List.choose (function
+                                | Error e -> Some e
+                                | Ok _ -> None)
 
                         match errors with
                         | e :: _ -> Error e
                         | [] ->
-                            let written = writeResults |> List.choose (function | Ok v -> Some v | Error _ -> None)
-                            Ok written))))
+                            let written =
+                                writeResults
+                                |> List.choose (function
+                                    | Ok v -> Some v
+                                    | Error _ -> None)
 
-    match result with
-    | Error msg -> Error msg
-    | Ok written ->
-        if outputJson then
-            let items =
-                written
-                |> List.map (fun (id, path) -> $"""  {{ "id": "{id}", "path": "{path}" }}""")
-                |> String.concat ",\n"
+                            Ok written)))
 
-            printfn """{ "ok": true, "tasks": ["""
-            printfn "%s" items
-            printfn "] }"
-        else
-            written |> List.iter (fun (id, path) -> printfn "Created task: %s → %s" id path)
+        match result with
+        | Error msg -> Error msg
+        | Ok written ->
+            if outputJson then
+                let items =
+                    written
+                    |> List.map (fun (id, path) -> $"""  {{ "id": "{id}", "path": "{path}" }}""")
+                    |> String.concat ",\n"
 
-        Ok()
+                printfn """{ "ok": true, "tasks": ["""
+                printfn "%s" items
+                printfn "] }"
+            else
+                written |> List.iter (fun (id, path) -> printfn "Created task: %s → %s" id path)
+
+            Ok()
 
 // ---------------------------------------------------------------------------
 // Dispatch
@@ -214,7 +237,8 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
     let configPath = (deps :> IPortfolioConfig).ConfigPath()
 
     let bootstrapResult =
-        Portfolio.bootstrapIfMissing configPath |> Effect.run deps
+        Portfolio.bootstrapIfMissing configPath
+        |> Effect.run deps
         |> Result.mapError formatPortfolioError
 
     match bootstrapResult with
@@ -229,27 +253,37 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
             | Some takeArgs ->
                 // Resolve the product to get the coordination root
                 let portfolioResult =
-                    Portfolio.loadPortfolio (Some configPath) |> Effect.run deps
+                    Portfolio.loadPortfolio (Some configPath)
+                    |> Effect.run deps
                     |> Result.mapError (fun e -> $"%A{e}")
                     |> Result.bind (fun portfolio ->
-                        Portfolio.resolveActiveProfile portfolio profile |> Effect.run deps
+                        Portfolio.resolveActiveProfile portfolio profile
+                        |> Effect.run deps
                         |> Result.mapError (fun e -> $"%A{e}"))
 
                 match portfolioResult with
                 | Error msg -> Error msg
-                | Ok profile ->
+                | Ok activeProfile ->
                     // For now take the first product from the profile
-                    match profile.Products with
+                    match activeProfile.Products with
                     | [] -> Error "No products in active profile"
                     | productRef :: _ ->
-                        let portfolioProductResult =
-                            Portfolio.resolveProduct profile (productRef.Id |> ProductId.value) |> Effect.run deps
-                            |> Result.mapError (fun e -> $"%A{e}")
+                        let (ProductRoot root) = productRef.Root
 
-                        match portfolioProductResult with
-                        | Error msg -> Error msg
-                        | Ok resolved ->
-                            handleBacklogTake deps resolved.CoordRoot.AbsolutePath takeArgs outputJson
+                        // Load the product definition to get the canonical id
+                        let productConfig = deps :> IProductConfig
+
+                        match productConfig.LoadProductConfig root with
+                        | Error e -> Error(formatPortfolioError e)
+                        | Ok definition ->
+                            let portfolioProductResult =
+                                Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                |> Effect.run deps
+                                |> Result.mapError (fun e -> $"%A{e}")
+
+                            match portfolioProductResult with
+                            | Error msg -> Error msg
+                            | Ok resolved -> handleBacklogTake deps resolved takeArgs outputJson
 
             | None -> Error "Specify a backlog subcommand (e.g. backlog take <id>)"
 

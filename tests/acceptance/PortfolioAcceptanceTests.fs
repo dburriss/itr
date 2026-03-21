@@ -15,6 +15,7 @@ module FeaturePortfolio = Itr.Features.Portfolio
 type TestDeps(portfolioPath: string) =
     let envAdapter = EnvironmentAdapter()
     let fsAdapter = FileSystemAdapter()
+    let productConfigAdapter = YamlAdapter.ProductConfigAdapter()
     let homeDir = (envAdapter :> IEnvironment).HomeDirectory()
 
     interface IEnvironment with
@@ -38,38 +39,58 @@ type TestDeps(portfolioPath: string) =
         member _.ConfigPath() = portfolioPath
         member _.LoadConfig path = readConfig homeDir path
 
+    interface IProductConfig with
+        member _.LoadProductConfig root =
+            (productConfigAdapter :> IProductConfig).LoadProductConfig root
+
+/// Creates a temp directory structure for portfolio acceptance tests.
+/// itr.json uses path-string product entries; each product root has a product.yaml.
 type TestFixture() =
     let root =
         Path.Combine(Path.GetTempPath(), $"itr-portfolio-tests-{Guid.NewGuid():N}")
 
     let portfolioPath = Path.Combine(root, "itr.json")
-    let standalone = Path.Combine(root, "standalone")
-    let primary = Path.Combine(root, "primary")
-    let control = Path.Combine(root, "control")
+    let alphaRoot = Path.Combine(root, "alpha")
+    let betaRoot = Path.Combine(root, "beta")
+    let gammaRoot = Path.Combine(root, "gamma")
 
     do
         Directory.CreateDirectory(root) |> ignore
-        Directory.CreateDirectory(Path.Combine(standalone, ".itr")) |> ignore
-        Directory.CreateDirectory(Path.Combine(primary, ".itr")) |> ignore
-        Directory.CreateDirectory(Path.Combine(control, ".itr")) |> ignore
+        Directory.CreateDirectory(alphaRoot) |> ignore
+        Directory.CreateDirectory(betaRoot) |> ignore
+        Directory.CreateDirectory(gammaRoot) |> ignore
+        // coord roots
+        Directory.CreateDirectory(Path.Combine(alphaRoot, ".itr")) |> ignore
+        Directory.CreateDirectory(Path.Combine(betaRoot, ".itr")) |> ignore
+        Directory.CreateDirectory(Path.Combine(gammaRoot, ".itr")) |> ignore
 
+        // itr.json — products are bare path strings
         let config =
-            $"""
-{{
+            $"""{{
   "defaultProfile": "work",
   "profiles": {{
     "work": {{
-      "products": [
-        {{ "id": "alpha", "root": {{ "mode": "standalone", "dir": "{standalone}" }} }},
-        {{ "id": "beta", "root": {{ "mode": "primary-repo", "repoDir": "{primary}" }} }},
-        {{ "id": "gamma", "root": {{ "mode": "control-repo", "repoDir": "{control}" }} }}
-      ]
+      "products": ["{alphaRoot}", "{betaRoot}", "{gammaRoot}"]
     }}
   }}
-}}
-"""
+}}"""
 
         File.WriteAllText(portfolioPath, config)
+
+        // product.yaml for each product root (standalone mode)
+        let writeProductYaml (dir: string) (id: string) =
+            let yaml =
+                $"""id: {id}
+coordination:
+  mode: standalone
+  path: .itr
+"""
+
+            File.WriteAllText(Path.Combine(dir, "product.yaml"), yaml)
+
+        writeProductYaml alphaRoot "alpha"
+        writeProductYaml betaRoot "beta"
+        writeProductYaml gammaRoot "gamma"
 
     member _.Root = root
     member _.PortfolioPath = portfolioPath
@@ -96,8 +117,8 @@ let ``full pipeline resolves to ResolvedProduct`` () =
         |> Result.bind (fun profile -> FeaturePortfolio.resolveProduct profile "alpha" |> Effect.run deps)
         |> getResult
 
-    Assert.Equal("alpha", ProductId.value resolved.Product.Id)
     Assert.True(Directory.Exists(resolved.CoordRoot.AbsolutePath))
+    Assert.Equal("alpha", ProductId.value resolved.Definition.Id)
 
 [<Fact>]
 let ``readConfig returns ConfigNotFound when file is absent`` () =
@@ -128,7 +149,7 @@ let ``readConfig returns ConfigParseError for malformed JSON`` () =
             Directory.Delete(dir, true)
 
 [<Fact>]
-let ``all coordination modes resolve to dir/.itr`` () =
+let ``all products resolve with standalone coord root`` () =
     use fixture = new TestFixture()
     let deps = TestDeps(fixture.PortfolioPath)
 
@@ -144,6 +165,60 @@ let ``all coordination modes resolve to dir/.itr`` () =
             FeaturePortfolio.resolveProduct profile id |> Effect.run deps |> getResult
 
         Assert.EndsWith(".itr", resolved.CoordRoot.AbsolutePath))
+
+[<Fact>]
+let ``duplicate registration returns DuplicateProductId error`` () =
+    let root = Path.Combine(Path.GetTempPath(), $"itr-dup-{Guid.NewGuid():N}")
+
+    try
+        let productRoot = Path.Combine(root, "product")
+        Directory.CreateDirectory(productRoot) |> ignore
+        Directory.CreateDirectory(Path.Combine(productRoot, ".itr")) |> ignore
+
+        // Both entries point to different paths but same canonical id
+        let productRoot2 = Path.Combine(root, "product2")
+        Directory.CreateDirectory(productRoot2) |> ignore
+        Directory.CreateDirectory(Path.Combine(productRoot2, ".itr")) |> ignore
+
+        let portfolioPath = Path.Combine(root, "itr.json")
+
+        let config =
+            $"""{{
+  "defaultProfile": "work",
+  "profiles": {{
+    "work": {{
+      "products": ["{productRoot}", "{productRoot2}"]
+    }}
+  }}
+}}"""
+
+        File.WriteAllText(portfolioPath, config)
+
+        let writeProductYaml dir id =
+            File.WriteAllText(
+                Path.Combine(dir, "product.yaml"),
+                $"id: {id}\ncoordination:\n  mode: standalone\n  path: .itr\n"
+            )
+
+        writeProductYaml productRoot "same-id"
+        writeProductYaml productRoot2 "same-id"
+
+        let deps = TestDeps(portfolioPath)
+
+        let profile =
+            FeaturePortfolio.loadPortfolio (Some portfolioPath)
+            |> Effect.run deps
+            |> Result.bind (fun portfolio -> FeaturePortfolio.resolveActiveProfile portfolio None |> Effect.run deps)
+            |> getResult
+
+        match FeaturePortfolio.resolveProduct profile "same-id" |> Effect.run deps with
+        | Error(DuplicateProductId(profileName, productId)) ->
+            Assert.Equal("work", profileName)
+            Assert.Equal("same-id", productId)
+        | other -> failwithf "expected DuplicateProductId, got %A" other
+    finally
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
 
 // ---------------------------------------------------------------------------
 // Bootstrap acceptance tests
@@ -185,7 +260,8 @@ let ``bootstrapIfMissing creates file and parent directory when both absent`` ()
 
 [<Fact>]
 let ``bootstrapIfMissing is idempotent when file already exists`` () =
-    let root = Path.Combine(Path.GetTempPath(), $"itr-bootstrap-idempotent-{Guid.NewGuid():N}")
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-bootstrap-idempotent-{Guid.NewGuid():N}")
 
     try
         Directory.CreateDirectory(root) |> ignore
@@ -208,7 +284,8 @@ let ``bootstrapIfMissing is idempotent when file already exists`` () =
 
 [<Fact>]
 let ``bootstrapIfMissing returns BootstrapWriteError when write fails`` () =
-    let root = Path.Combine(Path.GetTempPath(), $"itr-bootstrap-fail-{Guid.NewGuid():N}")
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-bootstrap-fail-{Guid.NewGuid():N}")
     // Use a path that does not exist so FileExists returns false, then the write fails
     let configPath = Path.Combine(root, "itr.json")
     let deps = FailingWriteFsDeps("Permission denied")

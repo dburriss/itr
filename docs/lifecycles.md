@@ -118,13 +118,13 @@ When resolving the active profile, the following order applies (first match wins
 
 ### Coordination root modes
 
-The active profile selects a registered product root from `itr.json`. The CLI then loads that product's `product.yaml` to determine where coordination files live.
+The active profile selects a registered product root path from `itr.json`. The CLI loads `product.yaml` from that root to determine where coordination files live.
 
-| Mode | Config field | `.itr/` expected at |
+| Mode | `coordination.repo` | `.itr/` at |
 |---|---|---|
-| `standalone` | `dir` | `<dir>/.itr/` |
-| `primary-repo` | `repoDir` | `<repoDir>/.itr/` |
-| `control-repo` | `repoDir` | `<repoDir>/.itr/` |
+| `standalone` | _(not used)_ | `<product-root>/<coordination.path>/` |
+| `primary-repo` | required — one of the product's repos | `<product-root>/<repo.path>/<coordination.path>/` |
+| `control-repo` | required — one of the product's repos | `<product-root>/<repo.path>/<coordination.path>/` |
 
 ### Setup sequence
 

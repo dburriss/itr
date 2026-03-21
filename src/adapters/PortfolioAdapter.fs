@@ -9,63 +9,14 @@ open System.Collections.Generic
 open Itr.Domain
 
 [<CLIMutable>]
-type ProductRefDto =
-    { id: string
-      root: CoordinationRootConfig }
-
-[<CLIMutable>]
 type ProfileDto =
-    { products: ProductRefDto array
+    { products: string array
       gitIdentity: GitIdentity option }
 
 [<CLIMutable>]
 type PortfolioDto =
     { defaultProfile: string option
       profiles: Dictionary<string, ProfileDto> }
-
-type CoordinationRootConfigConverter() =
-    inherit JsonConverter<CoordinationRootConfig>()
-
-    override _.Read(reader: byref<Utf8JsonReader>, _typeToConvert: Type, _options: JsonSerializerOptions) =
-        use document = JsonDocument.ParseValue(&reader)
-        let root = document.RootElement
-
-        let mode =
-            match root.TryGetProperty("mode") with
-            | true, element -> element.GetString()
-            | false, _ -> raise (JsonException("Missing required field 'mode' in product root."))
-
-        match mode with
-        | "standalone" ->
-            match root.TryGetProperty("dir") with
-            | true, element -> StandaloneConfig(element.GetString())
-            | false, _ -> raise (JsonException("mode 'standalone' requires field 'dir'."))
-        | "primary-repo" ->
-            match root.TryGetProperty("repoDir") with
-            | true, element -> PrimaryRepoConfig(element.GetString())
-            | false, _ -> raise (JsonException("mode 'primary-repo' requires field 'repoDir'."))
-        | "control-repo" ->
-            match root.TryGetProperty("repoDir") with
-            | true, element -> ControlRepoConfig(element.GetString())
-            | false, _ -> raise (JsonException("mode 'control-repo' requires field 'repoDir'."))
-        | null -> raise (JsonException("Field 'mode' cannot be null."))
-        | value -> raise (JsonException($"Unknown coordination mode '{value}'."))
-
-    override _.Write(writer: Utf8JsonWriter, value: CoordinationRootConfig, options: JsonSerializerOptions) =
-        writer.WriteStartObject()
-
-        match value with
-        | StandaloneConfig dir ->
-            writer.WriteString("mode", "standalone")
-            writer.WriteString("dir", dir)
-        | PrimaryRepoConfig repoDir ->
-            writer.WriteString("mode", "primary-repo")
-            writer.WriteString("repoDir", repoDir)
-        | ControlRepoConfig repoDir ->
-            writer.WriteString("mode", "control-repo")
-            writer.WriteString("repoDir", repoDir)
-
-        writer.WriteEndObject()
 
 let private expandUnixEnvVars (value: string) =
     let replaceToken (matchValue: Match) =
@@ -95,49 +46,36 @@ let expandPath (homeDir: string) (value: string) : string =
 
         expandedHome |> expandUnixEnvVars |> Environment.ExpandEnvironmentVariables
 
-let private normalizeCoordRootPath homeDir rootConfig =
-    match rootConfig with
-    | StandaloneConfig dir -> StandaloneConfig(expandPath homeDir dir)
-    | PrimaryRepoConfig repoDir -> PrimaryRepoConfig(expandPath homeDir repoDir)
-    | ControlRepoConfig repoDir -> ControlRepoConfig(expandPath homeDir repoDir)
-
-let private mapProduct homeDir (dto: ProductRefDto) =
-    ProductId.tryCreate dto.id
-    |> Result.map (fun productId ->
-        { Id = productId
-          Root = normalizeCoordRootPath homeDir dto.root })
+let private mapProduct homeDir (rootPath: string) : ProductRef =
+    { Root = ProductRoot(expandPath homeDir rootPath) }
 
 let private mapProfile homeDir (name: string) (dto: ProfileDto) =
     let products = if isNull dto.products then [||] else dto.products
 
-    products
-    |> Array.toList
-    |> List.fold
-        (fun state productDto ->
-            state
-            |> Result.bind (fun acc -> mapProduct homeDir productDto |> Result.map (fun product -> product :: acc)))
-        (Ok [])
-    |> Result.map (fun products ->
-        { Name = ProfileName.create name
-          Products = List.rev products
-          GitIdentity = dto.gitIdentity })
+    let productRefs = products |> Array.toList |> List.map (mapProduct homeDir)
+
+    { Name = ProfileName.create name
+      Products = productRefs
+      GitIdentity = dto.gitIdentity }
 
 let private mapPortfolio homeDir (dto: PortfolioDto) =
     if isNull dto.profiles then
         Error(ConfigParseError("<memory>", "Missing required object 'profiles'."))
     else
-        dto.profiles
-        |> Seq.toList
-        |> List.fold
-            (fun state kvp ->
-                state
-                |> Result.bind (fun acc ->
-                    mapProfile homeDir kvp.Key kvp.Value
-                    |> Result.map (fun profile -> profile :: acc)))
-            (Ok [])
-        |> Result.bind (fun profiles ->
-            let defaultProfile = dto.defaultProfile |> Option.map ProfileName.create
-            Portfolio.tryCreate defaultProfile (List.rev profiles))
+        let profiles =
+            dto.profiles
+            |> Seq.toList
+            |> List.map (fun kvp -> mapProfile homeDir kvp.Key kvp.Value)
+
+        let defaultProfile = dto.defaultProfile |> Option.map ProfileName.create
+        Portfolio.tryCreate defaultProfile profiles
+
+let private jsonOptions () =
+    let options = JsonSerializerOptions()
+    options.PropertyNamingPolicy <- JsonNamingPolicy.CamelCase
+    options.PropertyNameCaseInsensitive <- true
+    options.DefaultIgnoreCondition <- JsonIgnoreCondition.WhenWritingNull
+    options
 
 let readConfig (homeDir: string) (path: string) : Result<Portfolio, PortfolioError> =
     let resolvedPath = expandPath homeDir path
@@ -148,13 +86,8 @@ let readConfig (homeDir: string) (path: string) : Result<Portfolio, PortfolioErr
         try
             let json = File.ReadAllText(resolvedPath)
 
-            let options = JsonSerializerOptions()
-            options.PropertyNamingPolicy <- JsonNamingPolicy.CamelCase
-            options.PropertyNameCaseInsensitive <- true
-            options.DefaultIgnoreCondition <- JsonIgnoreCondition.WhenWritingNull
-            options.Converters.Add(CoordinationRootConfigConverter())
-
-            let dto = JsonSerializer.Deserialize<PortfolioDto>(json, options) |> Option.ofObj
+            let dto =
+                JsonSerializer.Deserialize<PortfolioDto>(json, jsonOptions ()) |> Option.ofObj
 
             match dto with
             | None -> Error(ConfigParseError(resolvedPath, "Config file was empty or invalid."))
@@ -165,6 +98,40 @@ let readConfig (homeDir: string) (path: string) : Result<Portfolio, PortfolioErr
                     | other -> other)
         with ex ->
             Error(ConfigParseError(resolvedPath, ex.Message))
+
+let writeConfig (homeDir: string) (path: string) (portfolio: Portfolio) : Result<unit, PortfolioError> =
+    let resolvedPath = expandPath homeDir path
+
+    try
+        let profiles = Dictionary<string, ProfileDto>()
+
+        for kvp in portfolio.Profiles do
+            let name = ProfileName.value kvp.Key
+            let profile = kvp.Value
+
+            let products =
+                profile.Products
+                |> List.map (fun p -> let (ProductRoot root) = p.Root in root)
+                |> List.toArray
+
+            profiles.[name] <-
+                { products = products
+                  gitIdentity = profile.GitIdentity }
+
+        let dto =
+            { defaultProfile = portfolio.DefaultProfile |> Option.map ProfileName.value
+              profiles = profiles }
+
+        let json = JsonSerializer.Serialize(dto, jsonOptions ())
+        let dir = Path.GetDirectoryName(resolvedPath)
+
+        if not (String.IsNullOrEmpty(dir)) then
+            Directory.CreateDirectory(dir) |> ignore
+
+        File.WriteAllText(resolvedPath, json)
+        Ok()
+    with ex ->
+        Error(ConfigParseError(resolvedPath, ex.Message))
 
 /// Create a PortfolioConfigAdapter that implements IPortfolioConfig
 type PortfolioConfigAdapter(env: IEnvironment) =

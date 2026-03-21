@@ -25,7 +25,7 @@ let private mkProductConfig repos =
     { Id = productId
       Repos =
         repos
-        |> List.map (fun (k, v) -> RepoId k, ({ Path = v; Url = None } : RepoConfig))
+        |> List.map (fun (k, v) -> RepoId k, ({ Path = v; Url = None }: RepoConfig))
         |> Map.ofList }
 
 let private mkBacklogItem id title repos =
@@ -69,8 +69,7 @@ let ``single-repo item re-taken uses repo-prefixed id`` () =
           CreatedAt = today }
 
     match Task.takeBacklogItem productConfig backlogItem [ existingTask ] input today with
-    | Ok [ task ] ->
-        Assert.Equal("main-repo-my-feature", TaskId.value task.Id)
+    | Ok [ task ] -> Assert.Equal("main-repo-my-feature", TaskId.value task.Id)
     | other -> failwithf "expected single task, got %A" other
 
 [<Fact>]
@@ -108,8 +107,7 @@ let ``re-take with collision on repo-prefixed id uses numeric suffix`` () =
           CreatedAt = today }
 
     match Task.takeBacklogItem productConfig backlogItem [ existing1; existing2 ] input today with
-    | Ok [ task ] ->
-        Assert.Equal("main-repo-feat-2", TaskId.value task.Id)
+    | Ok [ task ] -> Assert.Equal("main-repo-feat-2", TaskId.value task.Id)
     | other -> failwithf "expected single task, got %A" other
 
 // ---------------------------------------------------------------------------
@@ -123,8 +121,7 @@ let ``task-id override is used when provided for single-repo item`` () =
     let input = mkInput "my-feature" (Some "custom-task")
 
     match Task.takeBacklogItem productConfig backlogItem [] input today with
-    | Ok [ task ] ->
-        Assert.Equal("custom-task", TaskId.value task.Id)
+    | Ok [ task ] -> Assert.Equal("custom-task", TaskId.value task.Id)
     | other -> failwithf "expected single task, got %A" other
 
 [<Fact>]

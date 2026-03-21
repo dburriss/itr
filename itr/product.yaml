@@ -1,7 +1,5 @@
 id: itr
 
-profile: personal
-
 docs:
   product: ../PRODUCT.md
   architecture: ../ARCHITECTURE.md

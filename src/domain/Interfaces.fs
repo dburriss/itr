@@ -47,8 +47,8 @@ type IGitService =
 
 /// Capability interface for loading product configuration from product.yaml
 type IProductConfig =
-    /// Load product config from <coordRoot>/product.yaml
-    abstract LoadProductConfig: coordRoot: string -> Result<ProductConfig, TakeError>
+    /// Load product config from <productRoot>/product.yaml
+    abstract LoadProductConfig: productRoot: string -> Result<ProductDefinition, PortfolioError>
 
 /// Capability interface for loading backlog items
 type IBacklogStore =
@@ -63,5 +63,7 @@ type ITaskStore =
     abstract ListTasks: coordRoot: string -> backlogId: BacklogId -> Result<ItrTask list, TakeError>
     /// Write a task file to <coordRoot>/BACKLOG/<backlog-id>/tasks/<task-id>/task.yaml
     abstract WriteTask: coordRoot: string -> task: ItrTask -> Result<unit, TakeError>
+
     /// Archive a task by renaming <coordRoot>/BACKLOG/<backlog-id>/tasks/<task-id>/ to <coordRoot>/BACKLOG/<backlog-id>/tasks/<date>-<task-id>/
-    abstract ArchiveTask: coordRoot: string -> backlogId: BacklogId -> taskId: TaskId -> date: string -> Result<unit, TakeError>
+    abstract ArchiveTask:
+        coordRoot: string -> backlogId: BacklogId -> taskId: TaskId -> date: string -> Result<unit, TakeError>

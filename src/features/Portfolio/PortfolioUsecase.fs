@@ -10,6 +10,7 @@ type IPortfolioDeps =
     inherit IPortfolioConfig
     inherit IEnvironment
     inherit IFileSystem
+    inherit IProductConfig
 
 /// Load and parse a portfolio from the config path
 let loadPortfolio<'deps when 'deps :> IPortfolioConfig>
@@ -47,46 +48,59 @@ let resolveActiveProfile<'deps when 'deps :> IEnvironment>
             | Some profile -> Ok profile
             | None -> Error(ProfileNotFound profileName))
 
-let private rootDirFromConfig root =
-    match root with
-    | StandaloneConfig dir
-    | PrimaryRepoConfig dir
-    | ControlRepoConfig dir -> dir
+/// Load all product definitions from registered roots, detecting duplicates.
+/// Returns a list of (ProductRef * ProductDefinition) pairs.
+let private loadAllDefinitions<'deps when 'deps :> IProductConfig and 'deps :> IFileSystem>
+    (profile: Profile)
+    (deps: 'deps)
+    : Result<(ProductRef * ProductDefinition) list, PortfolioError> =
+    let productConfig = deps :> IProductConfig
 
-let private modeFromConfig root =
-    match root with
-    | StandaloneConfig _ -> Standalone
-    | PrimaryRepoConfig _ -> PrimaryRepo
-    | ControlRepoConfig _ -> ControlRepo
+    profile.Products
+    |> List.fold
+        (fun state productRef ->
+            state
+            |> Result.bind (fun (acc, seenIds) ->
+                let (ProductRoot root) = productRef.Root
 
-/// Resolve a product by ID within a profile
-let resolveProduct<'deps when 'deps :> IFileSystem>
+                match productConfig.LoadProductConfig root with
+                | Error e -> Error e
+                | Ok definition ->
+                    let idStr = ProductId.value definition.Id
+
+                    match Map.tryFind idStr seenIds with
+                    | Some _ -> Error(DuplicateProductId(ProfileName.value profile.Name, idStr))
+                    | None ->
+                        let newSeenIds = Map.add idStr true seenIds
+                        Ok((productRef, definition) :: acc, newSeenIds)))
+        (Ok([], Map.empty))
+    |> Result.map (fun (pairs, _) -> List.rev pairs)
+
+/// Resolve a product by ID within a profile.
+/// Loads product.yaml from each registered root path, matches canonical id,
+/// and returns a ResolvedProduct with the derived CoordinationRoot.
+let resolveProduct<'deps when 'deps :> IProductConfig and 'deps :> IFileSystem>
     (profile: Profile)
     (productId: string)
     : EffectResult<'deps, ResolvedProduct, PortfolioError> =
     Effect(fun (deps: 'deps) ->
         let fs = deps :> IFileSystem
 
-        ProductId.tryCreate productId
-        |> Result.bind (fun validId ->
-            let maybeProduct =
-                profile.Products |> List.tryFind (fun product -> product.Id = validId)
-
-            match maybeProduct with
+        loadAllDefinitions profile deps
+        |> Result.bind (fun pairs ->
+            match pairs |> List.tryFind (fun (_, def) -> ProductId.value def.Id = productId) with
             | None -> Error(ProductNotFound productId)
-            | Some product ->
-                let rootDir = rootDirFromConfig product.Root
-                let expectedPath = Path.GetFullPath(Path.Combine(rootDir, ".itr"))
+            | Some(productRef, definition) ->
+                let expectedPath = definition.CoordRoot.AbsolutePath
 
                 if fs.DirectoryExists expectedPath then
                     Ok
                         { Profile = profile
-                          Product = product
-                          CoordRoot =
-                            { Mode = modeFromConfig product.Root
-                              AbsolutePath = expectedPath } }
+                          Product = productRef
+                          Definition = definition
+                          CoordRoot = definition.CoordRoot }
                 else
-                    Error(CoordRootNotFound(ProductId.value validId, expectedPath))))
+                    Error(CoordRootNotFound(productId, expectedPath))))
 
 // Pipeline used by all interfaces:
 // loadPortfolio >>= resolveActiveProfile >>= resolveProduct >>= executeProductCommand

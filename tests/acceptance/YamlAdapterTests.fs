@@ -25,13 +25,16 @@ let private mkTaskId s = TaskId.create s
 let private writeTaskYaml (coordRoot: string) (backlogId: string) (taskFolderName: string) (taskId: string) =
     let taskDir = Path.Combine(coordRoot, "BACKLOG", backlogId, "tasks", taskFolderName)
     Directory.CreateDirectory(taskDir) |> ignore
-    let yaml = $"""id: {taskId}
+
+    let yaml =
+        $"""id: {taskId}
 source:
   backlog: {backlogId}
 repo: main-repo
 state: planning
 created_at: 2026-01-01
 """
+
     File.WriteAllText(Path.Combine(taskDir, "task.yaml"), yaml)
 
 // ---------------------------------------------------------------------------
@@ -54,8 +57,7 @@ let ``ListTasks returns tasks from both active and dated subdirectories`` () =
 
         match store.ListTasks root backlogId with
         | Error e -> failwithf "expected Ok, got Error: %A" e
-        | Ok tasks ->
-            Assert.Equal(2, tasks.Length)
+        | Ok tasks -> Assert.Equal(2, tasks.Length)
     finally
         Directory.Delete(root, true)
 
@@ -100,8 +102,10 @@ let ``WriteTask creates intermediate task subfolder before writing`` () =
 
         match store.WriteTask root task with
         | Error e -> failwithf "expected Ok, got Error: %A" e
-        | Ok () ->
-            let expectedPath = Path.Combine(root, "BACKLOG", "my-feature", "tasks", "my-feature", "task.yaml")
+        | Ok() ->
+            let expectedPath =
+                Path.Combine(root, "BACKLOG", "my-feature", "tasks", "my-feature", "task.yaml")
+
             Assert.True(File.Exists(expectedPath), $"Expected task file at: {expectedPath}")
     finally
         Directory.Delete(root, true)
@@ -118,6 +122,7 @@ let ``ArchiveBacklogItem moves BACKLOG folder to archive subfolder with date pre
         let bid = "my-feature"
         // Create backlog item with a completed task
         writeTaskYaml root bid "2026-01-15-my-feature" "my-feature"
+
         File.WriteAllText(
             Path.Combine(root, "BACKLOG", bid, "item.yaml"),
             $"id: {bid}\ntitle: My Feature\nrepos:\n  - main-repo\n"
@@ -128,7 +133,7 @@ let ``ArchiveBacklogItem moves BACKLOG folder to archive subfolder with date pre
 
         match store.ArchiveBacklogItem root backlogId "2026-03-20" with
         | Error e -> failwithf "expected Ok, got Error: %A" e
-        | Ok () ->
+        | Ok() ->
             let archivedPath = Path.Combine(root, "BACKLOG", "archive", "2026-03-20-my-feature")
             Assert.True(Directory.Exists(archivedPath), $"Expected archive directory at: {archivedPath}")
             let originalPath = Path.Combine(root, "BACKLOG", bid)

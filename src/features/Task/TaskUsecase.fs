@@ -29,8 +29,7 @@ let private deriveTaskId
     let bid = BacklogId.value backlogId
     let rid = RepoId.value repoId
 
-    let baseId =
-        if isSingleRepo && isFirstTake then bid else $"{rid}-{bid}"
+    let baseId = if isSingleRepo && isFirstTake then bid else $"{rid}-{bid}"
 
     if not (Set.contains baseId existingIds) then
         TaskId.create baseId
@@ -68,57 +67,56 @@ let takeBacklogItem
     | Some repoId -> Error(RepoNotInProduct repoId)
     | None ->
 
-    // 2. Handle --task-id override
-    match input.TaskIdOverride with
-    | Some overrideId when backlogItem.Repos.Length > 1 ->
-        Error TaskIdOverrideRequiresSingleRepo
+        // 2. Handle --task-id override
+        match input.TaskIdOverride with
+        | Some overrideId when backlogItem.Repos.Length > 1 -> Error TaskIdOverrideRequiresSingleRepo
 
-    | Some overrideId ->
-        // Single-repo with explicit task id
-        match TaskId.tryCreate overrideId with
-        | Error _ -> Error(TaskIdConflict(TaskId.create overrideId))
-        | Ok taskId ->
+        | Some overrideId ->
+            // Single-repo with explicit task id
+            match TaskId.tryCreate overrideId with
+            | Error _ -> Error(TaskIdConflict(TaskId.create overrideId))
+            | Ok taskId ->
+                let existingIdSet =
+                    existingTasks |> List.map (fun t -> TaskId.value t.Id) |> Set.ofList
+
+                if Set.contains (TaskId.value taskId) existingIdSet then
+                    Error(TaskIdConflict taskId)
+                else
+                    let repo = backlogItem.Repos |> List.head
+
+                    Ok
+                        [ { Id = taskId
+                            SourceBacklog = input.BacklogId
+                            Repo = repo
+                            State = Planning
+                            CreatedAt = today } ]
+
+        | None ->
+            // Auto-derive task ids
             let existingIdSet =
                 existingTasks |> List.map (fun t -> TaskId.value t.Id) |> Set.ofList
 
-            if Set.contains (TaskId.value taskId) existingIdSet then
-                Error(TaskIdConflict taskId)
-            else
-                let repo = backlogItem.Repos |> List.head
+            let isSingleRepo = backlogItem.Repos.Length = 1
+            let isFirstTake = existingTasks.IsEmpty
 
-                Ok
-                    [ { Id = taskId
-                        SourceBacklog = input.BacklogId
-                        Repo = repo
-                        State = Planning
-                        CreatedAt = today } ]
+            // Track ids already allocated in this call to avoid intra-call collisions
+            let tasks, _ =
+                backlogItem.Repos
+                |> List.fold
+                    (fun (acc, allocatedIds) repoId ->
+                        let allExisting = Set.union existingIdSet allocatedIds
 
-    | None ->
-        // Auto-derive task ids
-        let existingIdSet =
-            existingTasks |> List.map (fun t -> TaskId.value t.Id) |> Set.ofList
+                        let taskId =
+                            deriveTaskId allExisting input.BacklogId repoId isSingleRepo isFirstTake
 
-        let isSingleRepo = backlogItem.Repos.Length = 1
-        let isFirstTake = existingTasks.IsEmpty
+                        let task =
+                            { Id = taskId
+                              SourceBacklog = input.BacklogId
+                              Repo = repoId
+                              State = Planning
+                              CreatedAt = today }
 
-        // Track ids already allocated in this call to avoid intra-call collisions
-        let tasks, _ =
-            backlogItem.Repos
-            |> List.fold
-                (fun (acc, allocatedIds) repoId ->
-                    let allExisting = Set.union existingIdSet allocatedIds
+                        (task :: acc, Set.add (TaskId.value taskId) allocatedIds))
+                    ([], Set.empty)
 
-                    let taskId =
-                        deriveTaskId allExisting input.BacklogId repoId isSingleRepo isFirstTake
-
-                    let task =
-                        { Id = taskId
-                          SourceBacklog = input.BacklogId
-                          Repo = repoId
-                          State = Planning
-                          CreatedAt = today }
-
-                    (task :: acc, Set.add (TaskId.value taskId) allocatedIds))
-                ([], Set.empty)
-
-        Ok(List.rev tasks)
+            Ok(List.rev tasks)

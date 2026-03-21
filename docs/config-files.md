@@ -10,9 +10,7 @@ Defines the global portfolio config, profiles, and product registrations for thi
   "profiles": {
     "work": {
       "products": [
-        {
-          "path": "~/dev/work/billing-system"
-        }
+        "~/dev/work/billing-system"
       ],
       "gitIdentity": {
         "name": "Jane Dev",
@@ -35,13 +33,9 @@ Required object keyed by profile name, such as `work` or `personal`. This object
 
 #### profiles.<id>.products
 
-List of products registered under that profile.
+List of product root directory paths registered under that profile. Each entry is a bare path string.
 
-#### profiles.<id>.products[].path
-
-Path to the product root directory on the current machine.
-
-The CLI loads `product.yaml` from this directory to discover the product's canonical `id`, repos, docs, and coordination layout.
+The CLI loads `product.yaml` from each directory to discover the product's canonical `id`, repos, docs, and coordination layout.
 
 #### profiles.<id>.gitIdentity
 
@@ -65,19 +59,13 @@ Optional email for git commits.
   "profiles": {
     "personal": {
       "products": [
-        {
-          "path": "~/dev/personal/portfolio-tool"
-        }
+        "~/dev/personal/portfolio-tool"
       ]
     },
     "work": {
       "products": [
-        {
-          "path": "~/dev/work/billing-system"
-        },
-        {
-          "path": "~/dev/work/infra-control"
-        }
+        "~/dev/work/billing-system",
+        "~/dev/work/infra-control"
       ],
       "gitIdentity": {
         "name": "Jane Dev",

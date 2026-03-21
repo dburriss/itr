@@ -15,18 +15,30 @@ type CoordinationRoot =
     { Mode: CoordinationMode
       AbsolutePath: string }
 
-type CoordinationRootConfig =
-    | StandaloneConfig of string
-    | PrimaryRepoConfig of string
-    | ControlRepoConfig of string
+/// Wrapper for a product root directory path
+type ProductRoot = ProductRoot of string
 
 type GitIdentity = { Name: string; Email: string option }
 
 type ProductId = private ProductId of string
 
-type ProductRef =
+/// Coordination configuration as read from product.yaml
+type CoordinationConfig =
+    { Mode: string
+      Repo: string option
+      Path: string option }
+
+/// Canonical product definition loaded from product.yaml
+type ProductDefinition =
     { Id: ProductId
-      Root: CoordinationRootConfig }
+      Repos: Map<string, RepoConfig>
+      Docs: Map<string, string>
+      Coordination: CoordinationConfig
+      CoordRoot: CoordinationRoot }
+
+and RepoConfig = { Path: string; Url: string option }
+
+type ProductRef = { Root: ProductRoot }
 
 type Profile =
     { Name: ProfileName
@@ -40,6 +52,7 @@ type Portfolio =
 type ResolvedProduct =
     { Profile: Profile
       Product: ProductRef
+      Definition: ProductDefinition
       CoordRoot: CoordinationRoot }
 
 type PortfolioError =
@@ -52,6 +65,7 @@ type PortfolioError =
     | ProductNotFound of productId: string
     | CoordRootNotFound of productId: string * expectedPath: string
     | BootstrapWriteError of path: string * message: string
+    | ProductConfigError of productRoot: string * message: string
 
 [<RequireQualifiedAccess>]
 module ProductId =
@@ -79,19 +93,6 @@ module Portfolio =
     let private duplicateProfileNameError (name: ProfileName) =
         DuplicateProfileName(ProfileName.value name)
 
-    let private duplicateProductIdError (profileName: ProfileName) (productId: ProductId) =
-        DuplicateProductId(ProfileName.value profileName, ProductId.value productId)
-
-    let private tryEnsureDistinctProducts (profile: Profile) =
-        let dupes =
-            profile.Products
-            |> List.groupBy (fun product -> ProductId.value product.Id)
-            |> List.tryFind (fun (_, products) -> products.Length > 1)
-
-        match dupes with
-        | Some(_, products) -> Error(duplicateProductIdError profile.Name products.Head.Id)
-        | None -> Ok profile
-
     let tryCreate (defaultProfile: ProfileName option) (profiles: Profile list) : Result<Portfolio, PortfolioError> =
         let duplicateProfiles =
             profiles
@@ -101,18 +102,12 @@ module Portfolio =
         match duplicateProfiles with
         | Some(_, first :: _) -> Error(duplicateProfileNameError first.Name)
         | _ ->
-            let distinctProductsCheck =
-                profiles |> List.map tryEnsureDistinctProducts |> List.tryFind Result.isError
+            let profilesMap =
+                profiles |> List.map (fun profile -> profile.Name, profile) |> Map.ofList
 
-            match distinctProductsCheck with
-            | Some(Error error) -> Error error
-            | _ ->
-                let profilesMap =
-                    profiles |> List.map (fun profile -> profile.Name, profile) |> Map.ofList
-
-                Ok
-                    { DefaultProfile = defaultProfile
-                      Profiles = profilesMap }
+            Ok
+                { DefaultProfile = defaultProfile
+                  Profiles = profilesMap }
 
     let tryFindProfileCaseInsensitive (name: string) (portfolio: Portfolio) : Profile option =
         let normalized = name.Trim().ToLowerInvariant()
@@ -152,8 +147,6 @@ type ItrTask =
       Repo: RepoId
       State: TaskState
       CreatedAt: System.DateOnly }
-
-type RepoConfig = { Path: string; Url: string option }
 
 type ProductConfig =
     { Id: ProductId

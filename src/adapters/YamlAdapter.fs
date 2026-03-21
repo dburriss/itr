@@ -3,6 +3,7 @@ module Itr.Adapters.YamlAdapter
 open System
 open System.IO
 open System.Collections.Generic
+open System.Text.RegularExpressions
 open YamlDotNet.Serialization
 open YamlDotNet.Serialization.NamingConventions
 open Itr.Domain
@@ -19,11 +20,24 @@ type RepoConfigDto =
       Url: string }
 
 [<CLIMutable>]
+type CoordinationConfigDto =
+    { [<YamlMember(Alias = "mode")>]
+      Mode: string
+      [<YamlMember(Alias = "repo")>]
+      Repo: string
+      [<YamlMember(Alias = "path")>]
+      Path: string }
+
+[<CLIMutable>]
 type ProductConfigDto =
     { [<YamlMember(Alias = "id")>]
       Id: string
       [<YamlMember(Alias = "repos")>]
-      Repos: Dictionary<string, RepoConfigDto> }
+      Repos: Dictionary<string, RepoConfigDto>
+      [<YamlMember(Alias = "docs")>]
+      Docs: Dictionary<string, string>
+      [<YamlMember(Alias = "coordination")>]
+      Coordination: CoordinationConfigDto }
 
 [<CLIMutable>]
 type BacklogItemDto =
@@ -57,15 +71,10 @@ type ItrTaskDto =
 // ---------------------------------------------------------------------------
 
 let private deserializer =
-    DeserializerBuilder()
-        .WithNamingConvention(UnderscoredNamingConvention.Instance)
-        .IgnoreUnmatchedProperties()
-        .Build()
+    DeserializerBuilder().WithNamingConvention(UnderscoredNamingConvention.Instance).IgnoreUnmatchedProperties().Build()
 
 let private serializer =
-    SerializerBuilder()
-        .WithNamingConvention(UnderscoredNamingConvention.Instance)
-        .Build()
+    SerializerBuilder().WithNamingConvention(UnderscoredNamingConvention.Instance).Build()
 
 let private parseYaml<'a> (content: string) : Result<'a, string> =
     try
@@ -78,6 +87,87 @@ let private serializeYaml<'a> (value: 'a) : string = serializer.Serialize(value)
 // ---------------------------------------------------------------------------
 // Domain mapping helpers
 // ---------------------------------------------------------------------------
+
+let private slugRegex = Regex("^[a-z0-9][a-z0-9-]*$", RegexOptions.Compiled)
+
+let private validateSlug (value: string) (path: string) : Result<ProductId, PortfolioError> =
+    if String.IsNullOrWhiteSpace(value) then
+        Error(InvalidProductId(value, "must match [a-z0-9][a-z0-9-]*"))
+    elif slugRegex.IsMatch(value) then
+        ProductId.tryCreate value
+    else
+        Error(InvalidProductId(value, "must match [a-z0-9][a-z0-9-]*"))
+
+let private deriveCoordinationRoot
+    (productRoot: string)
+    (repos: Map<string, RepoConfig>)
+    (coord: CoordinationConfigDto)
+    (path: string)
+    : Result<CoordinationRoot, PortfolioError> =
+    if isNull coord.Mode then
+        Error(ProductConfigError(productRoot, "coordination.mode is required"))
+    else
+        match coord.Mode with
+        | "standalone" ->
+            let coordPath =
+                if isNull coord.Path || coord.Path = "" then
+                    ".itr"
+                else
+                    coord.Path
+
+            let absPath = Path.GetFullPath(Path.Combine(productRoot, coordPath))
+
+            Ok
+                { Mode = Standalone
+                  AbsolutePath = absPath }
+
+        | "primary-repo"
+        | "control-repo" ->
+            if isNull coord.Repo || coord.Repo = "" then
+                Error(ProductConfigError(productRoot, $"coordination.repo is required for mode '{coord.Mode}'"))
+            else
+                match Map.tryFind coord.Repo repos with
+                | None -> Error(ProductConfigError(productRoot, $"coordination.repo '{coord.Repo}' not found in repos"))
+                | Some repoConfig ->
+                    let coordSubPath =
+                        if isNull coord.Path || coord.Path = "" then
+                            ".itr"
+                        else
+                            coord.Path
+
+                    let absPath =
+                        Path.GetFullPath(Path.Combine(productRoot, repoConfig.Path, coordSubPath))
+
+                    let mode =
+                        if coord.Mode = "primary-repo" then
+                            PrimaryRepo
+                        else
+                            ControlRepo
+
+                    Ok { Mode = mode; AbsolutePath = absPath }
+
+        | unknown -> Error(ProductConfigError(productRoot, $"Unknown coordination mode '{unknown}'"))
+
+let private mapRepos (dto: Dictionary<string, RepoConfigDto>) : Map<string, RepoConfig> =
+    if isNull dto then
+        Map.empty
+    else
+        dto
+        |> Seq.map (fun kvp ->
+            let url =
+                if isNull kvp.Value.Url || kvp.Value.Url = "" then
+                    None
+                else
+                    Some kvp.Value.Url
+
+            kvp.Key, ({ Path = kvp.Value.Path; Url = url }: RepoConfig))
+        |> Map.ofSeq
+
+let private mapDocs (dto: Dictionary<string, string>) : Map<string, string> =
+    if isNull dto then
+        Map.empty
+    else
+        dto |> Seq.map (fun kvp -> kvp.Key, kvp.Value) |> Map.ofSeq
 
 let private mapTaskState (s: string) : TaskState =
     match s with
@@ -129,41 +219,57 @@ type YamlServiceAdapter() =
 
 type ProductConfigAdapter() =
     interface IProductConfig with
-        member _.LoadProductConfig(coordRoot: string) =
-            let path = Path.Combine(coordRoot, "product.yaml")
+        member _.LoadProductConfig(productRoot: string) =
+            let path = Path.Combine(productRoot, "product.yaml")
 
             if not (File.Exists(path)) then
-                Error(ProductConfigNotFound coordRoot)
+                Error(ProductConfigError(productRoot, $"product.yaml not found at: {path}"))
             else
                 try
                     let content = File.ReadAllText(path)
 
                     match parseYaml<ProductConfigDto> content with
-                    | Error msg -> Error(ProductConfigParseError(path, msg))
-                    | Ok dto when isNull dto.Id ->
-                        Error(ProductConfigParseError(path, "Missing required field 'id'"))
+                    | Error msg -> Error(ProductConfigError(path, msg))
+                    | Ok dto when isNull dto.Id -> Error(ProductConfigError(path, "Missing required field 'id'"))
                     | Ok dto ->
-                        match ProductId.tryCreate dto.Id with
-                        | Error _ -> Error(ProductConfigParseError(path, $"Invalid product id: {dto.Id}"))
+                        match validateSlug dto.Id path with
+                        | Error e -> Error e
                         | Ok productId ->
-                            let repos =
-                                if isNull dto.Repos then
-                                    Map.empty
+                            let repos = mapRepos dto.Repos
+                            let docs = mapDocs dto.Docs
+
+                            let coordDto =
+                                if box dto.Coordination = null then
+                                    { Mode = "standalone"
+                                      Repo = null
+                                      Path = ".itr" }
                                 else
-                                     dto.Repos
-                                     |> Seq.map (fun kvp ->
-                                         let url =
-                                             if isNull kvp.Value.Url || kvp.Value.Url = "" then
-                                                 None
-                                             else
-                                                 Some kvp.Value.Url
+                                    dto.Coordination
 
-                                         RepoId kvp.Key, ({ Path = kvp.Value.Path; Url = url } : RepoConfig))
-                                    |> Map.ofSeq
+                            match deriveCoordinationRoot productRoot repos coordDto path with
+                            | Error e -> Error e
+                            | Ok coordRoot ->
+                                let coordConfig: CoordinationConfig =
+                                    { Mode = coordDto.Mode
+                                      Repo =
+                                        if isNull coordDto.Repo || coordDto.Repo = "" then
+                                            None
+                                        else
+                                            Some coordDto.Repo
+                                      Path =
+                                        if isNull coordDto.Path || coordDto.Path = "" then
+                                            None
+                                        else
+                                            Some coordDto.Path }
 
-                            Ok { Id = productId; Repos = repos }
+                                Ok
+                                    { Id = productId
+                                      Repos = repos
+                                      Docs = docs
+                                      Coordination = coordConfig
+                                      CoordRoot = coordRoot }
                 with ex ->
-                    Error(ProductConfigParseError(path, ex.Message))
+                    Error(ProductConfigError(productRoot, ex.Message))
 
 // ---------------------------------------------------------------------------
 // IBacklogStore implementation
@@ -171,7 +277,7 @@ type ProductConfigAdapter() =
 
 type BacklogStoreAdapter() =
     interface IBacklogStore with
-        member _.LoadBacklogItem(coordRoot: string) (backlogId: BacklogId) =
+        member _.LoadBacklogItem (coordRoot: string) (backlogId: BacklogId) =
             let id = BacklogId.value backlogId
             let path = Path.Combine(coordRoot, "BACKLOG", id, "item.yaml")
 
@@ -185,7 +291,10 @@ type BacklogStoreAdapter() =
                     | Error msg -> Error(ProductConfigParseError(path, msg))
                     | Ok dto ->
                         let repos =
-                            if isNull dto.Repos then [] else dto.Repos |> Array.toList |> List.map RepoId
+                            if isNull dto.Repos then
+                                []
+                            else
+                                dto.Repos |> Array.toList |> List.map RepoId
 
                         Ok
                             { Id = backlogId
@@ -194,7 +303,7 @@ type BacklogStoreAdapter() =
                 with ex ->
                     Error(ProductConfigParseError(path, ex.Message))
 
-        member _.ArchiveBacklogItem(coordRoot: string) (backlogId: BacklogId) (date: string) =
+        member _.ArchiveBacklogItem (coordRoot: string) (backlogId: BacklogId) (date: string) =
             let id = BacklogId.value backlogId
             let sourcePath = Path.Combine(coordRoot, "BACKLOG", id)
             let archiveDir = Path.Combine(coordRoot, "BACKLOG", "archive")
@@ -216,7 +325,7 @@ type BacklogStoreAdapter() =
 
 type TaskStoreAdapter() =
     interface ITaskStore with
-        member _.ListTasks(coordRoot: string) (backlogId: BacklogId) =
+        member _.ListTasks (coordRoot: string) (backlogId: BacklogId) =
             let dir = Path.Combine(coordRoot, "BACKLOG", BacklogId.value backlogId, "tasks")
 
             if not (Directory.Exists(dir)) then
@@ -238,15 +347,25 @@ type TaskStoreAdapter() =
                             | Error msg -> Error(ProductConfigParseError(path, msg))
                             | Ok dto -> mapTaskDto dto)
 
-                    let errors = results |> List.choose (function | Error e -> Some e | Ok _ -> None)
+                    let errors =
+                        results
+                        |> List.choose (function
+                            | Error e -> Some e
+                            | Ok _ -> None)
 
                     match errors with
                     | e :: _ -> Error e
-                    | [] -> Ok(results |> List.choose (function | Ok t -> Some t | Error _ -> None))
+                    | [] ->
+                        Ok(
+                            results
+                            |> List.choose (function
+                                | Ok t -> Some t
+                                | Error _ -> None)
+                        )
                 with ex ->
                     Error(ProductConfigParseError(dir, ex.Message))
 
-        member _.WriteTask(coordRoot: string) (task: ItrTask) =
+        member _.WriteTask (coordRoot: string) (task: ItrTask) =
             let taskId = TaskId.value task.Id
             let backlogId = BacklogId.value task.SourceBacklog
             let taskDir = Path.Combine(coordRoot, "BACKLOG", backlogId, "tasks", taskId)
@@ -262,7 +381,7 @@ type TaskStoreAdapter() =
             with ex ->
                 Error(ProductConfigParseError(path, ex.Message))
 
-        member _.ArchiveTask(coordRoot: string) (backlogId: BacklogId) (taskId: TaskId) (date: string) =
+        member _.ArchiveTask (coordRoot: string) (backlogId: BacklogId) (taskId: TaskId) (date: string) =
             let bid = BacklogId.value backlogId
             let tid = TaskId.value taskId
             let sourcePath = Path.Combine(coordRoot, "BACKLOG", bid, "tasks", tid)
