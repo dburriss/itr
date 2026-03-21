@@ -1,0 +1,25 @@
+id: profile-command-rename
+
+title: Rename CLI subcommand profiles to profile
+
+type: chore
+
+priority: medium
+
+repos:
+  - itr
+
+summary: >
+  Rename the `profiles` CLI subcommand to `profile` so all management
+  subcommands use consistent singular noun form (e.g. `itr profile add`).
+
+acceptance_criteria:
+  - The `profiles` Argu DU and all associated types are renamed to `profile` (singular)
+  - CLI surface changes from `itr profiles add` to `itr profile add`
+  - All tests, docs, and specs are updated to reflect the new command name
+  - Existing behavior is unchanged; only the command name changes
+
+dependencies:
+  - profile-add
+
+created_at: 2026-03-21
