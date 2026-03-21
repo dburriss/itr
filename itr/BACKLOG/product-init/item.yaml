@@ -11,12 +11,13 @@ repos:
 
 summary: >
   Provide an interactive product initialization flow that creates product
-  structure, starter docs, and optionally registers the product in itr settings.
+  structure, starter docs, and optionally registers the product root directory
+  in itr settings.
 
 acceptance_criteria:
   - An init flow creates product.yaml and coordination directories
   - Init creates starter PRODUCT.md and ARCHITECTURE.md content
-  - Init asks whether to register the product with the active profile or another profile
+  - Init asks whether to register the product root directory with the active profile or another profile
   - Init can skip registration when requested
 
 constraints:

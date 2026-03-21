@@ -12,7 +12,7 @@ acceptance_criteria:
   - A command interactively prompts for settings and initializes itr.json when no values are submitted
   - The command validates submitted settings and returns clear errors for invalid input
   - The command does not overwrite existing itr.json without confirmation
-  - The command detects if in an existing repository and prompts to add current repository as a product repository
+  - The command detects if in an existing product root and prompts to register that product root directory
   - The command can create a local settings file or a global settings file based on user choice
 
 dependencies: []

@@ -8,7 +8,7 @@
 
 ## Description
 
-Add a `profile add` CLI command that inserts a new named profile into `itr.json`. A profile may include an optional git identity. Products registered later under that profile persist their own coordination root config (`mode` plus `dir` or `repoDir`). Duplicate profile names must be rejected with a clear error.
+Add a `profile add` CLI command that inserts a new named profile into `itr.json`. A profile may include an optional git identity. Products registered later under that profile are tracked by product root directory path, and product structure is loaded from `product.yaml`. Duplicate profile names must be rejected with a clear error.
 
 ---
 
@@ -124,7 +124,7 @@ No existing usecases or domain functions are modified.
 | Risk | Mitigation |
 |---|---|
 | JSON serialization loses `defaultProfile` or existing entries | Write a round-trip test before implementing `saveConfig` |
-| CLI optional args drift from the persisted JSON shape | Keep docs and tests aligned to `gitIdentity` and per-profile product registration |
+| CLI optional args drift from the persisted JSON shape | Keep docs and tests aligned to `gitIdentity` and path-based product registration |
 
 ---
 

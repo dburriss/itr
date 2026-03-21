@@ -2,7 +2,7 @@
 
 ## itr.json
 
-Defines the global portfolio config, profiles, and each profile's registered products.
+Defines the global portfolio config, profiles, and product registrations for this machine.
 
 ```json
 {
@@ -11,11 +11,7 @@ Defines the global portfolio config, profiles, and each profile's registered pro
     "work": {
       "products": [
         {
-          "id": "billing-system",
-          "root": {
-            "mode": "primary-repo",
-            "repoDir": "~/dev/work/billing-system"
-          }
+          "path": "~/dev/work/billing-system"
         }
       ],
       "gitIdentity": {
@@ -41,31 +37,11 @@ Required object keyed by profile name, such as `work` or `personal`. This object
 
 List of products registered under that profile.
 
-#### profiles.<id>.products[].id
+#### profiles.<id>.products[].path
 
-Product identifier. Must match the slug pattern `[a-z0-9][a-z0-9-]*`.
+Path to the product root directory on the current machine.
 
-#### profiles.<id>.products[].root
-
-Coordination root configuration for the product.
-
-#### profiles.<id>.products[].root.mode
-
-Supported values:
-
-```
-standalone
-primary-repo
-control-repo
-```
-
-#### profiles.<id>.products[].root.dir
-
-Used only when `mode` is `standalone`.
-
-#### profiles.<id>.products[].root.repoDir
-
-Used when `mode` is `primary-repo` or `control-repo`.
+The CLI loads `product.yaml` from this directory to discover the product's canonical `id`, repos, docs, and coordination layout.
 
 #### profiles.<id>.gitIdentity
 
@@ -90,29 +66,17 @@ Optional email for git commits.
     "personal": {
       "products": [
         {
-          "id": "portfolio-tool",
-          "root": {
-            "mode": "standalone",
-            "dir": "~/dev/personal/portfolio-tool"
-          }
+          "path": "~/dev/personal/portfolio-tool"
         }
       ]
     },
     "work": {
       "products": [
         {
-          "id": "billing-system",
-          "root": {
-            "mode": "primary-repo",
-            "repoDir": "~/dev/work/billing-system"
-          }
+          "path": "~/dev/work/billing-system"
         },
         {
-          "id": "infra-control",
-          "root": {
-            "mode": "control-repo",
-            "repoDir": "~/dev/work/infra-control"
-          }
+          "path": "~/dev/work/infra-control"
         }
       ],
       "gitIdentity": {
@@ -128,12 +92,10 @@ Optional email for git commits.
 
 ## product.yaml
 
-Defines a **product and its repositories**.
+Defines a **product and its structure**. This file is the canonical source for product identity, repositories, docs, and coordination layout.
 
 ```yaml
 id: string
-
-profile: profile-id (optional)
 
 docs:
   product: path (optional)
@@ -157,15 +119,9 @@ coordination:
 
 #### id
 
-Product identifier.
+Canonical product identifier.
 
-Must match the portfolio registration.
-
----
-
-#### profile
-
-Optional override of portfolio profile.
+This is the source of truth for product identity. `itr.json` should register the product by root directory path rather than repeating the id.
 
 ---
 
@@ -237,7 +193,7 @@ develop
 
 #### coordination.mode
 
-Controls where coordination files live.
+Controls where coordination files live for this product.
 
 Options:
 
@@ -253,18 +209,18 @@ control-repo
 
 Required if mode is `primary-repo`.
 
-Specifies which repo hosts `.product`.
+Specifies which repo hosts the coordination root.
 
 ---
 
 #### coordination.path
 
-Directory inside repo or filesystem containing coordination files.
+Directory inside the selected repo or filesystem containing coordination files.
 
 Usually:
 
 ```
-.product
+.itr
 ```
 
 ---
@@ -273,8 +229,6 @@ Usually:
 
 ```yaml
 id: billing-system
-
-profile: work
 
 docs:
   product: PRODUCT.md
@@ -293,7 +247,7 @@ repos:
 coordination:
   mode: primary-repo
   repo: billing-api
-  path: .product
+  path: .itr
 ```
 
 ---
@@ -486,8 +440,8 @@ products/
 
 | File           | Purpose                                 |
 | -------------- | --------------------------------------- |
-| itr.json       | portfolio + profiles + per-profile products |
-| product.yaml   | product + repo configuration            |
+| itr.json       | profiles + machine-local product registrations |
+| product.yaml   | canonical product identity, repos, docs, and coordination |
 | backlog item   | planning artifact                       |
 | backlog view   | backlog projection                      |
 | tasks.yaml     | execution coordination                  |

@@ -16,7 +16,7 @@ summary: >
 acceptance_criteria:
   - A command adds a new profile to itr.json
   - Profile captures optional gitIdentity name and email
-  - Products added under the profile persist coordination root config using mode plus dir or repoDir
+  - Products added under the profile are tracked by product root directory path
   - Duplicate profile names are rejected clearly
   - Added profile is available to later product registration and selection flows
 

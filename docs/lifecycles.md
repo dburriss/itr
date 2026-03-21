@@ -118,7 +118,7 @@ When resolving the active profile, the following order applies (first match wins
 
 ### Coordination root modes
 
-A product's `.itr/` directory is located by appending `/.itr` to the configured root path, regardless of mode. The `mode` field is semantic — it communicates intent but does not change path resolution in MVP.
+The active profile selects a registered product root from `itr.json`. The CLI then loads that product's `product.yaml` to determine where coordination files live.
 
 | Mode | Config field | `.itr/` expected at |
 |---|---|---|
@@ -132,7 +132,7 @@ A product's `.itr/` directory is located by appending `/.itr` to the configured 
 1. itr settings bootstrap    Create ~/.config/itr/itr.json if missing
 2. itr profile add           Register a profile (e.g. work, personal)
 3. itr product init          Initialise a product and its .itr/ directory
-4. itr product register      Register an existing product into the active profile
+4. itr product register      Register an existing product root directory into the active profile
 ```
 
 After setup, every command that operates on a product follows the same resolution pipeline:

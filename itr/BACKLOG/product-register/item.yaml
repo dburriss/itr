@@ -10,14 +10,14 @@ repos:
   - itr
 
 summary: >
-  Add an existing product to itr.json so itr can locate and manage it under a
-  selected profile.
+  Add an existing product root directory to itr.json so itr can locate and
+  manage it under a selected profile.
 
 acceptance_criteria:
-  - A command registers an existing product path in itr.json
+  - A command registers an existing product root directory in itr.json
   - Registration can target the active profile or an explicitly chosen profile
-  - Product ids are validated and duplicates are rejected
-  - Registration does not require creating product files on disk
+  - The product id is read from product.yaml and duplicates are rejected
+  - Registration does not require creating product files beyond an existing product root on disk
 
 dependencies:
   - settings-bootstrap
