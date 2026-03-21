@@ -1,5 +1,5 @@
 ---
-name: plan
+name: itr-plan
 description: Plan next feature based on BACKLOG and design docs
 ---
 # Plan creation
