@@ -9,6 +9,7 @@
   <ItemGroup>
     <Compile Include="PortfolioAcceptanceTests.fs" />
     <Compile Include="TaskAcceptanceTests.fs" />
+    <Compile Include="BacklogAcceptanceTests.fs" />
     <Compile Include="YamlAdapterTests.fs" />
     <Compile Include="Tests.fs" />
   </ItemGroup>

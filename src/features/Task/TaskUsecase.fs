@@ -56,7 +56,7 @@ let takeBacklogItem
     (existingTasks: ItrTask list)
     (input: TakeInput)
     (today: System.DateOnly)
-    : Result<ItrTask list, TakeError> =
+    : Result<ItrTask list, BacklogError> =
 
     // 1. Validate all repos on the item exist in product.yaml
     let invalidRepo =

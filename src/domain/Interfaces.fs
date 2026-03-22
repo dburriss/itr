@@ -55,17 +55,21 @@ type IProductConfig =
 /// Capability interface for loading backlog items
 type IBacklogStore =
     /// Load a backlog item from <coordRoot>/BACKLOG/<backlog-id>/item.yaml
-    abstract LoadBacklogItem: coordRoot: string -> backlogId: BacklogId -> Result<BacklogItem, TakeError>
+    abstract LoadBacklogItem: coordRoot: string -> backlogId: BacklogId -> Result<BacklogItem, BacklogError>
     /// Archive a backlog item by moving <coordRoot>/BACKLOG/<backlog-id>/ to <coordRoot>/BACKLOG/archive/<date>-<backlog-id>/
-    abstract ArchiveBacklogItem: coordRoot: string -> backlogId: BacklogId -> date: string -> Result<unit, TakeError>
+    abstract ArchiveBacklogItem: coordRoot: string -> backlogId: BacklogId -> date: string -> Result<unit, BacklogError>
+    /// Check whether a backlog item already exists at <coordRoot>/BACKLOG/<backlog-id>/item.yaml
+    abstract BacklogItemExists: coordRoot: string -> backlogId: BacklogId -> bool
+    /// Write a backlog item to <coordRoot>/BACKLOG/<backlog-id>/item.yaml
+    abstract WriteBacklogItem: coordRoot: string -> item: BacklogItem -> Result<unit, BacklogError>
 
 /// Capability interface for reading and writing task files
 type ITaskStore =
     /// List all tasks for a given backlog id from <coordRoot>/BACKLOG/<backlog-id>/tasks/
-    abstract ListTasks: coordRoot: string -> backlogId: BacklogId -> Result<ItrTask list, TakeError>
+    abstract ListTasks: coordRoot: string -> backlogId: BacklogId -> Result<ItrTask list, BacklogError>
     /// Write a task file to <coordRoot>/BACKLOG/<backlog-id>/tasks/<task-id>/task.yaml
-    abstract WriteTask: coordRoot: string -> task: ItrTask -> Result<unit, TakeError>
+    abstract WriteTask: coordRoot: string -> task: ItrTask -> Result<unit, BacklogError>
 
     /// Archive a task by renaming <coordRoot>/BACKLOG/<backlog-id>/tasks/<task-id>/ to <coordRoot>/BACKLOG/<backlog-id>/tasks/<date>-<task-id>/
     abstract ArchiveTask:
-        coordRoot: string -> backlogId: BacklogId -> taskId: TaskId -> date: string -> Result<unit, TakeError>
+        coordRoot: string -> backlogId: BacklogId -> taskId: TaskId -> date: string -> Result<unit, BacklogError>

@@ -23,13 +23,36 @@ type TakeArgs =
             | Task_Id _ -> "override the generated task id (single-repo items only)"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
+type AddArgs =
+    | [<MainCommand; Mandatory>] Backlog_Id of backlog_id: string
+    | [<Mandatory>] Title of title: string
+    | Repo of repo: string
+    | Item_Type of item_type: string
+    | Summary of summary: string
+    | Priority of priority: string
+    | Depends_On of depends_on: string
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Backlog_Id _ -> "backlog item id (slug: [a-z0-9][a-z0-9-]*)"
+            | Title _ -> "short title for the backlog item"
+            | Repo _ -> "repo id to assign item to (required if product has multiple repos)"
+            | Item_Type _ -> "item type: feature | bug | chore | spike (default: feature)"
+            | Summary _ -> "longer description of the item"
+            | Priority _ -> "priority label (e.g. high, medium, low)"
+            | Depends_On _ -> "backlog item id this item depends on (can be repeated)"
+
+[<CliPrefix(CliPrefix.DoubleDash)>]
 type BacklogArgs =
     | [<CliPrefix(CliPrefix.None)>] Take of ParseResults<TakeArgs>
+    | [<CliPrefix(CliPrefix.None)>] Add of ParseResults<AddArgs>
 
     interface IArgParserTemplate with
         member this.Usage =
             match this with
             | Take _ -> "take a backlog item and create task files"
+            | Add _ -> "create a new backlog item"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
 type ProfilesAddArgs =
@@ -166,6 +189,12 @@ type AppDeps() =
         member _.ArchiveBacklogItem coordRoot backlogId date =
             (backlogStoreAdapter :> IBacklogStore).ArchiveBacklogItem coordRoot backlogId date
 
+        member _.BacklogItemExists coordRoot backlogId =
+            (backlogStoreAdapter :> IBacklogStore).BacklogItemExists coordRoot backlogId
+
+        member _.WriteBacklogItem coordRoot item =
+            (backlogStoreAdapter :> IBacklogStore).WriteBacklogItem coordRoot item
+
     interface ITaskStore with
         member _.ListTasks coordRoot backlogId =
             (taskStoreAdapter :> ITaskStore).ListTasks coordRoot backlogId
@@ -180,14 +209,21 @@ type AppDeps() =
 // Error formatting
 // ---------------------------------------------------------------------------
 
-let private formatTakeError (err: TakeError) : string =
+let private formatBacklogError (err: BacklogError) : string =
     match err with
     | ProductConfigNotFound root -> $"product.yaml not found at: {root}"
     | ProductConfigParseError(path, msg) -> $"Failed to parse product config at {path}: {msg}"
     | BacklogItemNotFound id -> $"Backlog item not found: {BacklogId.value id}"
-    | RepoNotInProduct id -> $"Repo '{RepoId.value id}' is not listed in product.yaml"
+    | RepoNotInProduct id ->
+        if RepoId.value id = "" then
+            "--repo is required when the product has multiple repos"
+        else
+            $"Repo '{RepoId.value id}' is not listed in product.yaml"
     | TaskIdConflict id -> $"Task id '{TaskId.value id}' already exists"
     | TaskIdOverrideRequiresSingleRepo -> "--task-id can only be used with single-repo backlog items"
+    | DuplicateBacklogId id -> $"Backlog item '{BacklogId.value id}' already exists"
+    | InvalidItemType value -> $"Invalid item type '{value}': must be feature | bug | chore | spike"
+    | MissingTitle -> "--title is required"
 
 let private formatPortfolioError (err: PortfolioError) : string =
     match err with
@@ -222,8 +258,8 @@ let private handleBacklogTake
     (outputJson: bool)
     : Result<unit, string> =
     let coordRoot = resolved.CoordRoot.AbsolutePath
-    let rawBacklogId = takeArgs.GetResult Backlog_Id
-    let taskIdOverride = takeArgs.TryGetResult Task_Id
+    let rawBacklogId = takeArgs.GetResult TakeArgs.Backlog_Id
+    let taskIdOverride = takeArgs.TryGetResult TakeArgs.Task_Id
 
     let backlogIdResult = BacklogId.tryCreate rawBacklogId
 
@@ -237,10 +273,10 @@ let private handleBacklogTake
 
         let result =
             backlogStore.LoadBacklogItem coordRoot backlogId
-            |> Result.mapError formatTakeError
+            |> Result.mapError formatBacklogError
             |> Result.bind (fun backlogItem ->
                 taskStore.ListTasks coordRoot backlogId
-                |> Result.mapError formatTakeError
+                |> Result.mapError formatBacklogError
                 |> Result.bind (fun existingTasks ->
                     let input =
                         { Task.TakeInput.BacklogId = backlogId
@@ -249,7 +285,7 @@ let private handleBacklogTake
                     let today = DateOnly.FromDateTime(DateTime.UtcNow)
 
                     Task.takeBacklogItem productConfig backlogItem existingTasks input today
-                    |> Result.mapError formatTakeError
+                    |> Result.mapError formatBacklogError
                     |> Result.bind (fun newTasks ->
                         let writeResults =
                             newTasks
@@ -269,7 +305,7 @@ let private handleBacklogTake
                                         )
 
                                     (taskId, path))
-                                |> Result.mapError formatTakeError)
+                                |> Result.mapError formatBacklogError)
 
                         let errors =
                             writeResults
@@ -304,6 +340,63 @@ let private handleBacklogTake
                 written |> List.iter (fun (id, path) -> printfn "Created task: %s → %s" id path)
 
             Ok()
+
+// ---------------------------------------------------------------------------
+// backlog add handler
+// ---------------------------------------------------------------------------
+
+let private handleBacklogAdd
+    (deps: AppDeps)
+    (resolved: ResolvedProduct)
+    (addArgs: ParseResults<AddArgs>)
+    (outputJson: bool)
+    : Result<unit, string> =
+    let coordRoot = resolved.CoordRoot.AbsolutePath
+    let rawBacklogId = addArgs.GetResult AddArgs.Backlog_Id
+    let title = addArgs.GetResult AddArgs.Title
+    let repo = addArgs.TryGetResult AddArgs.Repo
+    let itemType = addArgs.TryGetResult AddArgs.Item_Type
+    let summary = addArgs.TryGetResult AddArgs.Summary
+    let priority = addArgs.TryGetResult AddArgs.Priority
+    let dependsOn = addArgs.GetResults AddArgs.Depends_On
+
+    let productConfig = toProductConfig resolved.Definition
+    let backlogStore = deps :> IBacklogStore
+
+    // Check for duplicate
+    match BacklogId.tryCreate rawBacklogId with
+    | Error _ -> Error $"Invalid backlog id '{rawBacklogId}': must match [a-z0-9][a-z0-9-]*"
+    | Ok backlogId ->
+        if backlogStore.BacklogItemExists coordRoot backlogId then
+            Error(formatBacklogError (DuplicateBacklogId backlogId))
+        else
+            let input: Backlog.CreateBacklogItemInput =
+                { BacklogId = rawBacklogId
+                  Title = title
+                  Repos = repo |> Option.toList
+                  ItemType = itemType
+                  Priority = priority
+                  Summary = summary
+                  AcceptanceCriteria = []
+                  DependsOn = dependsOn }
+
+            let today = DateOnly.FromDateTime(DateTime.UtcNow)
+
+            match Backlog.createBacklogItem productConfig input today with
+            | Error e -> Error(formatBacklogError e)
+            | Ok item ->
+                match backlogStore.WriteBacklogItem coordRoot item with
+                | Error e -> Error(formatBacklogError e)
+                | Ok() ->
+                    let id = BacklogId.value item.Id
+                    let path = System.IO.Path.Combine(coordRoot, "BACKLOG", id, "item.yaml")
+
+                    if outputJson then
+                        printfn """{ "ok": true, "id": "%s" }""" id
+                    else
+                        printfn "Created backlog item '%s' → %s" id path
+
+                    Ok()
 
 // ---------------------------------------------------------------------------
 // product register handler
@@ -413,12 +506,45 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                             | Error msg -> Error msg
                             | Ok resolved -> handleBacklogTake deps resolved takeArgs outputJson
 
-            | None -> Error "Specify a backlog subcommand (e.g. backlog take <id>)"
+            | None ->
+                match backlogResults.TryGetResult BacklogArgs.Add with
+                | Some addArgs ->
+                    let portfolioResult =
+                        Portfolio.loadPortfolio (Some configPath)
+                        |> Effect.run deps
+                        |> Result.mapError (fun e -> $"%A{e}")
+                        |> Result.bind (fun portfolio ->
+                            Portfolio.resolveActiveProfile portfolio profile
+                            |> Effect.run deps
+                            |> Result.mapError (fun e -> $"%A{e}"))
+
+                    match portfolioResult with
+                    | Error msg -> Error msg
+                    | Ok activeProfile ->
+                        match activeProfile.Products with
+                        | [] -> Error "No products in active profile"
+                        | productRef :: _ ->
+                            let (ProductRoot root) = productRef.Root
+                            let productConfig = deps :> IProductConfig
+
+                            match productConfig.LoadProductConfig root with
+                            | Error e -> Error(formatPortfolioError e)
+                            | Ok definition ->
+                                let portfolioProductResult =
+                                    Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                    |> Effect.run deps
+                                    |> Result.mapError (fun e -> $"%A{e}")
+
+                                match portfolioProductResult with
+                                | Error msg -> Error msg
+                                | Ok resolved -> handleBacklogAdd deps resolved addArgs outputJson
+
+                | None -> Error "Specify a backlog subcommand (e.g. backlog take <id> or backlog add <id>)"
 
         | None ->
             match results.TryGetResult Profiles with
             | Some profilesResults ->
-                match profilesResults.TryGetResult Add with
+                match profilesResults.TryGetResult ProfilesArgs.Add with
                 | Some addArgs ->
                     let name = addArgs.GetResult ProfilesAddArgs.Name
                     let gitName = addArgs.TryGetResult ProfilesAddArgs.Git_Name

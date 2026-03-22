@@ -148,10 +148,22 @@ type TaskState =
     | Implemented
     | Validated
 
+type BacklogItemType =
+    | Feature
+    | Bug
+    | Chore
+    | Spike
+
 type BacklogItem =
     { Id: BacklogId
       Title: string
-      Repos: RepoId list }
+      Repos: RepoId list
+      Type: BacklogItemType
+      Priority: string option
+      Summary: string option
+      AcceptanceCriteria: string list
+      Dependencies: BacklogId list
+      CreatedAt: System.DateOnly }
 
 type ItrTask =
     { Id: TaskId
@@ -164,20 +176,40 @@ type ProductConfig =
     { Id: ProductId
       Repos: Map<RepoId, RepoConfig> }
 
-type TakeError =
+type BacklogError =
     | ProductConfigNotFound of coordRoot: string
     | ProductConfigParseError of path: string * message: string
     | BacklogItemNotFound of BacklogId
     | RepoNotInProduct of RepoId
     | TaskIdConflict of TaskId
     | TaskIdOverrideRequiresSingleRepo
+    | DuplicateBacklogId of BacklogId
+    | InvalidItemType of value: string
+    | MissingTitle
+
+[<RequireQualifiedAccess>]
+module BacklogItemType =
+    let tryParse (value: string) : Result<BacklogItemType, BacklogError> =
+        match value with
+        | null | "" | "feature" -> Ok Feature
+        | "bug" -> Ok Bug
+        | "chore" -> Ok Chore
+        | "spike" -> Ok Spike
+        | other -> Error(InvalidItemType other)
+
+    let toString (t: BacklogItemType) : string =
+        match t with
+        | Feature -> "feature"
+        | Bug -> "bug"
+        | Chore -> "chore"
+        | Spike -> "spike"
 
 [<RequireQualifiedAccess>]
 module BacklogId =
     let private slugRegex = Regex("^[a-z0-9][a-z0-9-]*$", RegexOptions.Compiled)
     let private rules = "must match [a-z0-9][a-z0-9-]*"
 
-    let tryCreate (value: string) : Result<BacklogId, TakeError> =
+    let tryCreate (value: string) : Result<BacklogId, BacklogError> =
         if System.String.IsNullOrWhiteSpace(value) then
             Error(BacklogItemNotFound(BacklogId value))
         elif slugRegex.IsMatch(value) then
@@ -191,7 +223,7 @@ module BacklogId =
 module TaskId =
     let private slugRegex = Regex("^[a-z0-9][a-z0-9-]*$", RegexOptions.Compiled)
 
-    let tryCreate (value: string) : Result<TaskId, TakeError> =
+    let tryCreate (value: string) : Result<TaskId, BacklogError> =
         if System.String.IsNullOrWhiteSpace(value) then
             Error(TaskIdConflict(TaskId value))
         elif slugRegex.IsMatch(value) then

@@ -4,6 +4,7 @@ open System
 open System.IO
 open System.Collections.Generic
 open System.Text.RegularExpressions
+open YamlDotNet.Core
 open YamlDotNet.Serialization
 open YamlDotNet.Serialization.NamingConventions
 open Itr.Domain
@@ -46,7 +47,19 @@ type BacklogItemDto =
       [<YamlMember(Alias = "title")>]
       Title: string
       [<YamlMember(Alias = "repos")>]
-      Repos: string array }
+      Repos: string array
+      [<YamlMember(Alias = "type")>]
+      Type: string
+      [<YamlMember(Alias = "priority")>]
+      Priority: string
+      [<YamlMember(Alias = "summary", ScalarStyle = ScalarStyle.Literal)>]
+      Summary: string
+      [<YamlMember(Alias = "acceptance_criteria")>]
+      AcceptanceCriteria: string array
+      [<YamlMember(Alias = "dependencies")>]
+      Dependencies: string array
+      [<YamlMember(Alias = "created_at")>]
+      CreatedAt: string }
 
 [<CLIMutable>]
 type TaskSourceDto =
@@ -183,7 +196,7 @@ let private taskStateToString (state: TaskState) : string =
     | Implemented -> "implemented"
     | Validated -> "validated"
 
-let private mapTaskDto (dto: ItrTaskDto) : Result<ItrTask, TakeError> =
+let private mapTaskDto (dto: ItrTaskDto) : Result<ItrTask, BacklogError> =
     match BacklogId.tryCreate dto.Source.Backlog with
     | Error _ -> Error(ProductConfigParseError("<task>", $"Invalid backlog id: {dto.Source.Backlog}"))
     | Ok backlogId ->
@@ -296,10 +309,44 @@ type BacklogStoreAdapter() =
                             else
                                 dto.Repos |> Array.toList |> List.map RepoId
 
+                        let itemType =
+                            if isNull dto.Type || dto.Type = "" then
+                                Feature
+                            else
+                                match BacklogItemType.tryParse dto.Type with
+                                | Ok t -> t
+                                | Error _ -> Feature
+
+                        let deps =
+                            if isNull dto.Dependencies then
+                                []
+                            else
+                                dto.Dependencies
+                                |> Array.toList
+                                |> List.choose (fun d ->
+                                    match BacklogId.tryCreate d with
+                                    | Ok bid -> Some bid
+                                    | Error _ -> None)
+
+                        let ac =
+                            if isNull dto.AcceptanceCriteria then []
+                            else dto.AcceptanceCriteria |> Array.toList
+
+                        let createdAt =
+                            match DateOnly.TryParse(dto.CreatedAt) with
+                            | true, d -> d
+                            | _ -> DateOnly.MinValue
+
                         Ok
                             { Id = backlogId
                               Title = if isNull dto.Title then id else dto.Title
-                              Repos = repos }
+                              Repos = repos
+                              Type = itemType
+                              Priority = if isNull dto.Priority || dto.Priority = "" then None else Some dto.Priority
+                              Summary = if isNull dto.Summary || dto.Summary = "" then None else Some dto.Summary
+                              AcceptanceCriteria = ac
+                              Dependencies = deps
+                              CreatedAt = createdAt }
                 with ex ->
                     Error(ProductConfigParseError(path, ex.Message))
 
@@ -318,6 +365,44 @@ type BacklogStoreAdapter() =
                     Ok()
                 with ex ->
                     Error(ProductConfigParseError(sourcePath, ex.Message))
+
+        member _.BacklogItemExists (coordRoot: string) (backlogId: BacklogId) =
+            let id = BacklogId.value backlogId
+            let path = Path.Combine(coordRoot, "BACKLOG", id, "item.yaml")
+            File.Exists(path)
+
+        member _.WriteBacklogItem (coordRoot: string) (item: BacklogItem) =
+            let id = BacklogId.value item.Id
+            let itemDir = Path.Combine(coordRoot, "BACKLOG", id)
+            let path = Path.Combine(itemDir, "item.yaml")
+
+            try
+                Directory.CreateDirectory(itemDir) |> ignore
+
+                let ac =
+                    if item.AcceptanceCriteria.IsEmpty then null
+                    else item.AcceptanceCriteria |> List.toArray
+
+                let deps =
+                    if item.Dependencies.IsEmpty then null
+                    else item.Dependencies |> List.map BacklogId.value |> List.toArray
+
+                let dto: BacklogItemDto =
+                    { Id = id
+                      Title = item.Title
+                      Repos = item.Repos |> List.map RepoId.value |> List.toArray
+                      Type = BacklogItemType.toString item.Type
+                      Priority = item.Priority |> Option.defaultValue null
+                      Summary = item.Summary |> Option.defaultValue null
+                      AcceptanceCriteria = ac
+                      Dependencies = deps
+                      CreatedAt = item.CreatedAt.ToString("yyyy-MM-dd") }
+
+                let yaml = serializeYaml dto
+                File.WriteAllText(path, yaml)
+                Ok()
+            with ex ->
+                Error(ProductConfigParseError(path, ex.Message))
 
 // ---------------------------------------------------------------------------
 // ITaskStore implementation

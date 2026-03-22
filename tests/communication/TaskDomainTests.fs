@@ -31,7 +31,13 @@ let private mkProductConfig repos =
 let private mkBacklogItem id title repos =
     { Id = mkBacklogId id
       Title = title
-      Repos = repos |> List.map RepoId }
+      Repos = repos |> List.map RepoId
+      Type = Feature
+      Priority = None
+      Summary = None
+      AcceptanceCriteria = []
+      Dependencies = []
+      CreatedAt = DateOnly.MinValue }
 
 let private mkInput backlogId overrideTaskId =
     { Task.TakeInput.BacklogId = mkBacklogId backlogId
