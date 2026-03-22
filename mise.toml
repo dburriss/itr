@@ -42,6 +42,14 @@ if [ "${usage_default:-false}" = "true" ]; then EXTRA_ARGS+=("--set-default"); f
 dotnet run --project src/cli/Itr.Cli.fsproj -- profiles add "${usage_name?}" --git-name "${usage_git_name?}" --git-email "${usage_git_email?}" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
 '''
 
+[tasks.product-init]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- product init"
+description = "Run the product init command using dotnet run."
+
+[tasks.product-register]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- product register ./itr/"
+description = "Run the product register command using dotnet run."
+
 [tasks.backlog]
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog"
 description = "Run the backlog command using dotnet run."

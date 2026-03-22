@@ -186,38 +186,69 @@ let addProfile<'deps when 'deps :> IPortfolioConfig>
 
 type RegisterProductInput =
     { Path: string
-      Profile: string }
+      Profile: string option }
 
 /// Register an existing product root under a named profile in itr.json.
-/// Validates the profile name, checks for duplicate roots, appends to profile, and saves.
-let registerProduct<'deps when 'deps :> IPortfolioConfig>
+/// Validates directory existence, loads product.yaml to read canonical id,
+/// detects duplicate canonical ids, appends ProductRef and returns updated Portfolio.
+/// The caller is responsible for persisting via SaveConfig.
+let registerProduct<'deps when 'deps :> IPortfolioConfig and 'deps :> IProductConfig and 'deps :> IFileSystem>
     (configPath: string)
     (input: RegisterProductInput)
     : EffectResult<'deps, DomainPortfolio, PortfolioError> =
     Effect(fun (deps: 'deps) ->
         let config = deps :> IPortfolioConfig
+        let fs = deps :> IFileSystem
+        let productConfig = deps :> IProductConfig
 
         config.LoadConfig configPath
         |> Result.bind (fun portfolio ->
-            match Portfolio.tryFindProfileCaseInsensitive input.Profile portfolio with
-            | None -> Error(ProfileNotFound input.Profile)
-            | Some profile ->
-                let absPath = System.IO.Path.GetFullPath(input.Path)
-                let rootStr = ProductRoot absPath
+            // 1.3 Resolve active profile from input.Profile or portfolio.DefaultProfile
+            let profileName =
+                match input.Profile with
+                | Some name when not (System.String.IsNullOrWhiteSpace(name)) -> Some name
+                | _ -> portfolio.DefaultProfile |> Option.map ProfileName.value
 
-                let alreadyRegistered =
-                    profile.Products |> List.exists (fun p -> p.Root = rootStr)
+            match profileName with
+            | None -> Error(ProfileNotFound "<none>")
+            | Some name ->
+                match Portfolio.tryFindProfileCaseInsensitive name portfolio with
+                | None -> Error(ProfileNotFound name)
+                | Some profile ->
 
-                if alreadyRegistered then
-                    Error(DuplicateProductId(ProfileName.value profile.Name, absPath))
+                // 1.4 Validate path is non-empty and directory exists
+                if System.String.IsNullOrWhiteSpace(input.Path) then
+                    Error(ProductConfigError(input.Path, "Path must not be empty"))
                 else
-                    let newRef = { Root = rootStr }
+
+                let resolvedPath = System.IO.Path.GetFullPath(input.Path)
+
+                if not (fs.DirectoryExists resolvedPath) then
+                    Error(ProductConfigError(resolvedPath, $"Directory does not exist: {resolvedPath}"))
+                else
+
+                // 1.5 Load product.yaml to get canonical id
+                match productConfig.LoadProductConfig resolvedPath with
+                | Error e -> Error e
+                | Ok definition ->
+
+                // 1.6 Call loadAllDefinitions to detect duplicate canonical ids
+                let newId = ProductId.value definition.Id
+
+                match loadAllDefinitions profile deps with
+                | Error e -> Error e
+                | Ok existingPairs ->
+                    let isDuplicate = existingPairs |> List.exists (fun (_, def) -> ProductId.value def.Id = newId)
+
+                    if isDuplicate then
+                        Error(DuplicateProductId(ProfileName.value profile.Name, newId))
+                    else
+
+                    // 1.7 Append ProductRef and return updated Portfolio (no save)
+                    let newRef = { Root = ProductRoot resolvedPath }
                     let updatedProfile = { profile with Products = profile.Products @ [ newRef ] }
                     let updatedProfiles = portfolio.Profiles |> Map.add profile.Name updatedProfile
-                    let updatedPortfolio = { portfolio with Profiles = updatedProfiles }
-
-                    config.SaveConfig configPath updatedPortfolio
-                    |> Result.map (fun () -> updatedPortfolio)))
+                    Ok { portfolio with Profiles = updatedProfiles }))
 
 // ---------------------------------------------------------------------------
 // initProduct use-case input type and function
@@ -233,7 +264,7 @@ type InitProductInput =
 
 /// Scaffold a new product on disk: writes product.yaml, PRODUCT.md, ARCHITECTURE.md,
 /// and creates the coordination directory sentinel. Optionally registers the product.
-let initProduct<'deps when 'deps :> IFileSystem and 'deps :> IPortfolioConfig>
+let initProduct<'deps when 'deps :> IFileSystem and 'deps :> IPortfolioConfig and 'deps :> IProductConfig>
     (configPath: string)
     (input: InitProductInput)
     : EffectResult<'deps, DomainPortfolio option, PortfolioError> =
@@ -356,8 +387,11 @@ coordination:
         match input.RegisterProfile with
         | None -> Ok None
         | Some profile ->
-            let regInput: RegisterProductInput = { Path = absPath; Profile = profile }
+            let regInput: RegisterProductInput = { Path = absPath; Profile = Some profile }
+            let portfolioConfig = deps :> IPortfolioConfig
 
             registerProduct configPath regInput
             |> Effect.run deps
-            |> Result.map Some)
+            |> Result.bind (fun updatedPortfolio ->
+                portfolioConfig.SaveConfig configPath updatedPortfolio
+                |> Result.map (fun () -> Some updatedPortfolio)))

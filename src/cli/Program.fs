@@ -77,13 +77,24 @@ type ProductInitArgs =
             | No_Register -> "skip registration in itr.json"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
+type ProductRegisterArgs =
+    | [<MainCommand; Mandatory>] Path of path: string
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Path _ -> "path to an existing product root directory"
+
+[<CliPrefix(CliPrefix.DoubleDash)>]
 type ProductArgs =
     | [<CliPrefix(CliPrefix.None)>] Init of ParseResults<ProductInitArgs>
+    | [<CliPrefix(CliPrefix.None)>] Register of ParseResults<ProductRegisterArgs>
 
     interface IArgParserTemplate with
         member this.Usage =
             match this with
             | Init _ -> "scaffold a new product"
+            | Register _ -> "register an existing product root in the portfolio"
 
 type CliArgs =
     | [<AltCommandLine("-p")>] Profile of string
@@ -185,6 +196,9 @@ let private formatPortfolioError (err: PortfolioError) : string =
     | InvalidProfileName(value, rules) -> $"Invalid profile name '{value}': {rules}"
     | InvalidProductId(value, rules) -> $"Invalid product id '{value}': {rules}"
     | ProductConfigError(root, msg) -> $"Product config error at '{root}': {msg}"
+    | ProductNotFound id -> $"Product '{id}' not found."
+    | CoordRootNotFound(id, path) -> $"Coordination root for '{id}' not found at: {path}"
+    | DuplicateProductId(profile, id) -> $"Product '{id}' is already registered in profile '{profile}'."
     | other -> $"%A{other}"
 
 // ---------------------------------------------------------------------------
@@ -290,6 +304,54 @@ let private handleBacklogTake
                 written |> List.iter (fun (id, path) -> printfn "Created task: %s → %s" id path)
 
             Ok()
+
+// ---------------------------------------------------------------------------
+// product register handler
+// ---------------------------------------------------------------------------
+
+let private handleProductRegister
+    (deps: AppDeps)
+    (configPath: string)
+    (profile: string option)
+    (registerArgs: ParseResults<ProductRegisterArgs>)
+    (outputJson: bool)
+    : Result<unit, string> =
+    let path = registerArgs.GetResult ProductRegisterArgs.Path
+
+    let input: Portfolio.RegisterProductInput =
+        { Path = path
+          Profile = profile }
+
+    let result =
+        Portfolio.registerProduct configPath input
+        |> Effect.run deps
+        |> Result.mapError formatPortfolioError
+
+    match result with
+    | Error msg -> Error msg
+    | Ok updatedPortfolio ->
+        let portfolioConfig = deps :> IPortfolioConfig
+
+        portfolioConfig.SaveConfig configPath updatedPortfolio
+        |> Result.mapError formatPortfolioError
+        |> Result.map (fun () ->
+            // Load product.yaml to get the canonical id for the success message
+            let productConfig = deps :> IProductConfig
+
+            match productConfig.LoadProductConfig path with
+            | Ok definition ->
+                let id = ProductId.value definition.Id
+
+                if outputJson then
+                    printfn """{ "ok": true, "id": "%s", "path": "%s" }""" id path
+                else
+                    printfn "Registered product '%s' from '%s'." id path
+            | Error _ ->
+                // Fallback if product.yaml read fails after registration
+                if outputJson then
+                    printfn """{ "ok": true, "path": "%s" }""" path
+                else
+                    printfn "Registered product from '%s'." path)
 
 // ---------------------------------------------------------------------------
 // Dispatch
@@ -454,7 +516,11 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
 
                             Ok()
 
-                    | None -> Error "Specify a product subcommand (e.g. product init <path>)"
+                    | None ->
+                        match productResults.TryGetResult Register with
+                        | Some registerArgs ->
+                            handleProductRegister deps configPath profile registerArgs outputJson
+                        | None -> Error "Specify a product subcommand (e.g. product init <path> or product register <path>)"
 
                 | None ->
                 // Legacy behaviour: just load portfolio

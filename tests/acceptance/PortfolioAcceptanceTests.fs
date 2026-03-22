@@ -637,7 +637,7 @@ let ``initProduct duplicate product root in profile returns error and itr.json u
             // Try to register the same root again
             let regInput: Portfolio.RegisterProductInput =
                 { Path = productPath
-                  Profile = "default" }
+                  Profile = Some "default" }
 
             let deps2 = TestDeps(portfolioPath)
 
@@ -645,6 +645,163 @@ let ``initProduct duplicate product root in profile returns error and itr.json u
             | Error _ ->
                 Assert.Equal(afterFirst, File.ReadAllText(portfolioPath))
             | Ok _ -> failwith "expected error for duplicate registration"
+    finally
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
+
+// ---------------------------------------------------------------------------
+// registerProduct acceptance tests
+// ---------------------------------------------------------------------------
+
+/// Helper: write itr.json with one named profile and no products
+let private makePortfolioJson (portfolioPath: string) (profileName: string) =
+    File.WriteAllText(
+        portfolioPath,
+        $"""{{ "defaultProfile": "{profileName}", "profiles": {{ "{profileName}": {{ "products": [] }} }} }}"""
+    )
+
+/// Helper: write product.yaml with given id
+let private writeProductYamlWithId (dir: string) (id: string) =
+    File.WriteAllText(
+        Path.Combine(dir, "product.yaml"),
+        $"id: {id}\ncoordination:\n  mode: standalone\n  path: .itr\n"
+    )
+
+[<Fact>]
+let ``registerProduct end-to-end adds product root to profile in itr.json`` () =
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-reg-e2e-{Guid.NewGuid():N}")
+
+    try
+        Directory.CreateDirectory(root) |> ignore
+        let portfolioPath = Path.Combine(root, "itr.json")
+        makePortfolioJson portfolioPath "work"
+
+        let productRoot = Path.Combine(root, "my-product")
+        Directory.CreateDirectory(productRoot) |> ignore
+        writeProductYamlWithId productRoot "my-product"
+
+        let deps = TestDeps(portfolioPath)
+
+        let input: FeaturePortfolio.RegisterProductInput =
+            { Path = productRoot; Profile = None }
+
+        match FeaturePortfolio.registerProduct portfolioPath input |> Effect.run deps with
+        | Error e -> failwithf "expected Ok, got %A" e
+        | Ok updatedPortfolio ->
+            let portfolioConfig = deps :> IPortfolioConfig
+
+            portfolioConfig.SaveConfig portfolioPath updatedPortfolio
+            |> Result.defaultWith (fun e -> failwithf "SaveConfig failed: %A" e)
+
+            let loaded =
+                portfolioConfig.LoadConfig portfolioPath
+                |> Result.defaultWith (fun e -> failwithf "LoadConfig failed: %A" e)
+
+            let profile = loaded.Profiles |> Map.find (ProfileName.create "work")
+            Assert.Equal(1, profile.Products.Length)
+            let (ProductRoot storedPath) = profile.Products.[0].Root
+            Assert.Equal(productRoot, storedPath)
+    finally
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
+
+[<Fact>]
+let ``registerProduct duplicate canonical id returns DuplicateProductId and file unchanged`` () =
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-reg-dup2-{Guid.NewGuid():N}")
+
+    try
+        Directory.CreateDirectory(root) |> ignore
+        let portfolioPath = Path.Combine(root, "itr.json")
+        makePortfolioJson portfolioPath "work"
+
+        let productRoot = Path.Combine(root, "my-product")
+        Directory.CreateDirectory(productRoot) |> ignore
+        writeProductYamlWithId productRoot "my-product"
+
+        let deps = TestDeps(portfolioPath)
+
+        let input: FeaturePortfolio.RegisterProductInput =
+            { Path = productRoot; Profile = None }
+
+        // First registration
+        match FeaturePortfolio.registerProduct portfolioPath input |> Effect.run deps with
+        | Error e -> failwithf "first registration expected Ok, got %A" e
+        | Ok updatedPortfolio ->
+            (deps :> IPortfolioConfig).SaveConfig portfolioPath updatedPortfolio
+            |> Result.defaultWith (fun e -> failwithf "SaveConfig failed: %A" e)
+
+            let afterFirst = File.ReadAllText(portfolioPath)
+            let deps2 = TestDeps(portfolioPath)
+
+            // Second registration — same canonical id
+            match FeaturePortfolio.registerProduct portfolioPath input |> Effect.run deps2 with
+            | Error(DuplicateProductId(profileName, productId)) ->
+                Assert.Equal("work", profileName)
+                Assert.Equal("my-product", productId)
+                Assert.Equal(afterFirst, File.ReadAllText(portfolioPath))
+            | other -> failwithf "expected DuplicateProductId, got %A" other
+    finally
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
+
+[<Fact>]
+let ``registerProduct round-trip preserves existing profiles and products`` () =
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-reg-roundtrip-{Guid.NewGuid():N}")
+
+    try
+        Directory.CreateDirectory(root) |> ignore
+        let portfolioPath = Path.Combine(root, "itr.json")
+
+        // Create itr.json with two profiles; work already has one product
+        let existingProductRoot = Path.Combine(root, "existing-product")
+        Directory.CreateDirectory(existingProductRoot) |> ignore
+        writeProductYamlWithId existingProductRoot "existing-product"
+
+        File.WriteAllText(
+            portfolioPath,
+            $"""{{
+  "defaultProfile": "work",
+  "profiles": {{
+    "work": {{ "products": ["{existingProductRoot}"] }},
+    "personal": {{ "products": [] }}
+  }}
+}}"""
+        )
+
+        let newProductRoot = Path.Combine(root, "new-product")
+        Directory.CreateDirectory(newProductRoot) |> ignore
+        writeProductYamlWithId newProductRoot "new-product"
+
+        let deps = TestDeps(portfolioPath)
+
+        let input: FeaturePortfolio.RegisterProductInput =
+            { Path = newProductRoot; Profile = None }
+
+        match FeaturePortfolio.registerProduct portfolioPath input |> Effect.run deps with
+        | Error e -> failwithf "expected Ok, got %A" e
+        | Ok updatedPortfolio ->
+            (deps :> IPortfolioConfig).SaveConfig portfolioPath updatedPortfolio
+            |> Result.defaultWith (fun e -> failwithf "SaveConfig failed: %A" e)
+
+            let loaded =
+                (deps :> IPortfolioConfig).LoadConfig portfolioPath
+                |> Result.defaultWith (fun e -> failwithf "LoadConfig failed: %A" e)
+
+            // Both profiles must still be present
+            Assert.True(loaded.Profiles |> Map.containsKey (ProfileName.create "work"))
+            Assert.True(loaded.Profiles |> Map.containsKey (ProfileName.create "personal"))
+
+            // work profile now has 2 products
+            let workProfile = loaded.Profiles |> Map.find (ProfileName.create "work")
+            Assert.Equal(2, workProfile.Products.Length)
+
+            // existing product still present
+            let roots = workProfile.Products |> List.map (fun p -> let (ProductRoot r) = p.Root in r)
+            Assert.Contains(existingProductRoot, roots)
+            Assert.Contains(newProductRoot, roots)
     finally
         if Directory.Exists(root) then
             Directory.Delete(root, true)

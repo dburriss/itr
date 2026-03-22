@@ -1,0 +1,24 @@
+id: product-register-default-path
+
+title: Default to current directory when no path given to product register
+
+type: chore
+
+priority: low
+
+repos:
+  - itr
+
+summary: >
+  When the user runs `itr product register` with no path argument, default to
+  the current working directory instead of failing with an Argu parse error.
+
+acceptance_criteria:
+  - "'itr product register' with no path uses the current working directory"
+  - "'itr product register <path>' continues to work as before"
+  - Existing tests remain green
+
+dependencies:
+  - product-register
+
+created_at: 2026-03-22

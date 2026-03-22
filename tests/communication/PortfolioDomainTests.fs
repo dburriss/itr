@@ -329,8 +329,139 @@ let ``addProfile returns InvalidProfileName for invalid name`` () =
     | other -> failwithf "expected InvalidProfileName, got %A" other
 
 // ---------------------------------------------------------------------------
-// initProduct use-case tests
+// registerProduct use-case tests
 // ---------------------------------------------------------------------------
+
+/// Combined test deps for registerProduct: IPortfolioConfig + IProductConfig + IFileSystem.
+/// dirExists: controls IFileSystem.DirectoryExists
+/// productDefs: maps root path → ProductDefinition
+/// portfolio: the portfolio returned by LoadConfig
+type TestRegisterDeps
+    (
+        portfolio: Portfolio,
+        dirExists: string -> bool,
+        productDefs: Map<string, ProductDefinition>
+    ) =
+    interface IPortfolioConfig with
+        member _.ConfigPath() = "/stub/itr.json"
+        member _.LoadConfig _ = Ok portfolio
+        member _.SaveConfig _ _ = Ok()
+
+    interface IFileSystem with
+        member _.ReadFile _ = Error(FileNotFound "not implemented")
+        member _.WriteFile _ _ = Error(IoException("", "not implemented"))
+        member _.FileExists _ = false
+        member _.DirectoryExists path = dirExists path
+
+    interface IProductConfig with
+        member _.LoadProductConfig root =
+            match Map.tryFind root productDefs with
+            | Some def -> Ok def
+            | None -> Error(ProductConfigError(root, "product.yaml not found (test stub)"))
+
+let private mkRegPortfolio profileName products =
+    let profile =
+        { Name = ProfileName.create profileName
+          Products = products
+          GitIdentity = None }
+
+    DomainPortfolio.tryCreate (Some(ProfileName.create profileName)) [ profile ]
+    |> Result.defaultWith (fun e -> failwithf "failed to build portfolio: %A" e)
+
+[<Fact>]
+let ``registerProduct valid path adds ProductRef to active profile and returns updated Portfolio`` () =
+    let root = "/tmp/my-product"
+    let definition = mkDefinition "my-product" root
+
+    let portfolio = mkRegPortfolio "work" []
+
+    let deps =
+        TestRegisterDeps(portfolio, (fun _ -> true), Map.ofList [ root, definition ])
+
+    let input: FeaturePortfolio.RegisterProductInput =
+        { Path = root; Profile = None }
+
+    match FeaturePortfolio.registerProduct "/stub/itr.json" input |> Effect.run deps with
+    | Ok updated ->
+        let profile = updated.Profiles |> Map.find (ProfileName.create "work")
+        Assert.Equal(1, profile.Products.Length)
+        Assert.Equal(ProductRoot root, profile.Products.[0].Root)
+    | Error e -> failwithf "expected Ok, got %A" e
+
+[<Fact>]
+let ``registerProduct duplicate canonical id returns DuplicateProductId portfolio unchanged`` () =
+    let root = "/tmp/my-product"
+    let root2 = "/tmp/my-product-2"
+    let definition = mkDefinition "my-product" root
+    let definition2 = mkDefinition "my-product" root2
+
+    let portfolio = mkRegPortfolio "work" [ mkProductRef root ]
+
+    let deps =
+        TestRegisterDeps(
+            portfolio,
+            (fun _ -> true),
+            Map.ofList [ root, definition; root2, definition2 ]
+        )
+
+    let input: FeaturePortfolio.RegisterProductInput =
+        { Path = root2; Profile = None }
+
+    match FeaturePortfolio.registerProduct "/stub/itr.json" input |> Effect.run deps with
+    | Error(DuplicateProductId(profileName, productId)) ->
+        Assert.Equal("work", profileName)
+        Assert.Equal("my-product", productId)
+    | other -> failwithf "expected DuplicateProductId, got %A" other
+
+[<Fact>]
+let ``registerProduct non-existent directory returns ProductConfigError portfolio unchanged`` () =
+    let root = "/tmp/nonexistent-product"
+
+    let portfolio = mkRegPortfolio "work" []
+
+    let deps =
+        TestRegisterDeps(portfolio, (fun _ -> false), Map.empty)
+
+    let input: FeaturePortfolio.RegisterProductInput =
+        { Path = root; Profile = None }
+
+    match FeaturePortfolio.registerProduct "/stub/itr.json" input |> Effect.run deps with
+    | Error(ProductConfigError _) -> Assert.True(true)
+    | other -> failwithf "expected ProductConfigError, got %A" other
+
+[<Fact>]
+let ``registerProduct missing product yaml propagates ProductConfigError`` () =
+    let root = "/tmp/product-no-yaml"
+
+    let portfolio = mkRegPortfolio "work" []
+
+    // dirExists returns true but productDefs is empty → LoadProductConfig returns Error
+    let deps =
+        TestRegisterDeps(portfolio, (fun _ -> true), Map.empty)
+
+    let input: FeaturePortfolio.RegisterProductInput =
+        { Path = root; Profile = None }
+
+    match FeaturePortfolio.registerProduct "/stub/itr.json" input |> Effect.run deps with
+    | Error(ProductConfigError _) -> Assert.True(true)
+    | other -> failwithf "expected ProductConfigError, got %A" other
+
+[<Fact>]
+let ``registerProduct named profile not found returns ProfileNotFound`` () =
+    let root = "/tmp/product"
+    let definition = mkDefinition "my-product" root
+
+    let portfolio = mkRegPortfolio "work" []
+
+    let deps =
+        TestRegisterDeps(portfolio, (fun _ -> true), Map.ofList [ root, definition ])
+
+    let input: FeaturePortfolio.RegisterProductInput =
+        { Path = root; Profile = Some "nonexistent" }
+
+    match FeaturePortfolio.registerProduct "/stub/itr.json" input |> Effect.run deps with
+    | Error(ProfileNotFound name) -> Assert.Equal("nonexistent", name)
+    | other -> failwithf "expected ProfileNotFound, got %A" other
 
 /// Test deps for initProduct.
 /// dirExists: controls IFileSystem.DirectoryExists
@@ -358,6 +489,31 @@ type TestInitDeps
         member _.LoadConfig _ = Ok portfolio
 
         member _.SaveConfig _ _ = Ok()
+
+    interface IProductConfig with
+        member _.LoadProductConfig root =
+            // Return a stub definition using the directory name as the product id
+            let dirName =
+                System.IO.Path.GetFileName(root.TrimEnd(System.IO.Path.DirectorySeparatorChar))
+
+            // Try to parse as a valid slug; fall back to a fixed id if not
+            match ProductId.tryCreate dirName with
+            | Ok id ->
+                let coordRoot =
+                    { Mode = Standalone
+                      AbsolutePath = System.IO.Path.Combine(root, ".itr") }
+
+                Ok
+                    { Id = id
+                      Repos = Map.empty
+                      Docs = Map.empty
+                      Coordination =
+                        { Mode = "standalone"
+                          Repo = None
+                          Path = None }
+                      CoordRoot = coordRoot }
+            | Error _ ->
+                Error(ProductConfigError(root, "product.yaml not found (test stub)"))
 
 let private mkInitPortfolio () =
     let profile =
