@@ -134,7 +134,7 @@ let ``take single-repo item creates task file with correct YAML content`` () =
         let task = tasks.[0]
         Assert.Equal("my-feature", TaskId.value task.Id)
         Assert.Equal(RepoId "main-repo", task.Repo)
-        Assert.Equal(Planning, task.State)
+        Assert.Equal(TaskState.Planning, task.State)
 
         // Check file exists on disk
         let taskPath =

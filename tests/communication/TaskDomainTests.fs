@@ -57,7 +57,7 @@ let ``single-repo item with no existing tasks uses backlog id as task id`` () =
     | Ok [ task ] ->
         Assert.Equal("my-feature", TaskId.value task.Id)
         Assert.Equal(RepoId "main-repo", task.Repo)
-        Assert.Equal(Planning, task.State)
+        Assert.Equal(TaskState.Planning, task.State)
         Assert.Equal(today, task.CreatedAt)
     | other -> failwithf "expected single task, got %A" other
 
@@ -71,7 +71,7 @@ let ``single-repo item re-taken uses repo-prefixed id`` () =
         { Id = TaskId.create "my-feature"
           SourceBacklog = mkBacklogId "my-feature"
           Repo = RepoId "main-repo"
-          State = Planning
+          State = TaskState.Planning
           CreatedAt = today }
 
     match Task.takeBacklogItem productConfig backlogItem [ existingTask ] input today with
@@ -102,14 +102,14 @@ let ``re-take with collision on repo-prefixed id uses numeric suffix`` () =
         { Id = TaskId.create "feat"
           SourceBacklog = mkBacklogId "feat"
           Repo = RepoId "main-repo"
-          State = Planning
+          State = TaskState.Planning
           CreatedAt = today }
 
     let existing2 =
         { Id = TaskId.create "main-repo-feat"
           SourceBacklog = mkBacklogId "feat"
           Repo = RepoId "main-repo"
-          State = Planning
+          State = TaskState.Planning
           CreatedAt = today }
 
     match Task.takeBacklogItem productConfig backlogItem [ existing1; existing2 ] input today with
@@ -140,7 +140,7 @@ let ``task-id override fails with TaskIdConflict when id already exists`` () =
         { Id = TaskId.create "existing-task"
           SourceBacklog = mkBacklogId "my-feature"
           Repo = RepoId "main-repo"
-          State = Planning
+          State = TaskState.Planning
           CreatedAt = today }
 
     match Task.takeBacklogItem productConfig backlogItem [ existingTask ] input today with

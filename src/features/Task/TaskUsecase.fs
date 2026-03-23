@@ -88,7 +88,7 @@ let takeBacklogItem
                         [ { Id = taskId
                             SourceBacklog = input.BacklogId
                             Repo = repo
-                            State = Planning
+                            State = TaskState.Planning
                             CreatedAt = today } ]
 
         | None ->
@@ -113,7 +113,7 @@ let takeBacklogItem
                             { Id = taskId
                               SourceBacklog = input.BacklogId
                               Repo = repoId
-                              State = Planning
+                              State = TaskState.Planning
                               CreatedAt = today }
 
                         (task :: acc, Set.add (TaskId.value taskId) allocatedIds))

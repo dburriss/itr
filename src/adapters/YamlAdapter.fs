@@ -184,17 +184,21 @@ let private mapDocs (dto: Dictionary<string, string>) : Map<string, string> =
 
 let private mapTaskState (s: string) : TaskState =
     match s with
-    | "in_progress" -> InProgress
-    | "implemented" -> Implemented
-    | "validated" -> Validated
-    | _ -> Planning
+    | "planned" -> TaskState.Planned
+    | "approved" -> TaskState.Approved
+    | "in_progress" -> TaskState.InProgress
+    | "implemented" -> TaskState.Implemented
+    | "validated" -> TaskState.Validated
+    | _ -> TaskState.Planning
 
 let private taskStateToString (state: TaskState) : string =
     match state with
-    | Planning -> "planning"
-    | InProgress -> "in_progress"
-    | Implemented -> "implemented"
-    | Validated -> "validated"
+    | TaskState.Planning -> "planning"
+    | TaskState.Planned -> "planned"
+    | TaskState.Approved -> "approved"
+    | TaskState.InProgress -> "in_progress"
+    | TaskState.Implemented -> "implemented"
+    | TaskState.Validated -> "validated"
 
 let private mapTaskDto (dto: ItrTaskDto) : Result<ItrTask, BacklogError> =
     match BacklogId.tryCreate dto.Source.Backlog with
@@ -353,7 +357,7 @@ type BacklogStoreAdapter() =
         member _.ArchiveBacklogItem (coordRoot: string) (backlogId: BacklogId) (date: string) =
             let id = BacklogId.value backlogId
             let sourcePath = Path.Combine(coordRoot, "BACKLOG", id)
-            let archiveDir = Path.Combine(coordRoot, "BACKLOG", "archive")
+            let archiveDir = Path.Combine(coordRoot, "BACKLOG", "_archive")
             let destPath = Path.Combine(archiveDir, $"{date}-{id}")
 
             if not (Directory.Exists(sourcePath)) then
@@ -403,6 +407,126 @@ type BacklogStoreAdapter() =
                 Ok()
             with ex ->
                 Error(ProductConfigParseError(path, ex.Message))
+
+        member self.ListBacklogItems (coordRoot: string) =
+            let backlogDir = Path.Combine(coordRoot, "BACKLOG")
+
+            if not (Directory.Exists(backlogDir)) then
+                Ok []
+            else
+                try
+                    let dirs =
+                        Directory.GetDirectories(backlogDir)
+                        |> Array.filter (fun d -> not (Path.GetFileName(d).StartsWith("_")))
+
+                    let results =
+                        dirs
+                        |> Array.toList
+                        |> List.map (fun dir ->
+                            let dirName = Path.GetFileName(dir)
+                            match BacklogId.tryCreate dirName with
+                            | Error _ -> Error(ProductConfigParseError(dir, $"Invalid backlog id: {dirName}"))
+                            | Ok backlogId ->
+                                (self :> IBacklogStore).LoadBacklogItem coordRoot backlogId)
+
+                    let errors =
+                        results
+                        |> List.choose (function
+                            | Error e -> Some e
+                            | Ok _ -> None)
+
+                    match errors with
+                    | e :: _ -> Error e
+                    | [] ->
+                        Ok(
+                            results
+                            |> List.choose (function
+                                | Ok item -> Some item
+                                | Error _ -> None)
+                        )
+                with ex ->
+                    Error(ProductConfigParseError(backlogDir, ex.Message))
+
+        member _.ListArchivedBacklogItems (coordRoot: string) =
+            let archiveDir = Path.Combine(coordRoot, "BACKLOG", "_archive")
+
+            if not (Directory.Exists(archiveDir)) then
+                Ok []
+            else
+                try
+                    let dirs = Directory.GetDirectories(archiveDir)
+
+                    let results =
+                        dirs
+                        |> Array.toList
+                        |> List.map (fun dir ->
+                            let path = Path.Combine(dir, "item.yaml")
+                            if not (File.Exists(path)) then
+                                Ok None
+                            else
+                                try
+                                    let content = File.ReadAllText(path)
+                                    match parseYaml<BacklogItemDto> content with
+                                    | Error msg -> Error(ProductConfigParseError(path, msg))
+                                    | Ok dto ->
+                                        match BacklogId.tryCreate dto.Id with
+                                        | Error _ -> Error(ProductConfigParseError(path, $"Invalid backlog id in yaml: {dto.Id}"))
+                                        | Ok backlogId ->
+                                            let repos =
+                                                if isNull dto.Repos then []
+                                                else dto.Repos |> Array.toList |> List.map RepoId
+
+                                            let itemType =
+                                                if isNull dto.Type || dto.Type = "" then Feature
+                                                else
+                                                    match BacklogItemType.tryParse dto.Type with
+                                                    | Ok t -> t
+                                                    | Error _ -> Feature
+
+                                            let deps =
+                                                if isNull dto.Dependencies then []
+                                                else
+                                                    dto.Dependencies
+                                                    |> Array.toList
+                                                    |> List.choose (fun d ->
+                                                        match BacklogId.tryCreate d with
+                                                        | Ok bid -> Some bid
+                                                        | Error _ -> None)
+
+                                            let ac =
+                                                if isNull dto.AcceptanceCriteria then []
+                                                else dto.AcceptanceCriteria |> Array.toList
+
+                                            let createdAt =
+                                                match DateOnly.TryParse(dto.CreatedAt) with
+                                                | true, d -> d
+                                                | _ -> DateOnly.MinValue
+
+                                            Ok(Some(
+                                                { Id = backlogId
+                                                  Title = if isNull dto.Title then dto.Id else dto.Title
+                                                  Repos = repos
+                                                  Type = itemType
+                                                  Priority = if isNull dto.Priority || dto.Priority = "" then None else Some dto.Priority
+                                                  Summary = if isNull dto.Summary || dto.Summary = "" then None else Some dto.Summary
+                                                  AcceptanceCriteria = ac
+                                                  Dependencies = deps
+                                                  CreatedAt = createdAt } : BacklogItem))
+                                with ex ->
+                                    Error(ProductConfigParseError(path, ex.Message)))
+
+                    let errors =
+                        results
+                        |> List.choose (function
+                            | Error e -> Some e
+                            | Ok _ -> None)
+
+                    match errors with
+                    | e :: _ -> Error e
+                    | [] ->
+                        Ok(results |> List.choose (function Ok(Some item) -> Some item | _ -> None))
+                with ex ->
+                    Error(ProductConfigParseError(archiveDir, ex.Message))
 
 // ---------------------------------------------------------------------------
 // ITaskStore implementation
@@ -480,3 +604,67 @@ type TaskStoreAdapter() =
                     Ok()
                 with ex ->
                     Error(ProductConfigParseError(sourcePath, ex.Message))
+
+// ---------------------------------------------------------------------------
+// BacklogViewDto
+// ---------------------------------------------------------------------------
+
+[<CLIMutable>]
+type BacklogViewDto =
+    { [<YamlMember(Alias = "id")>]
+      Id: string
+      [<YamlMember(Alias = "description")>]
+      Description: string
+      [<YamlMember(Alias = "items")>]
+      Items: string array }
+
+// ---------------------------------------------------------------------------
+// IViewStore implementation
+// ---------------------------------------------------------------------------
+
+type ViewStoreAdapter() =
+    interface IViewStore with
+        member _.ListViews (coordRoot: string) =
+            let viewsDir = Path.Combine(coordRoot, "BACKLOG", "_views")
+
+            if not (Directory.Exists(viewsDir)) then
+                Ok []
+            else
+                try
+                    let files =
+                        Directory.GetFiles(viewsDir, "*.yaml")
+                        |> Array.sort // alphabetical for first-match semantics
+
+                    let results =
+                        files
+                        |> Array.toList
+                        |> List.map (fun path ->
+                            let content = File.ReadAllText(path)
+
+                            match parseYaml<BacklogViewDto> content with
+                            | Error msg -> Error(ProductConfigParseError(path, msg))
+                            | Ok dto ->
+                                Ok
+                                    { BacklogView.Id = if isNull dto.Id then Path.GetFileNameWithoutExtension(path) else dto.Id
+                                      Description = if isNull dto.Description || dto.Description = "" then None else Some dto.Description
+                                      Items =
+                                        if isNull dto.Items then []
+                                        else dto.Items |> Array.toList })
+
+                    let errors =
+                        results
+                        |> List.choose (function
+                            | Error e -> Some e
+                            | Ok _ -> None)
+
+                    match errors with
+                    | e :: _ -> Error e
+                    | [] ->
+                        Ok(
+                            results
+                            |> List.choose (function
+                                | Ok v -> Some v
+                                | Error _ -> None)
+                        )
+                with ex ->
+                    Error(ProductConfigParseError(viewsDir, ex.Message))

@@ -71,6 +71,10 @@ set -euo pipefail
 dotnet run --project src/cli/Itr.Cli.fsproj -- backlog take "${usage_item_id?}"
 '''
 
+[tasks.backlog-list]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog list"
+description = "Run the backlog list command using dotnet run."
+
 [tasks.portfolio]
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- portfolio --profile work --output json"
 description = "Run the portfolio command using dotnet run."

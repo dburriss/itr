@@ -1,9 +1,11 @@
 module Itr.Tests.Communication.BacklogDomainTests
 
 open System
+open System.IO
 open Xunit
 open Itr.Domain
 open Itr.Features
+open Itr.Adapters.YamlAdapter
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -112,3 +114,102 @@ let ``invalid item type returns InvalidItemType with the value`` () =
     match Backlog.createBacklogItem productConfig input today with
     | Error(InvalidItemType value) -> Assert.Equal("invalid-type", value)
     | other -> failwithf "expected InvalidItemType, got: %A" other
+
+// ---------------------------------------------------------------------------
+// TaskState round-trip via TaskStoreAdapter (1.5)
+// ---------------------------------------------------------------------------
+
+let private writeTaskYamlWithState (coordRoot: string) (backlogId: string) (taskId: string) (state: string) =
+    let taskDir = Path.Combine(coordRoot, "BACKLOG", backlogId, "tasks", taskId)
+    Directory.CreateDirectory(taskDir) |> ignore
+    let yaml =
+        $"""id: {taskId}
+source:
+  backlog: {backlogId}
+repo: main-repo
+state: {state}
+created_at: 2026-01-01
+"""
+    File.WriteAllText(Path.Combine(taskDir, "task.yaml"), yaml)
+
+[<Fact>]
+let ``mapTaskState round-trip for planned`` () =
+    let root = Path.Combine(Path.GetTempPath(), $"itr-taskstate-planned-{Guid.NewGuid():N}")
+    Directory.CreateDirectory(root) |> ignore
+    try
+        writeTaskYamlWithState root "my-feature" "my-task" "planned"
+        let store = TaskStoreAdapter() :> ITaskStore
+        let backlogId =
+            match BacklogId.tryCreate "my-feature" with
+            | Ok id -> id
+            | Error e -> failwithf "%A" e
+        match store.ListTasks root backlogId with
+        | Error e -> failwithf "expected Ok, got %A" e
+        | Ok [ task ] -> Assert.Equal(TaskState.Planned, task.State)
+        | Ok tasks -> failwithf "expected 1 task, got %d" tasks.Length
+    finally
+        if Directory.Exists(root) then Directory.Delete(root, true)
+
+[<Fact>]
+let ``mapTaskState round-trip for approved`` () =
+    let root = Path.Combine(Path.GetTempPath(), $"itr-taskstate-approved-{Guid.NewGuid():N}")
+    Directory.CreateDirectory(root) |> ignore
+    try
+        writeTaskYamlWithState root "my-feature" "my-task" "approved"
+        let store = TaskStoreAdapter() :> ITaskStore
+        let backlogId =
+            match BacklogId.tryCreate "my-feature" with
+            | Ok id -> id
+            | Error e -> failwithf "%A" e
+        match store.ListTasks root backlogId with
+        | Error e -> failwithf "expected Ok, got %A" e
+        | Ok [ task ] -> Assert.Equal(TaskState.Approved, task.State)
+        | Ok tasks -> failwithf "expected 1 task, got %d" tasks.Length
+    finally
+        if Directory.Exists(root) then Directory.Delete(root, true)
+
+// ---------------------------------------------------------------------------
+// BacklogItemStatus.compute tests (2.4)
+// ---------------------------------------------------------------------------
+
+let private mkTask (state: TaskState) : ItrTask =
+    let backlogId = match BacklogId.tryCreate "test-item" with Ok id -> id | Error e -> failwithf "%A" e
+    { Id = TaskId.create "t"
+      SourceBacklog = backlogId
+      Repo = RepoId "main-repo"
+      State = state
+      CreatedAt = DateOnly(2026, 1, 1) }
+
+[<Fact>]
+let ``compute with no tasks yields Created`` () =
+    Assert.Equal(BacklogItemStatus.Created, BacklogItemStatus.compute [] false)
+
+[<Fact>]
+let ``compute with all Planning tasks yields Planning`` () =
+    let tasks = [ mkTask TaskState.Planning; mkTask TaskState.Planning ]
+    Assert.Equal(BacklogItemStatus.Planning, BacklogItemStatus.compute tasks false)
+
+[<Fact>]
+let ``compute with all Planned tasks yields Planned`` () =
+    let tasks = [ mkTask TaskState.Planned; mkTask TaskState.Planned ]
+    Assert.Equal(BacklogItemStatus.Planned, BacklogItemStatus.compute tasks false)
+
+[<Fact>]
+let ``compute with all Approved tasks yields Approved`` () =
+    let tasks = [ mkTask TaskState.Approved; mkTask TaskState.Approved ]
+    Assert.Equal(BacklogItemStatus.Approved, BacklogItemStatus.compute tasks false)
+
+[<Fact>]
+let ``compute with any InProgress task yields InProgress`` () =
+    let tasks = [ mkTask TaskState.Approved; mkTask TaskState.InProgress ]
+    Assert.Equal(BacklogItemStatus.InProgress, BacklogItemStatus.compute tasks false)
+
+[<Fact>]
+let ``compute with all Implemented or Validated tasks yields Completed`` () =
+    let tasks = [ mkTask TaskState.Implemented; mkTask TaskState.Validated ]
+    Assert.Equal(BacklogItemStatus.Completed, BacklogItemStatus.compute tasks false)
+
+[<Fact>]
+let ``compute with isArchived=true yields Archived regardless of tasks`` () =
+    let tasks = [ mkTask TaskState.Planning ]
+    Assert.Equal(BacklogItemStatus.Archived, BacklogItemStatus.compute tasks true)

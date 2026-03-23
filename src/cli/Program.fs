@@ -44,15 +44,32 @@ type AddArgs =
             | Depends_On _ -> "backlog item id this item depends on (can be repeated)"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
+type ListArgs =
+    | View of view: string
+    | Status of status: string
+    | Type of type_: string
+    | Output of output: string
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | View _ -> "filter by view id"
+            | Status _ -> "filter by status: created | planning | planned | approved | in-progress | completed | archived"
+            | Type _ -> "filter by item type: feature | bug | chore | spike"
+            | Output _ -> "output mode: table (default) | json"
+
+[<CliPrefix(CliPrefix.DoubleDash)>]
 type BacklogArgs =
     | [<CliPrefix(CliPrefix.None)>] Take of ParseResults<TakeArgs>
     | [<CliPrefix(CliPrefix.None)>] Add of ParseResults<AddArgs>
+    | [<CliPrefix(CliPrefix.None)>] List of ParseResults<ListArgs>
 
     interface IArgParserTemplate with
         member this.Usage =
             match this with
             | Take _ -> "take a backlog item and create task files"
             | Add _ -> "create a new backlog item"
+            | List _ -> "list backlog items"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
 type ProfilesAddArgs =
@@ -147,6 +164,7 @@ type AppDeps() =
     let productConfigAdapter = YamlAdapter.ProductConfigAdapter()
     let backlogStoreAdapter = YamlAdapter.BacklogStoreAdapter()
     let taskStoreAdapter = YamlAdapter.TaskStoreAdapter()
+    let viewStoreAdapter = YamlAdapter.ViewStoreAdapter()
 
     interface IEnvironment with
         member _.GetEnvVar name =
@@ -194,6 +212,16 @@ type AppDeps() =
 
         member _.WriteBacklogItem coordRoot item =
             (backlogStoreAdapter :> IBacklogStore).WriteBacklogItem coordRoot item
+
+        member _.ListBacklogItems coordRoot =
+            (backlogStoreAdapter :> IBacklogStore).ListBacklogItems coordRoot
+
+        member _.ListArchivedBacklogItems coordRoot =
+            (backlogStoreAdapter :> IBacklogStore).ListArchivedBacklogItems coordRoot
+
+    interface IViewStore with
+        member _.ListViews coordRoot =
+            (viewStoreAdapter :> IViewStore).ListViews coordRoot
 
     interface ITaskStore with
         member _.ListTasks coordRoot backlogId =
@@ -246,6 +274,106 @@ let private toProductConfig (def: ProductDefinition) : ProductConfig =
         def.Repos |> Map.toSeq |> Seq.map (fun (k, v) -> RepoId k, v) |> Map.ofSeq
 
     { Id = def.Id; Repos = repos }
+
+let private backlogItemStatusToString (status: BacklogItemStatus) : string =
+    match status with
+    | BacklogItemStatus.Created -> "created"
+    | BacklogItemStatus.Planning -> "planning"
+    | BacklogItemStatus.Planned -> "planned"
+    | BacklogItemStatus.Approved -> "approved"
+    | BacklogItemStatus.InProgress -> "in-progress"
+    | BacklogItemStatus.Completed -> "completed"
+    | BacklogItemStatus.Archived -> "archived"
+
+let private tryParseBacklogItemStatus (s: string) : BacklogItemStatus option =
+    match s with
+    | "created" -> Some BacklogItemStatus.Created
+    | "planning" -> Some BacklogItemStatus.Planning
+    | "planned" -> Some BacklogItemStatus.Planned
+    | "approved" -> Some BacklogItemStatus.Approved
+    | "in-progress" | "inprogress" -> Some BacklogItemStatus.InProgress
+    | "completed" -> Some BacklogItemStatus.Completed
+    | "archived" -> Some BacklogItemStatus.Archived
+    | _ -> None
+
+// ---------------------------------------------------------------------------
+// backlog list handler
+// ---------------------------------------------------------------------------
+
+let private handleBacklogList
+    (deps: AppDeps)
+    (resolved: ResolvedProduct)
+    (listArgs: ParseResults<ListArgs>)
+    : Result<unit, string> =
+    let coordRoot = resolved.CoordRoot.AbsolutePath
+    let backlogStore = deps :> IBacklogStore
+    let taskStore = deps :> ITaskStore
+    let viewStore = deps :> IViewStore
+
+    let viewFilter = listArgs.TryGetResult ListArgs.View
+    let outputJson = listArgs.TryGetResult ListArgs.Output |> Option.exists (fun v -> v = "json")
+
+    let statusFilter =
+        listArgs.TryGetResult ListArgs.Status
+        |> Option.bind tryParseBacklogItemStatus
+
+    let typeFilter =
+        listArgs.TryGetResult ListArgs.Type
+        |> Option.bind (fun t ->
+            match BacklogItemType.tryParse t with
+            | Ok bt -> Some bt
+            | Error _ -> None)
+
+    let filter: Backlog.BacklogListFilter =
+        { ViewId = viewFilter
+          Status = statusFilter
+          ItemType = typeFilter }
+
+    match Backlog.loadSnapshot backlogStore taskStore viewStore coordRoot with
+    | Error e -> Error(formatBacklogError e)
+    | Ok snapshot ->
+        let items = Backlog.listBacklogItems filter snapshot
+
+        if outputJson then
+            let jsonItems =
+                items
+                |> List.map (fun s ->
+                    let id = BacklogId.value s.Item.Id
+                    let itemType = BacklogItemType.toString s.Item.Type
+                    let priority = s.Item.Priority |> Option.defaultValue ""
+                    let status = backlogItemStatusToString s.Status
+                    let viewId = s.ViewId |> Option.defaultValue ""
+                    let createdAt = s.Item.CreatedAt.ToString("yyyy-MM-dd")
+                    sprintf """  { "id": "%s", "type": "%s", "priority": "%s", "status": "%s", "view": "%s", "taskCount": %d, "createdAt": "%s" }"""
+                        id itemType priority status viewId s.TaskCount createdAt)
+                |> String.concat ",\n"
+            printfn "["
+            if not (List.isEmpty items) then
+                printfn "%s" jsonItems
+            printfn "]"
+        else
+            let table = Table()
+            table.AddColumn("ID") |> ignore
+            table.AddColumn("Type") |> ignore
+            table.AddColumn("Priority") |> ignore
+            table.AddColumn("Status") |> ignore
+            table.AddColumn("View") |> ignore
+            table.AddColumn("Tasks") |> ignore
+            table.AddColumn("Created") |> ignore
+
+            items
+            |> List.iter (fun s ->
+                let id = BacklogId.value s.Item.Id
+                let itemType = BacklogItemType.toString s.Item.Type
+                let priority = s.Item.Priority |> Option.defaultValue "-"
+                let status = backlogItemStatusToString s.Status
+                let viewId = s.ViewId |> Option.defaultValue "-"
+                let createdAt = s.Item.CreatedAt.ToString("yyyy-MM-dd")
+                table.AddRow(id, itemType, priority, status, viewId, string s.TaskCount, createdAt) |> ignore)
+
+            AnsiConsole.Write(table)
+
+        Ok()
 
 // ---------------------------------------------------------------------------
 // backlog take handler
@@ -539,7 +667,40 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                 | Error msg -> Error msg
                                 | Ok resolved -> handleBacklogAdd deps resolved addArgs outputJson
 
-                | None -> Error "Specify a backlog subcommand (e.g. backlog take <id> or backlog add <id>)"
+                | None ->
+                    match backlogResults.TryGetResult BacklogArgs.List with
+                    | Some listArgs ->
+                        let portfolioResult =
+                            Portfolio.loadPortfolio (Some configPath)
+                            |> Effect.run deps
+                            |> Result.mapError (fun e -> $"%A{e}")
+                            |> Result.bind (fun portfolio ->
+                                Portfolio.resolveActiveProfile portfolio profile
+                                |> Effect.run deps
+                                |> Result.mapError (fun e -> $"%A{e}"))
+
+                        match portfolioResult with
+                        | Error msg -> Error msg
+                        | Ok activeProfile ->
+                            match activeProfile.Products with
+                            | [] -> Error "No products in active profile"
+                            | productRef :: _ ->
+                                let (ProductRoot root) = productRef.Root
+                                let productConfig = deps :> IProductConfig
+
+                                match productConfig.LoadProductConfig root with
+                                | Error e -> Error(formatPortfolioError e)
+                                | Ok definition ->
+                                    let portfolioProductResult =
+                                        Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                        |> Effect.run deps
+                                        |> Result.mapError (fun e -> $"%A{e}")
+
+                                    match portfolioProductResult with
+                                    | Error msg -> Error msg
+                                    | Ok resolved -> handleBacklogList deps resolved listArgs
+
+                    | None -> Error "Specify a backlog subcommand (e.g. backlog take <id> or backlog add <id> or backlog list)"
 
         | None ->
             match results.TryGetResult Profiles with

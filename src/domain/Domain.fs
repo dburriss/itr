@@ -144,6 +144,8 @@ type RepoId = RepoId of string
 
 type TaskState =
     | Planning
+    | Planned
+    | Approved
     | InProgress
     | Implemented
     | Validated
@@ -186,6 +188,56 @@ type BacklogError =
     | DuplicateBacklogId of BacklogId
     | InvalidItemType of value: string
     | MissingTitle
+
+/// Computed status of a backlog item derived from its tasks
+type BacklogItemStatus =
+    | Created
+    | Planning
+    | Planned
+    | Approved
+    | InProgress
+    | Completed
+    | Archived
+
+[<RequireQualifiedAccess>]
+module BacklogItemStatus =
+    /// Compute status from a list of tasks and whether the item is archived.
+    /// Priority order:
+    ///   Archived > Completed > InProgress > Approved > Planned > Planning > Created
+    let compute (tasks: ItrTask list) (isArchived: bool) : BacklogItemStatus =
+        if isArchived then Archived
+        elif tasks.IsEmpty then Created
+        else
+            let states = tasks |> List.map (fun t -> t.State)
+            let allDone =
+                states |> List.forall (fun s -> s = TaskState.Implemented || s = TaskState.Validated)
+            if allDone then Completed
+            else
+            let anyInProgress = states |> List.exists (fun s -> s = TaskState.InProgress)
+            if anyInProgress then InProgress
+            else
+            let allApprovedOrBeyond =
+                states |> List.forall (fun s ->
+                    s = TaskState.Approved || s = TaskState.Implemented || s = TaskState.Validated)
+            if allApprovedOrBeyond then Approved
+            else
+            let allPlannedOrBeyond =
+                states |> List.forall (fun s ->
+                    s = TaskState.Planned || s = TaskState.Approved ||
+                    s = TaskState.Implemented || s = TaskState.Validated)
+            if allPlannedOrBeyond then Planned
+            else Planning
+
+/// Summary of a backlog item including computed status
+type BacklogItemSummary =
+    { Item: BacklogItem
+      Status: BacklogItemStatus
+      ViewId: string option
+      TaskCount: int }
+
+/// Snapshot of all backlog items loaded for a given coordination root
+type BacklogSnapshot =
+    { Items: BacklogItemSummary list }
 
 [<RequireQualifiedAccess>]
 module BacklogItemType =
