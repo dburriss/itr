@@ -18,6 +18,14 @@ acceptance_criteria:
   - The list can be filtered by a specific view
   - Items not assigned to a view can still be listed
   - Output supports human-readable and structured modes
+  - Lists the number of tasks associated with each backlog item
+  - Allows filtering by item status (e.g., created, planning, planned, approved, in-progress, completed, archived)
+  - Filter by type of backlog item (e.g., feature, bug, chore)
+  - Defaults to showing only active items if no status filter is provided
+  - Shows the assigned view for each item if applicable
+  - Shows creation date and is ordered by creation date by default
+  - Shows priority
+  - Shows type of backlog item (e.g., feature, bug, chore)
 
 dependencies:
   - backlog-item-create
