@@ -50,6 +50,17 @@ description = "Run the product init command using dotnet run."
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- product register ./itr/"
 description = "Run the product register command using dotnet run."
 
+[tasks.backlog-add]
+description = "Run the backlog add command using dotnet run."
+usage = '''
+arg "<id>" help="ID of the backlog item to add."
+flag "--title <title>" help="Title of the backlog item to add."
+'''
+run = '''#!/usr/bin/env bash
+set -euo pipefail
+dotnet run --project src/cli/Itr.Cli.fsproj -- backlog add "${usage_id?}" --title "${usage_title?}" 
+'''
+
 [tasks.backlog-take]
 description = "Run the backlog take command using dotnet run."
 usage = '''
