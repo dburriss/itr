@@ -13,6 +13,21 @@ When the user runs `itr backlog take <backlog-id>`, the system SHALL read the na
 - **WHEN** `itr backlog take feature-x` is run and the backlog item lists two repos
 - **THEN** two task files are written, each with id `<repo-id>-feature-x`, under `<coordRoot>/BACKLOG/feature-x/tasks/<repo-id>-feature-x/task.yaml`
 
+### Requirement: Task state includes Planned and Approved
+The `TaskState` type SHALL include `Planned` (plan written, not yet approved) and `Approved` (plan approved, ready to start) in addition to the existing states. The `planning` state in task YAML SHALL map to `Planning`; `planned` SHALL map to `Planned`; `approved` SHALL map to `Approved`.
+
+#### Scenario: task.yaml with state planned deserialises to Planned
+- **WHEN** a `task.yaml` file contains `state: planned`
+- **THEN** the task's `State` field is `Planned`, not `Planning`
+
+#### Scenario: task.yaml with state approved deserialises to Approved
+- **WHEN** a `task.yaml` file contains `state: approved`
+- **THEN** the task's `State` field is `Approved`
+
+#### Scenario: Planned task serialises back to planned
+- **WHEN** a task with `State = Planned` is serialised
+- **THEN** the YAML contains `state: planned`
+
 ### Requirement: Task id override for single-repo items
 The system SHALL accept an optional `--task-id <id>` flag when taking a single-repo backlog item to override the derived task id.
 
