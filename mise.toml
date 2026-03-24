@@ -79,6 +79,10 @@ dotnet run --project src/cli/Itr.Cli.fsproj -- backlog take "${usage_item_id?}"
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog list"
 description = "Run the backlog list command using dotnet run."
 
+[tasks.backlog-info]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog info"
+description = "Run the backlog info command using dotnet run."
+
 [tasks.portfolio]
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- portfolio --profile work --output json"
 description = "Run the portfolio command using dotnet run."

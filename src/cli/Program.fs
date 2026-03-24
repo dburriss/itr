@@ -59,10 +59,22 @@ type ListArgs =
             | Output _ -> "output mode: table (default) | json"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
+type InfoArgs =
+    | [<MainCommand; Mandatory>] Backlog_Id of backlog_id: string
+    | Output of output: string
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Backlog_Id _ -> "backlog item id to inspect"
+            | Output _ -> "output mode: table (default) | json"
+
+[<CliPrefix(CliPrefix.DoubleDash)>]
 type BacklogArgs =
     | [<CliPrefix(CliPrefix.None)>] Take of ParseResults<TakeArgs>
     | [<CliPrefix(CliPrefix.None)>] Add of ParseResults<AddArgs>
     | [<CliPrefix(CliPrefix.None)>] List of ParseResults<ListArgs>
+    | [<CliPrefix(CliPrefix.None)>] Info of ParseResults<InfoArgs>
 
     interface IArgParserTemplate with
         member this.Usage =
@@ -70,6 +82,7 @@ type BacklogArgs =
             | Take _ -> "take a backlog item and create task files"
             | Add _ -> "create a new backlog item"
             | List _ -> "list backlog items"
+            | Info _ -> "show detailed information about a backlog item"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
 type ProfilesAddArgs =
@@ -204,6 +217,9 @@ type AppDeps() =
         member _.LoadBacklogItem coordRoot backlogId =
             (backlogStoreAdapter :> IBacklogStore).LoadBacklogItem coordRoot backlogId
 
+        member _.LoadArchivedBacklogItem coordRoot backlogId =
+            (backlogStoreAdapter :> IBacklogStore).LoadArchivedBacklogItem coordRoot backlogId
+
         member _.ArchiveBacklogItem coordRoot backlogId date =
             (backlogStoreAdapter :> IBacklogStore).ArchiveBacklogItem coordRoot backlogId date
 
@@ -226,6 +242,9 @@ type AppDeps() =
     interface ITaskStore with
         member _.ListTasks coordRoot backlogId =
             (taskStoreAdapter :> ITaskStore).ListTasks coordRoot backlogId
+
+        member _.ListArchivedTasks coordRoot backlogId =
+            (taskStoreAdapter :> ITaskStore).ListArchivedTasks coordRoot backlogId
 
         member _.WriteTask coordRoot task =
             (taskStoreAdapter :> ITaskStore).WriteTask coordRoot task
@@ -374,6 +393,133 @@ let private handleBacklogList
             AnsiConsole.Write(table)
 
         Ok()
+
+// ---------------------------------------------------------------------------
+// backlog info handler
+// ---------------------------------------------------------------------------
+
+let private handleBacklogInfo
+    (deps: AppDeps)
+    (resolved: ResolvedProduct)
+    (infoArgs: ParseResults<InfoArgs>)
+    : Result<unit, string> =
+    let coordRoot = resolved.CoordRoot.AbsolutePath
+    let rawBacklogId = infoArgs.GetResult InfoArgs.Backlog_Id
+    let outputJson = infoArgs.TryGetResult InfoArgs.Output |> Option.exists (fun v -> v = "json")
+
+    match BacklogId.tryCreate rawBacklogId with
+    | Error _ -> Error $"Invalid backlog id '{rawBacklogId}': must match [a-z0-9][a-z0-9-]*"
+    | Ok backlogId ->
+        let backlogStore = deps :> IBacklogStore
+        let taskStore = deps :> ITaskStore
+        let viewStore = deps :> IViewStore
+
+        match Backlog.getBacklogItemDetail backlogStore taskStore viewStore coordRoot backlogId with
+        | Error e -> Error(formatBacklogError e)
+        | Ok detail ->
+            let item = detail.Item
+            let id = BacklogId.value item.Id
+            let itemType = BacklogItemType.toString item.Type
+            let priority = item.Priority |> Option.defaultValue ""
+            let status = backlogItemStatusToString detail.Status
+            let viewId = detail.ViewId |> Option.defaultValue ""
+            let createdAt = item.CreatedAt.ToString("yyyy-MM-dd")
+            let summary = item.Summary |> Option.defaultValue ""
+            let ac = item.AcceptanceCriteria
+            let deps_ = item.Dependencies |> List.map BacklogId.value
+            let repos = item.Repos |> List.map RepoId.value
+
+            if outputJson then
+                let acJson =
+                    ac
+                    |> List.map (fun s -> sprintf "    \"%s\"" (s.Replace("\"", "\\\"")))
+                    |> String.concat ",\n"
+                let depsJson =
+                    deps_
+                    |> List.map (fun s -> sprintf "    \"%s\"" s)
+                    |> String.concat ",\n"
+                let reposJson =
+                    repos
+                    |> List.map (fun s -> sprintf "    \"%s\"" s)
+                    |> String.concat ",\n"
+                let tasksJson =
+                    detail.Tasks
+                    |> List.map (fun t ->
+                        let tid = TaskId.value t.Id
+                        let repo = RepoId.value t.Repo
+                        let state =
+                            match t.State with
+                            | TaskState.Planning -> "planning"
+                            | TaskState.Planned -> "planned"
+                            | TaskState.Approved -> "approved"
+                            | TaskState.InProgress -> "in-progress"
+                            | TaskState.Implemented -> "implemented"
+                            | TaskState.Validated -> "validated"
+                        sprintf "    { \"id\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\" }" tid repo state)
+                    |> String.concat ",\n"
+
+                printfn "{"
+                printfn "  \"id\": \"%s\"," id
+                printfn "  \"title\": \"%s\"," (item.Title.Replace("\"", "\\\""))
+                printfn "  \"type\": \"%s\"," itemType
+                printfn "  \"priority\": \"%s\"," priority
+                printfn "  \"status\": \"%s\"," status
+                printfn "  \"summary\": \"%s\"," (summary.Replace("\"", "\\\""))
+                printfn "  \"acceptanceCriteria\": ["
+                if not (List.isEmpty ac) then printfn "%s" acJson
+                printfn "  ],"
+                printfn "  \"dependencies\": ["
+                if not (List.isEmpty deps_) then printfn "%s" depsJson
+                printfn "  ],"
+                printfn "  \"repos\": ["
+                if not (List.isEmpty repos) then printfn "%s" reposJson
+                printfn "  ],"
+                printfn "  \"createdAt\": \"%s\"," createdAt
+                printfn "  \"tasks\": ["
+                if not (List.isEmpty detail.Tasks) then printfn "%s" tasksJson
+                printfn "  ]"
+                printfn "}"
+            else
+                // Detail table
+                let infoTable = Table()
+                infoTable.AddColumn("Field") |> ignore
+                infoTable.AddColumn("Value") |> ignore
+                infoTable.AddRow("id", id) |> ignore
+                infoTable.AddRow("title", item.Title) |> ignore
+                infoTable.AddRow("type", itemType) |> ignore
+                infoTable.AddRow("priority", priority) |> ignore
+                infoTable.AddRow("status", status) |> ignore
+                infoTable.AddRow("view", viewId) |> ignore
+                infoTable.AddRow("summary", summary) |> ignore
+                infoTable.AddRow("acceptance criteria", String.concat "\n" ac) |> ignore
+                infoTable.AddRow("dependencies", String.concat ", " deps_) |> ignore
+                infoTable.AddRow("repos", String.concat ", " repos) |> ignore
+                infoTable.AddRow("created", createdAt) |> ignore
+                AnsiConsole.Write(infoTable)
+
+                // Tasks table
+                let tasksTable = Table()
+                tasksTable.AddColumn("Task ID") |> ignore
+                tasksTable.AddColumn("Repo") |> ignore
+                tasksTable.AddColumn("State") |> ignore
+
+                detail.Tasks
+                |> List.iter (fun t ->
+                    let tid = TaskId.value t.Id
+                    let repo = RepoId.value t.Repo
+                    let state =
+                        match t.State with
+                        | TaskState.Planning -> "planning"
+                        | TaskState.Planned -> "planned"
+                        | TaskState.Approved -> "approved"
+                        | TaskState.InProgress -> "in-progress"
+                        | TaskState.Implemented -> "implemented"
+                        | TaskState.Validated -> "validated"
+                    tasksTable.AddRow(tid, repo, state) |> ignore)
+
+                AnsiConsole.Write(tasksTable)
+
+            Ok()
 
 // ---------------------------------------------------------------------------
 // backlog take handler
@@ -700,7 +846,40 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                     | Error msg -> Error msg
                                     | Ok resolved -> handleBacklogList deps resolved listArgs
 
-                    | None -> Error "Specify a backlog subcommand (e.g. backlog take <id> or backlog add <id> or backlog list)"
+                    | None ->
+                        match backlogResults.TryGetResult BacklogArgs.Info with
+                        | Some infoArgs ->
+                            let portfolioResult =
+                                Portfolio.loadPortfolio (Some configPath)
+                                |> Effect.run deps
+                                |> Result.mapError (fun e -> $"%A{e}")
+                                |> Result.bind (fun portfolio ->
+                                    Portfolio.resolveActiveProfile portfolio profile
+                                    |> Effect.run deps
+                                    |> Result.mapError (fun e -> $"%A{e}"))
+
+                            match portfolioResult with
+                            | Error msg -> Error msg
+                            | Ok activeProfile ->
+                                match activeProfile.Products with
+                                | [] -> Error "No products in active profile"
+                                | productRef :: _ ->
+                                    let (ProductRoot root) = productRef.Root
+                                    let productConfig = deps :> IProductConfig
+
+                                    match productConfig.LoadProductConfig root with
+                                    | Error e -> Error(formatPortfolioError e)
+                                    | Ok definition ->
+                                        let portfolioProductResult =
+                                            Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                            |> Effect.run deps
+                                            |> Result.mapError (fun e -> $"%A{e}")
+
+                                        match portfolioProductResult with
+                                        | Error msg -> Error msg
+                                        | Ok resolved -> handleBacklogInfo deps resolved infoArgs
+
+                        | None -> Error "Specify a backlog subcommand (e.g. backlog take <id> or backlog add <id> or backlog list or backlog info <id>)"
 
         | None ->
             match results.TryGetResult Profiles with

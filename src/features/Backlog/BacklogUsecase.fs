@@ -219,3 +219,64 @@ let listBacklogItems (filter: BacklogListFilter) (snapshot: BacklogSnapshot) : B
             | Some itemType -> s.Item.Type = itemType
 
         viewMatch && statusMatch && typeMatch)
+
+// ---------------------------------------------------------------------------
+// getBacklogItemDetail
+// ---------------------------------------------------------------------------
+
+/// Load a single backlog item with full detail: tasks, computed status, and view membership.
+/// Checks active items first; falls back to archived items if not found.
+let getBacklogItemDetail
+    (backlogStore: IBacklogStore)
+    (taskStore: ITaskStore)
+    (viewStore: IViewStore)
+    (coordRoot: string)
+    (backlogId: BacklogId)
+    : Result<BacklogItemDetail, BacklogError> =
+
+    // 1. Try loading the active item; on not-found, check archive
+    let itemResult =
+        match backlogStore.LoadBacklogItem coordRoot backlogId with
+        | Ok item -> Ok(item, false)
+        | Error(BacklogItemNotFound _) ->
+            match backlogStore.LoadArchivedBacklogItem coordRoot backlogId with
+            | Error e -> Error e
+            | Ok None -> Error(BacklogItemNotFound backlogId)
+            | Ok(Some item) -> Ok(item, true)
+        | Error e -> Error e
+
+    match itemResult with
+    | Error e -> Error e
+    | Ok(item, isArchived) ->
+
+    // 2. Load tasks — archived items have tasks under the archive folder
+    let tasksResult =
+        if isArchived then
+            taskStore.ListArchivedTasks coordRoot backlogId
+        else
+            taskStore.ListTasks coordRoot backlogId
+
+    match tasksResult with
+    | Error e -> Error e
+    | Ok tasks ->
+
+    // 3. Load views to find view membership
+    match viewStore.ListViews coordRoot with
+    | Error e -> Error e
+    | Ok views ->
+
+    // 4. Find the first view that contains this item
+    let idStr = BacklogId.value backlogId
+    let viewId =
+        views
+        |> List.tryPick (fun view ->
+            if List.contains idStr view.Items then Some view.Id else None)
+
+    // 5. Compute status (passes isArchived so archived items always show "archived")
+    let status = BacklogItemStatus.compute tasks isArchived
+
+    Ok
+        { Item = item
+          Status = status
+          ViewId = viewId
+          Tasks = tasks }

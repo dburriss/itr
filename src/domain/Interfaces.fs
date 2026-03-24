@@ -56,6 +56,9 @@ type IProductConfig =
 type IBacklogStore =
     /// Load a backlog item from <coordRoot>/BACKLOG/<backlog-id>/item.yaml
     abstract LoadBacklogItem: coordRoot: string -> backlogId: BacklogId -> Result<BacklogItem, BacklogError>
+    /// Load an archived backlog item by scanning <coordRoot>/BACKLOG/_archive/ for a folder whose item.yaml has a matching id.
+    /// Returns Ok(Some item) if found, Ok None if not present, Error on parse failure.
+    abstract LoadArchivedBacklogItem: coordRoot: string -> backlogId: BacklogId -> Result<BacklogItem option, BacklogError>
     /// Archive a backlog item by moving <coordRoot>/BACKLOG/<backlog-id>/ to <coordRoot>/BACKLOG/_archive/<date>-<backlog-id>/
     abstract ArchiveBacklogItem: coordRoot: string -> backlogId: BacklogId -> date: string -> Result<unit, BacklogError>
     /// Check whether a backlog item already exists at <coordRoot>/BACKLOG/<backlog-id>/item.yaml
@@ -82,6 +85,8 @@ type IViewStore =
 type ITaskStore =
     /// List all tasks for a given backlog id from <coordRoot>/BACKLOG/<backlog-id>/tasks/
     abstract ListTasks: coordRoot: string -> backlogId: BacklogId -> Result<ItrTask list, BacklogError>
+    /// List all tasks for an archived backlog item by scanning <coordRoot>/BACKLOG/_archive/ for the matching folder
+    abstract ListArchivedTasks: coordRoot: string -> backlogId: BacklogId -> Result<ItrTask list, BacklogError>
     /// Write a task file to <coordRoot>/BACKLOG/<backlog-id>/tasks/<task-id>/task.yaml
     abstract WriteTask: coordRoot: string -> task: ItrTask -> Result<unit, BacklogError>
 

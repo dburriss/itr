@@ -235,6 +235,13 @@ type BacklogItemSummary =
       ViewId: string option
       TaskCount: int }
 
+/// Detailed view of a single backlog item including its tasks
+type BacklogItemDetail =
+    { Item: BacklogItem
+      Status: BacklogItemStatus
+      ViewId: string option
+      Tasks: ItrTask list }
+
 /// Snapshot of all backlog items loaded for a given coordination root
 type BacklogSnapshot =
     { Items: BacklogItemSummary list }
