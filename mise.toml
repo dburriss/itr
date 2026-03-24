@@ -1,6 +1,10 @@
 [tools]
 dotnet = "latest"
 "npm:@fission-ai/openspec" = "latest"
+television = "latest"
+
+[env]
+TELEVISION_CONFIG = "./.tv/"
 
 # Define tasks for building, testing, formatting, and running the project.
 [tasks.build]
