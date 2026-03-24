@@ -189,6 +189,7 @@ let private mapTaskState (s: string) : TaskState =
     | "in_progress" -> TaskState.InProgress
     | "implemented" -> TaskState.Implemented
     | "validated" -> TaskState.Validated
+    | "archived" -> TaskState.Archived
     | _ -> TaskState.Planning
 
 let private taskStateToString (state: TaskState) : string =
@@ -199,6 +200,7 @@ let private taskStateToString (state: TaskState) : string =
     | TaskState.InProgress -> "in_progress"
     | TaskState.Implemented -> "implemented"
     | TaskState.Validated -> "validated"
+    | TaskState.Archived -> "archived"
 
 let private mapTaskDto (dto: ItrTaskDto) : Result<ItrTask, BacklogError> =
     match BacklogId.tryCreate dto.Source.Backlog with
@@ -434,6 +436,16 @@ type BacklogStoreAdapter() =
                 try
                     Directory.CreateDirectory(archiveDir) |> ignore
                     Directory.Move(sourcePath, destPath)
+                    // Rewrite all task.yaml files under the archived folder to state: archived
+                    let tasksDir = Path.Combine(destPath, "tasks")
+                    if Directory.Exists(tasksDir) then
+                        for taskFile in Directory.GetFiles(tasksDir, "task.yaml", SearchOption.AllDirectories) do
+                            let content = File.ReadAllText(taskFile)
+                            match parseYaml<ItrTaskDto> content with
+                            | Ok dto ->
+                                let updated = { dto with State = "archived" }
+                                File.WriteAllText(taskFile, serializeYaml updated)
+                            | Error _ -> () // leave as-is if unparseable
                     Ok()
                 with ex ->
                     Error(ProductConfigParseError(sourcePath, ex.Message))

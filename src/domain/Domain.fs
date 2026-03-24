@@ -149,6 +149,7 @@ type TaskState =
     | InProgress
     | Implemented
     | Validated
+    | Archived
 
 type BacklogItemType =
     | Feature
@@ -201,16 +202,20 @@ type BacklogItemStatus =
 
 [<RequireQualifiedAccess>]
 module BacklogItemStatus =
-    /// Compute status from a list of tasks and whether the item is archived.
+    /// Compute status from a list of tasks.
     /// Priority order:
     ///   Archived > Completed > InProgress > Approved > Planned > Planning > Created
-    let compute (tasks: ItrTask list) (isArchived: bool) : BacklogItemStatus =
-        if isArchived then Archived
-        elif tasks.IsEmpty then Created
+    let compute (tasks: ItrTask list) : BacklogItemStatus =
+        if tasks.IsEmpty then Created
         else
             let states = tasks |> List.map (fun t -> t.State)
+            let allArchived =
+                states |> List.forall (fun s -> s = TaskState.Archived)
+            if allArchived then Archived
+            else
             let allDone =
-                states |> List.forall (fun s -> s = TaskState.Implemented || s = TaskState.Validated)
+                states |> List.forall (fun s ->
+                    s = TaskState.Implemented || s = TaskState.Validated || s = TaskState.Archived)
             if allDone then Completed
             else
             let anyInProgress = states |> List.exists (fun s -> s = TaskState.InProgress)
@@ -218,13 +223,13 @@ module BacklogItemStatus =
             else
             let allApprovedOrBeyond =
                 states |> List.forall (fun s ->
-                    s = TaskState.Approved || s = TaskState.Implemented || s = TaskState.Validated)
+                    s = TaskState.Approved || s = TaskState.Implemented || s = TaskState.Validated || s = TaskState.Archived)
             if allApprovedOrBeyond then Approved
             else
             let allPlannedOrBeyond =
                 states |> List.forall (fun s ->
                     s = TaskState.Planned || s = TaskState.Approved ||
-                    s = TaskState.Implemented || s = TaskState.Validated)
+                    s = TaskState.Implemented || s = TaskState.Validated || s = TaskState.Archived)
             if allPlannedOrBeyond then Planned
             else Planning
 

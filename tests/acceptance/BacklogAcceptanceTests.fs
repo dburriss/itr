@@ -372,6 +372,18 @@ type: feature
 created_at: 2026-01-01
 """
     File.WriteAllText(Path.Combine(archiveDir, "item.yaml"), yaml)
+    // Write a sentinel archived task so BacklogItemStatus.compute can infer Archived status
+    let taskDir = Path.Combine(archiveDir, "tasks", id)
+    Directory.CreateDirectory(taskDir) |> ignore
+    let taskYaml =
+        $"""id: {id}
+source:
+  backlog: {id}
+repo: main-repo
+state: archived
+created_at: 2026-01-01
+"""
+    File.WriteAllText(Path.Combine(taskDir, "task.yaml"), taskYaml)
 
 [<Fact>]
 let ``8.7 status archived returns only archived items`` () =

@@ -455,6 +455,7 @@ let private handleBacklogInfo
                             | TaskState.InProgress -> "in-progress"
                             | TaskState.Implemented -> "implemented"
                             | TaskState.Validated -> "validated"
+                            | TaskState.Archived -> "archived"
                         sprintf "    { \"id\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\" }" tid repo state)
                     |> String.concat ",\n"
 
@@ -515,6 +516,7 @@ let private handleBacklogInfo
                         | TaskState.InProgress -> "in-progress"
                         | TaskState.Implemented -> "implemented"
                         | TaskState.Validated -> "validated"
+                        | TaskState.Archived -> "archived"
                     tasksTable.AddRow(tid, repo, state) |> ignore)
 
                 AnsiConsole.Write(tasksTable)

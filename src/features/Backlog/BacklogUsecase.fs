@@ -143,7 +143,7 @@ let loadSnapshot
             ) acc
         ) Map.empty
 
-    // 5. Build summaries for active items (isArchived = false)
+    // 5. Build summaries for active items
     let activeSummaryResults =
         activeItems
         |> List.map (fun item ->
@@ -151,29 +151,27 @@ let loadSnapshot
             match taskStore.ListTasks coordRoot item.Id with
             | Error e -> Error e
             | Ok tasks ->
-                let status = BacklogItemStatus.compute tasks false
+                let status = BacklogItemStatus.compute tasks
                 Ok
                     { Item = item
                       Status = status
                       ViewId = Map.tryFind id itemViewMap
                       TaskCount = tasks.Length })
 
-    // 6. Build summaries for archived items (isArchived = true)
-    // Tasks for archived items live under BACKLOG/_archive/<date-id>/tasks/
-    // Use the original item id to look up tasks via the archive path directly.
-    // Since ITaskStore.ListTasks constructs BACKLOG/<backlogId>/tasks/, we pass
-    // coordRoot unchanged — archived items' tasks are not reachable this way.
-    // Instead we just pass isArchived=true so status = Archived regardless of tasks.
+    // 6. Build summaries for archived items
     let archivedSummaryResults =
         archivedItems
         |> List.map (fun item ->
             let id = BacklogId.value item.Id
-            let status = BacklogItemStatus.compute [] true
-            Ok
-                { Item = item
-                  Status = status
-                  ViewId = Map.tryFind id itemViewMap
-                  TaskCount = 0 })
+            match taskStore.ListArchivedTasks coordRoot item.Id with
+            | Error e -> Error e
+            | Ok tasks ->
+                let status = BacklogItemStatus.compute tasks
+                Ok
+                    { Item = item
+                      Status = status
+                      ViewId = Map.tryFind id itemViewMap
+                      TaskCount = tasks.Length })
 
     let allResults = activeSummaryResults @ archivedSummaryResults
 
@@ -272,8 +270,8 @@ let getBacklogItemDetail
         |> List.tryPick (fun view ->
             if List.contains idStr view.Items then Some view.Id else None)
 
-    // 5. Compute status (passes isArchived so archived items always show "archived")
-    let status = BacklogItemStatus.compute tasks isArchived
+    // 5. Compute status from task states (TaskState.Archived tasks yield BacklogItemStatus.Archived)
+    let status = BacklogItemStatus.compute tasks
 
     Ok
         { Item = item

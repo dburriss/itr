@@ -168,6 +168,24 @@ let ``mapTaskState round-trip for approved`` () =
     finally
         if Directory.Exists(root) then Directory.Delete(root, true)
 
+[<Fact>]
+let ``mapTaskState round-trip for archived`` () =
+    let root = Path.Combine(Path.GetTempPath(), $"itr-taskstate-archived-{Guid.NewGuid():N}")
+    Directory.CreateDirectory(root) |> ignore
+    try
+        writeTaskYamlWithState root "my-feature" "my-task" "archived"
+        let store = TaskStoreAdapter() :> ITaskStore
+        let backlogId =
+            match BacklogId.tryCreate "my-feature" with
+            | Ok id -> id
+            | Error e -> failwithf "%A" e
+        match store.ListTasks root backlogId with
+        | Error e -> failwithf "expected Ok, got %A" e
+        | Ok [ task ] -> Assert.Equal(TaskState.Archived, task.State)
+        | Ok tasks -> failwithf "expected 1 task, got %d" tasks.Length
+    finally
+        if Directory.Exists(root) then Directory.Delete(root, true)
+
 // ---------------------------------------------------------------------------
 // BacklogItemStatus.compute tests (2.4)
 // ---------------------------------------------------------------------------
@@ -182,37 +200,42 @@ let private mkTask (state: TaskState) : ItrTask =
 
 [<Fact>]
 let ``compute with no tasks yields Created`` () =
-    Assert.Equal(BacklogItemStatus.Created, BacklogItemStatus.compute [] false)
+    Assert.Equal(BacklogItemStatus.Created, BacklogItemStatus.compute [])
 
 [<Fact>]
 let ``compute with all Planning tasks yields Planning`` () =
     let tasks = [ mkTask TaskState.Planning; mkTask TaskState.Planning ]
-    Assert.Equal(BacklogItemStatus.Planning, BacklogItemStatus.compute tasks false)
+    Assert.Equal(BacklogItemStatus.Planning, BacklogItemStatus.compute tasks)
 
 [<Fact>]
 let ``compute with all Planned tasks yields Planned`` () =
     let tasks = [ mkTask TaskState.Planned; mkTask TaskState.Planned ]
-    Assert.Equal(BacklogItemStatus.Planned, BacklogItemStatus.compute tasks false)
+    Assert.Equal(BacklogItemStatus.Planned, BacklogItemStatus.compute tasks)
 
 [<Fact>]
 let ``compute with all Approved tasks yields Approved`` () =
     let tasks = [ mkTask TaskState.Approved; mkTask TaskState.Approved ]
-    Assert.Equal(BacklogItemStatus.Approved, BacklogItemStatus.compute tasks false)
+    Assert.Equal(BacklogItemStatus.Approved, BacklogItemStatus.compute tasks)
 
 [<Fact>]
 let ``compute with any InProgress task yields InProgress`` () =
     let tasks = [ mkTask TaskState.Approved; mkTask TaskState.InProgress ]
-    Assert.Equal(BacklogItemStatus.InProgress, BacklogItemStatus.compute tasks false)
+    Assert.Equal(BacklogItemStatus.InProgress, BacklogItemStatus.compute tasks)
 
 [<Fact>]
 let ``compute with all Implemented or Validated tasks yields Completed`` () =
     let tasks = [ mkTask TaskState.Implemented; mkTask TaskState.Validated ]
-    Assert.Equal(BacklogItemStatus.Completed, BacklogItemStatus.compute tasks false)
+    Assert.Equal(BacklogItemStatus.Completed, BacklogItemStatus.compute tasks)
 
 [<Fact>]
-let ``compute with isArchived=true yields Archived regardless of tasks`` () =
-    let tasks = [ mkTask TaskState.Planning ]
-    Assert.Equal(BacklogItemStatus.Archived, BacklogItemStatus.compute tasks true)
+let ``compute with all Archived tasks yields Archived`` () =
+    let tasks = [ mkTask TaskState.Archived; mkTask TaskState.Archived ]
+    Assert.Equal(BacklogItemStatus.Archived, BacklogItemStatus.compute tasks)
+
+[<Fact>]
+let ``compute with mixed Archived and Validated tasks yields Completed`` () =
+    let tasks = [ mkTask TaskState.Archived; mkTask TaskState.Validated ]
+    Assert.Equal(BacklogItemStatus.Completed, BacklogItemStatus.compute tasks)
 
 // ---------------------------------------------------------------------------
 // getBacklogItemDetail tests (4.1 + 4.2)
@@ -383,6 +406,7 @@ let ``getBacklogItemDetail on archived item returns archived status`` () =
     Directory.CreateDirectory(root) |> ignore
     try
         writeArchivedItemYaml root "my-feature" "2026-03-01"
+        writeArchivedTaskYaml root "my-feature" "2026-03-01" "task-a" "archived"
         let backlogStore = BacklogStoreAdapter() :> IBacklogStore
         let taskStore = TaskStoreAdapter() :> ITaskStore
         let viewStore = StubViewStore() :> IViewStore
@@ -403,8 +427,8 @@ let ``getBacklogItemDetail on archived item with tasks returns all tasks`` () =
     Directory.CreateDirectory(root) |> ignore
     try
         writeArchivedItemYaml root "my-feature" "2026-03-01"
-        writeArchivedTaskYaml root "my-feature" "2026-03-01" "task-a" "approved"
-        writeArchivedTaskYaml root "my-feature" "2026-03-01" "task-b" "validated"
+        writeArchivedTaskYaml root "my-feature" "2026-03-01" "task-a" "archived"
+        writeArchivedTaskYaml root "my-feature" "2026-03-01" "task-b" "archived"
         let backlogStore = BacklogStoreAdapter() :> IBacklogStore
         let taskStore = TaskStoreAdapter() :> ITaskStore
         let viewStore = StubViewStore() :> IViewStore
