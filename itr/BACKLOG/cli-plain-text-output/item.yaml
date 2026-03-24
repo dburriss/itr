@@ -1,0 +1,16 @@
+id: cli-plain-text-output
+title: Add plain text output mode to CLI commands
+repos:
+- itr
+type: feature
+priority: medium
+summary: |-
+  Add --output text support to commands that currently have --output table|json. Text mode outputs tab-separated fields, one item per line, suitable for piping and scripting. Decide per-command scope during task planning.
+acceptance_criteria: |-
+  - `--output text` is accepted as a valid value alongside `table` and `json`
+  - Text output is tab-separated fields, one item per line
+  - Text output is suitable for piping to tools like awk, cut, grep
+  - No decorative borders or alignment padding in text mode
+  - Scope of which commands get text mode decided during task planning
+dependencies: 
+created_at: 2026-03-24
