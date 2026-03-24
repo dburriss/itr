@@ -9,8 +9,8 @@ items:
   - product-register
   - backlog-item-create
   - backlog-list
+  - backlog-info
   - backlog-take
-  - task-split
   - task-list
   - task-info
   - task-plan
