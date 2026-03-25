@@ -13,6 +13,7 @@ items:
   - backlog-take
   - task-list
   - task-info
+  - cli-plain-text-output
   - task-plan
   - task-plan-approval
   - task-start
