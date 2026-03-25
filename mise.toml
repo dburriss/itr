@@ -83,6 +83,10 @@ description = "Run the backlog list command using dotnet run."
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog info"
 description = "Run the backlog info command using dotnet run."
 
+[tasks.task-list]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- task list"
+description = "Run the task list command using dotnet run."
+
 [tasks.portfolio]
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- portfolio --profile work --output json"
 description = "Run the portfolio command using dotnet run."

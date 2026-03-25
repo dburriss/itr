@@ -149,12 +149,37 @@ type ProductArgs =
             | Init _ -> "scaffold a new product"
             | Register _ -> "register an existing product root in the portfolio"
 
+[<CliPrefix(CliPrefix.DoubleDash)>]
+type TaskListArgs =
+    | [<AltCommandLine("--backlog")>] Backlog_Id of backlog_id: string
+    | [<AltCommandLine("--repo")>] Repo_Id of repo_id: string
+    | State of state: string
+    | [<AltCommandLine("-o")>] Output of output: string
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Backlog_Id _ -> "filter by backlog item id"
+            | Repo_Id _ -> "filter by repo id"
+            | State _ -> "filter by task state (planning | planned | approved | in_progress | implemented | validated | archived)"
+            | Output _ -> "output mode: table (default) | json"
+
+[<CliPrefix(CliPrefix.DoubleDash)>]
+type TaskArgs =
+    | [<CliPrefix(CliPrefix.None)>] List of ParseResults<TaskListArgs>
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | List _ -> "list all tasks across a product"
+
 type CliArgs =
     | [<AltCommandLine("-p")>] Profile of string
     | Output of string
     | [<CliPrefix(CliPrefix.None)>] Backlog of ParseResults<BacklogArgs>
     | [<CliPrefix(CliPrefix.None)>] Profiles of ParseResults<ProfilesArgs>
     | [<CliPrefix(CliPrefix.None)>] Product of ParseResults<ProductArgs>
+    | [<CliPrefix(CliPrefix.None)>] Task of ParseResults<TaskArgs>
 
     interface IArgParserTemplate with
         member this.Usage =
@@ -164,6 +189,7 @@ type CliArgs =
             | Backlog _ -> "backlog commands"
             | Profiles _ -> "profile management commands"
             | Product _ -> "product management commands"
+            | Task _ -> "task commands"
 
 // ---------------------------------------------------------------------------
 // Composition root
@@ -252,6 +278,9 @@ type AppDeps() =
         member _.ArchiveTask coordRoot backlogId taskId date =
             (taskStoreAdapter :> ITaskStore).ArchiveTask coordRoot backlogId taskId date
 
+        member _.ListAllTasks coordRoot =
+            (taskStoreAdapter :> ITaskStore).ListAllTasks coordRoot
+
 // ---------------------------------------------------------------------------
 // Error formatting
 // ---------------------------------------------------------------------------
@@ -315,9 +344,115 @@ let private tryParseBacklogItemStatus (s: string) : BacklogItemStatus option =
     | "archived" -> Some BacklogItemStatus.Archived
     | _ -> None
 
+let private tryParseTaskState (s: string) : Result<TaskState, string> =
+    match s with
+    | "planning" -> Ok TaskState.Planning
+    | "planned" -> Ok TaskState.Planned
+    | "approved" -> Ok TaskState.Approved
+    | "in_progress" | "in-progress" -> Ok TaskState.InProgress
+    | "implemented" -> Ok TaskState.Implemented
+    | "validated" -> Ok TaskState.Validated
+    | "archived" -> Ok TaskState.Archived
+    | other -> Error $"Unknown task state '{other}': must be planning | planned | approved | in_progress | implemented | validated | archived"
+
+let private taskStateToDisplayString (state: TaskState) : string =
+    match state with
+    | TaskState.Planning -> "planning"
+    | TaskState.Planned -> "planned"
+    | TaskState.Approved -> "approved"
+    | TaskState.InProgress -> "in_progress"
+    | TaskState.Implemented -> "implemented"
+    | TaskState.Validated -> "validated"
+    | TaskState.Archived -> "archived"
+
 // ---------------------------------------------------------------------------
-// backlog list handler
+// task list handler
 // ---------------------------------------------------------------------------
+
+let private handleTaskList
+    (deps: AppDeps)
+    (resolved: ResolvedProduct)
+    (listArgs: ParseResults<TaskListArgs>)
+    : Result<unit, string> =
+    let coordRoot = resolved.CoordRoot.AbsolutePath
+    let taskStore = deps :> ITaskStore
+
+    let outputJson = listArgs.TryGetResult TaskListArgs.Output |> Option.exists (fun v -> v = "json")
+
+    // Parse optional filters
+    let backlogIdResult =
+        listArgs.TryGetResult TaskListArgs.Backlog_Id
+        |> Option.map (fun s ->
+            match BacklogId.tryCreate s with
+            | Ok bid -> Ok(Some bid)
+            | Error _ -> Error $"Invalid backlog id '{s}': must match [a-z0-9][a-z0-9-]*")
+        |> Option.defaultValue (Ok None)
+
+    let repoId =
+        listArgs.TryGetResult TaskListArgs.Repo_Id
+        |> Option.map RepoId
+
+    let stateResult =
+        listArgs.TryGetResult TaskListArgs.State
+        |> Option.map (fun s ->
+            match tryParseTaskState s with
+            | Ok st -> Ok(Some st)
+            | Error msg -> Error msg)
+        |> Option.defaultValue (Ok None)
+
+    match backlogIdResult, stateResult with
+    | Error msg, _ -> Error msg
+    | _, Error msg -> Error msg
+    | Ok backlogIdFilter, Ok stateFilter ->
+        match taskStore.ListAllTasks coordRoot with
+        | Error e -> Error(formatBacklogError e)
+        | Ok allTasks ->
+            // Apply implicit exclusion of archived tasks when no --state filter provided
+            let tasksToProcess =
+                match stateFilter with
+                | None -> allTasks |> List.filter (fun t -> t.State <> TaskState.Archived)
+                | Some _ -> allTasks
+
+            let summaries = Task.listTasks tasksToProcess
+            let filtered = Task.filterTasks backlogIdFilter repoId stateFilter summaries
+
+            if filtered.IsEmpty then
+                printfn "No tasks found."
+            elif outputJson then
+                let items =
+                    filtered
+                    |> List.map (fun s ->
+                        let id = TaskId.value s.Task.Id
+                        let backlog = BacklogId.value s.Task.SourceBacklog
+                        let repo = RepoId.value s.Task.Repo
+                        let state = taskStateToDisplayString s.Task.State
+                        let planApproved = if s.PlanApproved then "true" else "false"
+                        sprintf "    { \"id\": \"%s\", \"backlog\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\", \"planApproved\": %s }"
+                            id backlog repo state planApproved)
+                    |> String.concat ",\n"
+                printfn "{ \"tasks\": ["
+                printfn "%s" items
+                printfn "] }"
+            else
+                let table = Table()
+                table.AddColumn("Id") |> ignore
+                table.AddColumn("Backlog") |> ignore
+                table.AddColumn("Repo") |> ignore
+                table.AddColumn("State") |> ignore
+                table.AddColumn("Plan Approved") |> ignore
+
+                filtered
+                |> List.iter (fun s ->
+                    let id = TaskId.value s.Task.Id
+                    let backlog = BacklogId.value s.Task.SourceBacklog
+                    let repo = RepoId.value s.Task.Repo
+                    let state = taskStateToDisplayString s.Task.State
+                    let planApproved = if s.PlanApproved then "yes" else "no"
+                    table.AddRow(id, backlog, repo, state, planApproved) |> ignore)
+
+                AnsiConsole.Write(table)
+
+            Ok()
 
 let private handleBacklogList
     (deps: AppDeps)
@@ -991,13 +1126,50 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                         | None -> Error "Specify a product subcommand (e.g. product init <path> or product register <path>)"
 
                 | None ->
-                // Legacy behaviour: just load portfolio
-                let loadResult = Portfolio.loadPortfolio (Some configPath) |> Effect.run deps
+                    match results.TryGetResult Task with
+                    | Some taskResults ->
+                        match taskResults.TryGetResult TaskArgs.List with
+                        | Some listArgs ->
+                            let portfolioResult =
+                                Portfolio.loadPortfolio (Some configPath)
+                                |> Effect.run deps
+                                |> Result.mapError (fun e -> $"%A{e}")
+                                |> Result.bind (fun portfolio ->
+                                    Portfolio.resolveActiveProfile portfolio profile
+                                    |> Effect.run deps
+                                    |> Result.mapError (fun e -> $"%A{e}"))
 
-                loadResult
-                |> Result.bind (fun portfolio -> Portfolio.resolveActiveProfile portfolio profile |> Effect.run deps)
-                |> Result.map (fun _ -> printfn "itr cli")
-                |> Result.mapError (fun e -> $"%A{e}")
+                            match portfolioResult with
+                            | Error msg -> Error msg
+                            | Ok activeProfile ->
+                                match activeProfile.Products with
+                                | [] -> Error "No products in active profile"
+                                | productRef :: _ ->
+                                    let (ProductRoot root) = productRef.Root
+                                    let productConfig = deps :> IProductConfig
+
+                                    match productConfig.LoadProductConfig root with
+                                    | Error e -> Error(formatPortfolioError e)
+                                    | Ok definition ->
+                                        let portfolioProductResult =
+                                            Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                            |> Effect.run deps
+                                            |> Result.mapError (fun e -> $"%A{e}")
+
+                                        match portfolioProductResult with
+                                        | Error msg -> Error msg
+                                        | Ok resolved -> handleTaskList deps resolved listArgs
+
+                        | None -> Error "Specify a task subcommand (e.g. task list)"
+
+                    | None ->
+                    // Legacy behaviour: just load portfolio
+                    let loadResult = Portfolio.loadPortfolio (Some configPath) |> Effect.run deps
+
+                    loadResult
+                    |> Result.bind (fun portfolio -> Portfolio.resolveActiveProfile portfolio profile |> Effect.run deps)
+                    |> Result.map (fun _ -> printfn "itr cli")
+                    |> Result.mapError (fun e -> $"%A{e}")
 
 [<EntryPoint>]
 let main argv =

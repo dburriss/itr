@@ -737,6 +737,73 @@ type TaskStoreAdapter() =
                 with ex ->
                     Error(ProductConfigParseError(sourcePath, ex.Message))
 
+        member _.ListAllTasks (coordRoot: string) =
+            let backlogDir = Path.Combine(coordRoot, "BACKLOG")
+            let archiveDir = Path.Combine(coordRoot, "BACKLOG", "_archive")
+
+            /// Read all task.yaml files from tasks/ subdirs under a given backlog directory
+            let readTasksFromBacklogDir (dir: string) : Result<ItrTask list, BacklogError> =
+                let tasksDir = Path.Combine(dir, "tasks")
+                if not (Directory.Exists(tasksDir)) then
+                    Ok []
+                else
+                    try
+                        let subdirs = Directory.GetDirectories(tasksDir)
+                        let results =
+                            subdirs
+                            |> Array.toList
+                            |> List.choose (fun subdir ->
+                                let taskFile = Path.Combine(subdir, "task.yaml")
+                                if File.Exists(taskFile) then Some taskFile else None)
+                            |> List.map (fun path ->
+                                let content = File.ReadAllText(path)
+                                match parseYaml<ItrTaskDto> content with
+                                | Error msg -> Error(ProductConfigParseError(path, msg))
+                                | Ok dto -> mapTaskDto dto)
+                        let errors = results |> List.choose (function Error e -> Some e | Ok _ -> None)
+                        match errors with
+                        | e :: _ -> Error e
+                        | [] -> Ok(results |> List.choose (function Ok t -> Some t | Error _ -> None))
+                    with ex ->
+                        Error(ProductConfigParseError(tasksDir, ex.Message))
+
+            // Collect tasks from active backlog items (skip dirs starting with '_')
+            let activeResult =
+                if not (Directory.Exists(backlogDir)) then
+                    Ok []
+                else
+                    try
+                        let dirs =
+                            Directory.GetDirectories(backlogDir)
+                            |> Array.filter (fun d -> not (Path.GetFileName(d).StartsWith("_")))
+                        let results = dirs |> Array.toList |> List.map readTasksFromBacklogDir
+                        let errors = results |> List.choose (function Error e -> Some e | Ok _ -> None)
+                        match errors with
+                        | e :: _ -> Error e
+                        | [] -> Ok(results |> List.collect (function Ok ts -> ts | Error _ -> []))
+                    with ex ->
+                        Error(ProductConfigParseError(backlogDir, ex.Message))
+
+            // Collect tasks from archived backlog items
+            let archivedResult =
+                if not (Directory.Exists(archiveDir)) then
+                    Ok []
+                else
+                    try
+                        let dirs = Directory.GetDirectories(archiveDir)
+                        let results = dirs |> Array.toList |> List.map readTasksFromBacklogDir
+                        let errors = results |> List.choose (function Error e -> Some e | Ok _ -> None)
+                        match errors with
+                        | e :: _ -> Error e
+                        | [] -> Ok(results |> List.collect (function Ok ts -> ts | Error _ -> []))
+                    with ex ->
+                        Error(ProductConfigParseError(archiveDir, ex.Message))
+
+            match activeResult, archivedResult with
+            | Error e, _ -> Error e
+            | _, Error e -> Error e
+            | Ok activeTasks, Ok archivedTasks -> Ok(activeTasks @ archivedTasks)
+
 // ---------------------------------------------------------------------------
 // BacklogViewDto
 // ---------------------------------------------------------------------------

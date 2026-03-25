@@ -3,6 +3,61 @@ module Itr.Features.Task
 open Itr.Domain
 
 // ---------------------------------------------------------------------------
+// TaskSummary type
+// ---------------------------------------------------------------------------
+
+type TaskSummary =
+    { Task: ItrTask
+      PlanApproved: bool }
+
+// ---------------------------------------------------------------------------
+// listTasks: wraps a list of ItrTask into TaskSummary list
+// ---------------------------------------------------------------------------
+
+/// Wrap raw tasks into TaskSummary values.
+/// PlanApproved = true for Approved | InProgress | Implemented | Validated | Archived.
+let listTasks (tasks: ItrTask list) : TaskSummary list =
+    tasks
+    |> List.map (fun task ->
+        let planApproved =
+            match task.State with
+            | TaskState.Approved
+            | TaskState.InProgress
+            | TaskState.Implemented
+            | TaskState.Validated
+            | TaskState.Archived -> true
+            | _ -> false
+        { Task = task; PlanApproved = planApproved })
+
+// ---------------------------------------------------------------------------
+// filterTasks: apply optional AND filters to a TaskSummary list
+// ---------------------------------------------------------------------------
+
+/// Filter task summaries by optional backlog id, repo id, and state.
+/// All provided filters are applied as AND.
+let filterTasks
+    (backlogId: BacklogId option)
+    (repo: RepoId option)
+    (state: TaskState option)
+    (summaries: TaskSummary list)
+    : TaskSummary list =
+    summaries
+    |> List.filter (fun s ->
+        let matchesBacklog =
+            match backlogId with
+            | None -> true
+            | Some bid -> s.Task.SourceBacklog = bid
+        let matchesRepo =
+            match repo with
+            | None -> true
+            | Some rid -> s.Task.Repo = rid
+        let matchesState =
+            match state with
+            | None -> true
+            | Some st -> s.Task.State = st
+        matchesBacklog && matchesRepo && matchesState)
+
+// ---------------------------------------------------------------------------
 // Input type for the use case
 // ---------------------------------------------------------------------------
 

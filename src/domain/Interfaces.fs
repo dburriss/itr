@@ -93,3 +93,6 @@ type ITaskStore =
     /// Archive a task by renaming <coordRoot>/BACKLOG/<backlog-id>/tasks/<task-id>/ to <coordRoot>/BACKLOG/<backlog-id>/tasks/<date>-<task-id>/
     abstract ArchiveTask:
         coordRoot: string -> backlogId: BacklogId -> taskId: TaskId -> date: string -> Result<unit, BacklogError>
+
+    /// List all tasks across all backlog items (active and archived) under <coordRoot>/BACKLOG/
+    abstract ListAllTasks: coordRoot: string -> Result<ItrTask list, BacklogError>
