@@ -2,5 +2,5 @@ id: backlog-item-create
 source:
   backlog: backlog-item-create
 repo: itr
-state: planned
+state: archived
 created_at: 2026-03-22

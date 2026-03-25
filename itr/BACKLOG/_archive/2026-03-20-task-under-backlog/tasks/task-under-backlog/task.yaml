@@ -1,6 +1,6 @@
 id: task-under-backlog
 created_at: 2026-03-20
-state: planning
+state: archived
 source:
   backlog: task-under-backlog
 repo: itr
