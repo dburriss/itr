@@ -20,6 +20,6 @@ acceptance_criteria:
   - Output supports human-readable and structured modes
 
 dependencies:
-  - task-promotion
+  - backlog-take
 
 created_at: 2026-03-10
