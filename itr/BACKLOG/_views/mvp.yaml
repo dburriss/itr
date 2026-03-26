@@ -13,6 +13,8 @@ items:
   - backlog-take
   - task-list
   - task-info
+  - backlog-view-list
+  - backlog-view-info
   - cli-plain-text-output
   - task-plan
   - task-plan-approval
@@ -20,4 +22,4 @@ items:
   - task-done
   - task-validate
   - task-archive
-  - backlog-item-archive (draft)
+  - backlog-item-archive

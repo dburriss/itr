@@ -1,0 +1,25 @@
+id: backlog-view-info
+
+title: Show detailed info for a backlog view
+
+type: feature
+
+priority: medium
+
+repos:
+  - itr
+
+summary: >
+  Allow users to inspect a single backlog view in detail, showing its member
+  items and their current states to support delivery planning decisions.
+
+acceptance_criteria:
+  - A command shows the view id, description, and all member item ids
+  - Each member item includes its title and current state (e.g. backlog, in-progress, archived)
+  - Missing member items are flagged rather than silently omitted
+  - Output supports table, json, and text modes
+
+dependencies:
+  - backlog-view-list
+
+created_at: 2026-03-25
