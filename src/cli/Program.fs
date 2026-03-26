@@ -165,13 +165,26 @@ type TaskListArgs =
             | Output _ -> "output mode: table (default) | json"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
+type TaskInfoArgs =
+    | [<MainCommand; Mandatory>] Task_Id of task_id: string
+    | [<AltCommandLine("-o")>] Output of output: string
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Task_Id _ -> "task id to inspect"
+            | Output _ -> "output mode: table (default) | json"
+
+[<CliPrefix(CliPrefix.DoubleDash)>]
 type TaskArgs =
     | [<CliPrefix(CliPrefix.None)>] List of ParseResults<TaskListArgs>
+    | [<CliPrefix(CliPrefix.None)>] Info of ParseResults<TaskInfoArgs>
 
     interface IArgParserTemplate with
         member this.Usage =
             match this with
             | List _ -> "list all tasks across a product"
+            | Info _ -> "show detailed information about a task"
 
 type CliArgs =
     | [<AltCommandLine("-p")>] Profile of string
@@ -300,6 +313,7 @@ let private formatBacklogError (err: BacklogError) : string =
     | DuplicateBacklogId id -> $"Backlog item '{BacklogId.value id}' already exists"
     | InvalidItemType value -> $"Invalid item type '{value}': must be feature | bug | chore | spike"
     | MissingTitle -> "--title is required"
+    | TaskNotFound id -> $"Task not found: {TaskId.value id}"
 
 let private formatPortfolioError (err: PortfolioError) : string =
     match err with
@@ -453,6 +467,99 @@ let private handleTaskList
                 AnsiConsole.Write(table)
 
             Ok()
+
+// ---------------------------------------------------------------------------
+// task info handler
+// ---------------------------------------------------------------------------
+
+let private handleTaskInfo
+    (deps: AppDeps)
+    (resolved: ResolvedProduct)
+    (infoArgs: ParseResults<TaskInfoArgs>)
+    : Result<unit, string> =
+    let coordRoot = resolved.CoordRoot.AbsolutePath
+    let rawTaskId = infoArgs.GetResult TaskInfoArgs.Task_Id
+    let outputJson = infoArgs.TryGetResult TaskInfoArgs.Output |> Option.exists (fun v -> v = "json")
+
+    let taskId = TaskId.create rawTaskId
+    let taskStore = deps :> ITaskStore
+    let fileSystem = deps :> IFileSystem
+
+    match taskStore.ListAllTasks coordRoot with
+    | Error e -> Error(formatBacklogError e)
+    | Ok allTasks ->
+        // Resolve plan path: need the SourceBacklog of the target task first
+        match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
+        | None -> Error(formatBacklogError (TaskNotFound taskId))
+        | Some targetTask ->
+            let backlogId = BacklogId.value targetTask.SourceBacklog
+            let planPath =
+                System.IO.Path.Combine(
+                    coordRoot, "BACKLOG", backlogId, "tasks", rawTaskId, "plan.md")
+            let planExists = fileSystem.FileExists planPath
+
+            match Task.getTaskDetail taskId allTasks planExists with
+            | Error e -> Error(formatBacklogError e)
+            | Ok detail ->
+                let task = detail.Task
+                let id = TaskId.value task.Id
+                let backlog = BacklogId.value task.SourceBacklog
+                let repo = RepoId.value task.Repo
+                let state = taskStateToDisplayString task.State
+                let createdAt = task.CreatedAt.ToString("yyyy-MM-dd")
+                let planExistsStr = if detail.PlanExists then "yes" else "no"
+                let planApprovedStr = if detail.PlanApproved then "yes" else "no"
+
+                if outputJson then
+                    let siblingsJson =
+                        detail.Siblings
+                        |> List.map (fun s ->
+                            sprintf "    { \"id\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\" }"
+                                (TaskId.value s.Id)
+                                (RepoId.value s.Repo)
+                                (taskStateToDisplayString s.State))
+                        |> String.concat ",\n"
+                    printfn "{"
+                    printfn "  \"id\": \"%s\"," id
+                    printfn "  \"backlog\": \"%s\"," backlog
+                    printfn "  \"repo\": \"%s\"," repo
+                    printfn "  \"state\": \"%s\"," state
+                    printfn "  \"planExists\": %b," detail.PlanExists
+                    printfn "  \"planApproved\": %b," detail.PlanApproved
+                    printfn "  \"createdAt\": \"%s\"," createdAt
+                    printfn "  \"siblings\": ["
+                    if not (List.isEmpty detail.Siblings) then printfn "%s" siblingsJson
+                    printfn "  ]"
+                    printfn "}"
+                else
+                    let infoTable = Table()
+                    infoTable.AddColumn("Field") |> ignore
+                    infoTable.AddColumn("Value") |> ignore
+                    infoTable.AddRow("id", id) |> ignore
+                    infoTable.AddRow("backlog", backlog) |> ignore
+                    infoTable.AddRow("repo", repo) |> ignore
+                    infoTable.AddRow("state", state) |> ignore
+                    infoTable.AddRow("plan exists", planExistsStr) |> ignore
+                    infoTable.AddRow("plan approved", planApprovedStr) |> ignore
+                    infoTable.AddRow("created", createdAt) |> ignore
+                    AnsiConsole.Write(infoTable)
+
+                    if detail.Siblings.IsEmpty then
+                        printfn "siblings: (none)"
+                    else
+                        let sibTable = Table()
+                        sibTable.AddColumn("Id") |> ignore
+                        sibTable.AddColumn("Repo") |> ignore
+                        sibTable.AddColumn("State") |> ignore
+                        detail.Siblings
+                        |> List.iter (fun s ->
+                            sibTable.AddRow(
+                                TaskId.value s.Id,
+                                RepoId.value s.Repo,
+                                taskStateToDisplayString s.State) |> ignore)
+                        AnsiConsole.Write(sibTable)
+
+                Ok()
 
 let private handleBacklogList
     (deps: AppDeps)
@@ -1160,7 +1267,40 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                         | Error msg -> Error msg
                                         | Ok resolved -> handleTaskList deps resolved listArgs
 
-                        | None -> Error "Specify a task subcommand (e.g. task list)"
+                        | None ->
+                            match taskResults.TryGetResult TaskArgs.Info with
+                            | Some infoArgs ->
+                                let portfolioResult =
+                                    Portfolio.loadPortfolio (Some configPath)
+                                    |> Effect.run deps
+                                    |> Result.mapError (fun e -> $"%A{e}")
+                                    |> Result.bind (fun portfolio ->
+                                        Portfolio.resolveActiveProfile portfolio profile
+                                        |> Effect.run deps
+                                        |> Result.mapError (fun e -> $"%A{e}"))
+
+                                match portfolioResult with
+                                | Error msg -> Error msg
+                                | Ok activeProfile ->
+                                    match activeProfile.Products with
+                                    | [] -> Error "No products in active profile"
+                                    | productRef :: _ ->
+                                        let (ProductRoot root) = productRef.Root
+                                        let productConfig = deps :> IProductConfig
+
+                                        match productConfig.LoadProductConfig root with
+                                        | Error e -> Error(formatPortfolioError e)
+                                        | Ok definition ->
+                                            let portfolioProductResult =
+                                                Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                                |> Effect.run deps
+                                                |> Result.mapError (fun e -> $"%A{e}")
+
+                                            match portfolioProductResult with
+                                            | Error msg -> Error msg
+                                            | Ok resolved -> handleTaskInfo deps resolved infoArgs
+
+                            | None -> Error "Specify a task subcommand (e.g. task list or task info <id>)"
 
                     | None ->
                     // Legacy behaviour: just load portfolio

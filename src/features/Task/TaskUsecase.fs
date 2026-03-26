@@ -11,6 +11,25 @@ type TaskSummary =
       PlanApproved: bool }
 
 // ---------------------------------------------------------------------------
+// SiblingTask type (used in TaskDetail)
+// ---------------------------------------------------------------------------
+
+type SiblingTask =
+    { Id: TaskId
+      Repo: RepoId
+      State: TaskState }
+
+// ---------------------------------------------------------------------------
+// TaskDetail type
+// ---------------------------------------------------------------------------
+
+type TaskDetail =
+    { Task: ItrTask
+      PlanExists: bool
+      PlanApproved: bool
+      Siblings: SiblingTask list }
+
+// ---------------------------------------------------------------------------
 // listTasks: wraps a list of ItrTask into TaskSummary list
 // ---------------------------------------------------------------------------
 
@@ -175,3 +194,39 @@ let takeBacklogItem
                     ([], Set.empty)
 
             Ok(List.rev tasks)
+
+// ---------------------------------------------------------------------------
+// getTaskDetail: pure function returning TaskDetail for a single task id
+// ---------------------------------------------------------------------------
+
+/// Return the full detail record for the task with the given id.
+/// planExists must be resolved by the caller (IO concern).
+/// allTasks is used to find sibling tasks sharing the same SourceBacklog.
+let getTaskDetail
+    (taskId: TaskId)
+    (allTasks: ItrTask list)
+    (planExists: bool)
+    : Result<TaskDetail, BacklogError> =
+
+    match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
+    | None -> Error(TaskNotFound taskId)
+    | Some task ->
+        let planApproved =
+            match task.State with
+            | TaskState.Approved
+            | TaskState.InProgress
+            | TaskState.Implemented
+            | TaskState.Validated
+            | TaskState.Archived -> true
+            | _ -> false
+
+        let siblings =
+            allTasks
+            |> List.filter (fun t -> t.Id <> taskId && t.SourceBacklog = task.SourceBacklog)
+            |> List.map (fun t -> { Id = t.Id; Repo = t.Repo; State = t.State })
+
+        Ok
+            { Task = task
+              PlanExists = planExists
+              PlanApproved = planApproved
+              Siblings = siblings }

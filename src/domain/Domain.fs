@@ -189,6 +189,7 @@ type BacklogError =
     | DuplicateBacklogId of BacklogId
     | InvalidItemType of value: string
     | MissingTitle
+    | TaskNotFound of TaskId
 
 /// Computed status of a backlog item derived from its tasks
 type BacklogItemStatus =
