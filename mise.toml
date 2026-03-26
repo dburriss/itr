@@ -30,6 +30,11 @@ depends = ["test"]
 description = "Full pre-push verification: build, format check, test."
 
 # Define tasks for running specific CLI commands using dotnet run.
+
+[tasks.profiles]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- profiles json"
+description = "Run the profiles command using dotnet run."
+
 [tasks.profile-add]
 description = "Run the profiles add command using dotnet run."
 usage = '''
@@ -91,6 +96,3 @@ description = "Run the task list command using dotnet run."
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- task info"
 description = "Run the task info command using dotnet run."
 
-[tasks.portfolio]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- portfolio --profile work --output json"
-description = "Run the portfolio command using dotnet run."
