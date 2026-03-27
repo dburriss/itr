@@ -8,6 +8,18 @@ open Itr.Features
 open Itr.Adapters
 
 // ---------------------------------------------------------------------------
+// Output format
+// ---------------------------------------------------------------------------
+
+type OutputFormat = TableOutput | JsonOutput | TextOutput
+
+let private parseOutputFormat (value: string option) : OutputFormat =
+    match value with
+    | Some "json" -> JsonOutput
+    | Some "text" -> TextOutput
+    | _ -> TableOutput
+
+// ---------------------------------------------------------------------------
 // Argu argument DUs
 // ---------------------------------------------------------------------------
 
@@ -56,7 +68,7 @@ type ListArgs =
             | View _ -> "filter by view id"
             | Status _ -> "filter by status: created | planning | planned | approved | in-progress | completed | archived"
             | Type _ -> "filter by item type: feature | bug | chore | spike"
-            | Output _ -> "output mode: table (default) | json"
+             | Output _ -> "output mode: table (default) | json | text"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
 type InfoArgs =
@@ -66,8 +78,8 @@ type InfoArgs =
     interface IArgParserTemplate with
         member this.Usage =
             match this with
-            | Backlog_Id _ -> "backlog item id to inspect"
-            | Output _ -> "output mode: table (default) | json"
+             | Backlog_Id _ -> "backlog item id to inspect"
+             | Output _ -> "output mode: table (default) | json | text"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
 type BacklogArgs =
@@ -161,8 +173,8 @@ type TaskListArgs =
             match this with
             | Backlog_Id _ -> "filter by backlog item id"
             | Repo_Id _ -> "filter by repo id"
-            | State _ -> "filter by task state (planning | planned | approved | in_progress | implemented | validated | archived)"
-            | Output _ -> "output mode: table (default) | json"
+             | State _ -> "filter by task state (planning | planned | approved | in_progress | implemented | validated | archived)"
+             | Output _ -> "output mode: table (default) | json | text"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
 type TaskInfoArgs =
@@ -172,8 +184,8 @@ type TaskInfoArgs =
     interface IArgParserTemplate with
         member this.Usage =
             match this with
-            | Task_Id _ -> "task id to inspect"
-            | Output _ -> "output mode: table (default) | json"
+             | Task_Id _ -> "task id to inspect"
+             | Output _ -> "output mode: table (default) | json | text"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
 type TaskArgs =
@@ -391,7 +403,7 @@ let private handleTaskList
     let coordRoot = resolved.CoordRoot.AbsolutePath
     let taskStore = deps :> ITaskStore
 
-    let outputJson = listArgs.TryGetResult TaskListArgs.Output |> Option.exists (fun v -> v = "json")
+    let format = listArgs.TryGetResult TaskListArgs.Output |> parseOutputFormat
 
     // Parse optional filters
     let backlogIdResult =
@@ -431,40 +443,53 @@ let private handleTaskList
             let filtered = Task.filterTasks backlogIdFilter repoId stateFilter summaries
 
             if filtered.IsEmpty then
-                printfn "No tasks found."
-            elif outputJson then
-                let items =
+                match format with
+                | TextOutput -> () // no output in text mode for empty results
+                | _ -> printfn "No tasks found."
+            else
+                match format with
+                | JsonOutput ->
+                    let items =
+                        filtered
+                        |> List.map (fun s ->
+                            let id = TaskId.value s.Task.Id
+                            let backlog = BacklogId.value s.Task.SourceBacklog
+                            let repo = RepoId.value s.Task.Repo
+                            let state = taskStateToDisplayString s.Task.State
+                            let planApproved = if s.PlanApproved then "true" else "false"
+                            sprintf "    { \"id\": \"%s\", \"backlog\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\", \"planApproved\": %s }"
+                                id backlog repo state planApproved)
+                        |> String.concat ",\n"
+                    printfn "{ \"tasks\": ["
+                    printfn "%s" items
+                    printfn "] }"
+                | TextOutput ->
                     filtered
-                    |> List.map (fun s ->
+                    |> List.iter (fun s ->
                         let id = TaskId.value s.Task.Id
                         let backlog = BacklogId.value s.Task.SourceBacklog
                         let repo = RepoId.value s.Task.Repo
                         let state = taskStateToDisplayString s.Task.State
-                        let planApproved = if s.PlanApproved then "true" else "false"
-                        sprintf "    { \"id\": \"%s\", \"backlog\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\", \"planApproved\": %s }"
-                            id backlog repo state planApproved)
-                    |> String.concat ",\n"
-                printfn "{ \"tasks\": ["
-                printfn "%s" items
-                printfn "] }"
-            else
-                let table = Table()
-                table.AddColumn("Id") |> ignore
-                table.AddColumn("Backlog") |> ignore
-                table.AddColumn("Repo") |> ignore
-                table.AddColumn("State") |> ignore
-                table.AddColumn("Plan Approved") |> ignore
+                        let planApproved = if s.PlanApproved then "yes" else "no"
+                        printfn "%s\t%s\t%s\t%s\t%s" id backlog repo state planApproved)
+                | TableOutput ->
+                    let table = Table()
+                    table.AddColumn("Id") |> ignore
+                    table.AddColumn("Backlog") |> ignore
+                    table.AddColumn("Repo") |> ignore
+                    table.AddColumn("State") |> ignore
+                    table.AddColumn("Plan Approved") |> ignore
 
-                filtered
-                |> List.iter (fun s ->
-                    let id = TaskId.value s.Task.Id
-                    let backlog = BacklogId.value s.Task.SourceBacklog
-                    let repo = RepoId.value s.Task.Repo
-                    let state = taskStateToDisplayString s.Task.State
-                    let planApproved = if s.PlanApproved then "yes" else "no"
-                    table.AddRow(id, backlog, repo, state, planApproved) |> ignore)
+                    filtered
+                    |> List.iter (fun s ->
+                        let id = TaskId.value s.Task.Id
+                        let backlog = BacklogId.value s.Task.SourceBacklog
+                        let repo = RepoId.value s.Task.Repo
+                        let state = taskStateToDisplayString s.Task.State
+                        let planApproved = if s.PlanApproved then "yes" else "no"
+                        table.AddRow(id, backlog, repo, state, planApproved) |> ignore)
 
-                AnsiConsole.Write(table)
+                    AnsiConsole.Write(table)
 
             Ok()
 
@@ -479,7 +504,7 @@ let private handleTaskInfo
     : Result<unit, string> =
     let coordRoot = resolved.CoordRoot.AbsolutePath
     let rawTaskId = infoArgs.GetResult TaskInfoArgs.Task_Id
-    let outputJson = infoArgs.TryGetResult TaskInfoArgs.Output |> Option.exists (fun v -> v = "json")
+    let format = infoArgs.TryGetResult TaskInfoArgs.Output |> parseOutputFormat
 
     let taskId = TaskId.create rawTaskId
     let taskStore = deps :> ITaskStore
@@ -510,7 +535,8 @@ let private handleTaskInfo
                 let planExistsStr = if detail.PlanExists then "yes" else "no"
                 let planApprovedStr = if detail.PlanApproved then "yes" else "no"
 
-                if outputJson then
+                match format with
+                | JsonOutput ->
                     let siblingsJson =
                         detail.Siblings
                         |> List.map (fun s ->
@@ -531,7 +557,19 @@ let private handleTaskInfo
                     if not (List.isEmpty detail.Siblings) then printfn "%s" siblingsJson
                     printfn "  ]"
                     printfn "}"
-                else
+                | TextOutput ->
+                    let siblingsStr =
+                        if detail.Siblings.IsEmpty then "-"
+                        else detail.Siblings |> List.map (fun s -> TaskId.value s.Id) |> String.concat ","
+                    printfn "id\t%s" id
+                    printfn "backlog\t%s" backlog
+                    printfn "repo\t%s" repo
+                    printfn "state\t%s" state
+                    printfn "plan exists\t%s" planExistsStr
+                    printfn "plan approved\t%s" planApprovedStr
+                    printfn "created\t%s" createdAt
+                    printfn "siblings\t%s" siblingsStr
+                | TableOutput ->
                     let infoTable = Table()
                     infoTable.AddColumn("Field") |> ignore
                     infoTable.AddColumn("Value") |> ignore
@@ -572,7 +610,7 @@ let private handleBacklogList
     let viewStore = deps :> IViewStore
 
     let viewFilter = listArgs.TryGetResult ListArgs.View
-    let outputJson = listArgs.TryGetResult ListArgs.Output |> Option.exists (fun v -> v = "json")
+    let format = listArgs.TryGetResult ListArgs.Output |> parseOutputFormat
 
     let statusFilter =
         listArgs.TryGetResult ListArgs.Status
@@ -595,7 +633,8 @@ let private handleBacklogList
     | Ok snapshot ->
         let items = Backlog.listBacklogItems filter snapshot
 
-        if outputJson then
+        match format with
+        | JsonOutput ->
             let jsonItems =
                 items
                 |> List.map (fun s ->
@@ -612,7 +651,18 @@ let private handleBacklogList
             if not (List.isEmpty items) then
                 printfn "%s" jsonItems
             printfn "]"
-        else
+        | TextOutput ->
+            items
+            |> List.iter (fun s ->
+                let id = BacklogId.value s.Item.Id
+                let itemType = BacklogItemType.toString s.Item.Type
+                let priority = s.Item.Priority |> Option.defaultValue "-"
+                let status = backlogItemStatusToString s.Status
+                let viewId = s.ViewId |> Option.defaultValue "-"
+                let createdAt = s.Item.CreatedAt.ToString("yyyy-MM-dd")
+                let title = s.Item.Title
+                printfn "%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s" id itemType priority status viewId s.TaskCount createdAt title)
+        | TableOutput ->
             let table = Table()
             table.AddColumn("ID") |> ignore
             table.AddColumn("Type") |> ignore
@@ -647,7 +697,7 @@ let private handleBacklogInfo
     : Result<unit, string> =
     let coordRoot = resolved.CoordRoot.AbsolutePath
     let rawBacklogId = infoArgs.GetResult InfoArgs.Backlog_Id
-    let outputJson = infoArgs.TryGetResult InfoArgs.Output |> Option.exists (fun v -> v = "json")
+    let format = infoArgs.TryGetResult InfoArgs.Output |> parseOutputFormat
 
     match BacklogId.tryCreate rawBacklogId with
     | Error _ -> Error $"Invalid backlog id '{rawBacklogId}': must match [a-z0-9][a-z0-9-]*"
@@ -671,7 +721,8 @@ let private handleBacklogInfo
             let deps_ = item.Dependencies |> List.map BacklogId.value
             let repos = item.Repos |> List.map RepoId.value
 
-            if outputJson then
+            match format with
+            | JsonOutput ->
                 let acJson =
                     ac
                     |> List.map (fun s -> sprintf "    \"%s\"" (s.Replace("\"", "\\\"")))
@@ -722,7 +773,32 @@ let private handleBacklogInfo
                 if not (List.isEmpty detail.Tasks) then printfn "%s" tasksJson
                 printfn "  ]"
                 printfn "}"
-            else
+            | TextOutput ->
+                let priorityStr = item.Priority |> Option.defaultValue "-"
+                let viewStr = detail.ViewId |> Option.defaultValue "-"
+                let reposStr = if repos.IsEmpty then "-" else String.concat "," repos
+                let depsStr = if deps_.IsEmpty then "-" else String.concat "," deps_
+                let summaryStr = summary.Replace('\n', ' ').Replace('\r', ' ')
+                let acStr =
+                    if ac.IsEmpty then "-"
+                    else ac |> List.map (fun s -> s.Replace('\n', ' ').Replace('\r', ' ')) |> String.concat ","
+                let tasksStr =
+                    if detail.Tasks.IsEmpty then "-"
+                    else detail.Tasks |> List.map (fun t -> TaskId.value t.Id) |> String.concat ","
+                printfn "id\t%s" id
+                printfn "title\t%s" item.Title
+                printfn "type\t%s" itemType
+                printfn "priority\t%s" priorityStr
+                printfn "status\t%s" status
+                printfn "view\t%s" viewStr
+                printfn "summary\t%s" summaryStr
+                printfn "acceptance criteria\t%s" acStr
+                printfn "dependencies\t%s" depsStr
+                printfn "repos\t%s" reposStr
+                printfn "created\t%s" createdAt
+                printfn "taskCount\t%d" detail.Tasks.Length
+                printfn "tasks\t%s" tasksStr
+            | TableOutput ->
                 // Detail table
                 let infoTable = Table()
                 infoTable.AddColumn("Field") |> ignore
@@ -768,6 +844,9 @@ let private handleBacklogInfo
 // ---------------------------------------------------------------------------
 // backlog take handler
 // ---------------------------------------------------------------------------
+// Note: write-command handlers (handleBacklogTake, handleBacklogAdd, handleProductRegister)
+// intentionally retain `outputJson: bool` — they are not scripting targets and are excluded
+// from the OutputFormat refactor at MVP.
 
 let private handleBacklogTake
     (deps: AppDeps)

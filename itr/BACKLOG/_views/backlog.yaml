@@ -3,7 +3,6 @@ id: backlog
 description: Backlog management - creating items, views, and managing view membership.
 
 items:
-  - backlog-item-create
   - backlog-view-create
   - backlog-view-membership
-  - backlog-list
+  - backlog-next

@@ -13,6 +13,7 @@
     <Compile Include="TaskInfoAcceptanceTests.fs" />
     <Compile Include="BacklogAcceptanceTests.fs" />
     <Compile Include="YamlAdapterTests.fs" />
+    <Compile Include="OutputFormatTests.fs" />
     <Compile Include="Tests.fs" />
   </ItemGroup>
 
