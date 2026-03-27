@@ -96,3 +96,9 @@ type ITaskStore =
 
     /// List all tasks across all backlog items (active and archived) under <coordRoot>/BACKLOG/
     abstract ListAllTasks: coordRoot: string -> Result<ItrTask list, BacklogError>
+
+/// Capability interface for AI agent harness interactions
+type IAgentHarness =
+    /// Send a prompt to the AI harness and return the response content.
+    /// debug: if true, raw HTTP responses are printed to stderr.
+    abstract Prompt: prompt: string -> debug: bool -> Result<string, string>

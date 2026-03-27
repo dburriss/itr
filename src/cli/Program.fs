@@ -2,6 +2,8 @@ module Itr.Cli.Program
 
 open System
 open Argu
+open Fue.Data
+open Fue.Compiler
 open Spectre.Console
 open Itr.Domain
 open Itr.Features
@@ -188,15 +190,30 @@ type TaskInfoArgs =
              | Output _ -> "output mode: table (default) | json | text"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
+type TaskPlanArgs =
+    | [<MainCommand; Mandatory>] Task_Id of task_id: string
+    | Ai
+    | Debug
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Task_Id _ -> "task id to plan"
+            | Ai -> "use OpenCode AI to generate plan content"
+            | Debug -> "print raw HTTP responses to stderr during AI interaction"
+
+[<CliPrefix(CliPrefix.DoubleDash)>]
 type TaskArgs =
     | [<CliPrefix(CliPrefix.None)>] List of ParseResults<TaskListArgs>
     | [<CliPrefix(CliPrefix.None)>] Info of ParseResults<TaskInfoArgs>
+    | [<CliPrefix(CliPrefix.None)>] Plan of ParseResults<TaskPlanArgs>
 
     interface IArgParserTemplate with
         member this.Usage =
             match this with
             | List _ -> "list all tasks across a product"
             | Info _ -> "show detailed information about a task"
+            | Plan _ -> "generate a plan for a task"
 
 type CliArgs =
     | [<AltCommandLine("-p")>] Profile of string
@@ -229,6 +246,7 @@ type AppDeps() =
     let backlogStoreAdapter = YamlAdapter.BacklogStoreAdapter()
     let taskStoreAdapter = YamlAdapter.TaskStoreAdapter()
     let viewStoreAdapter = YamlAdapter.ViewStoreAdapter()
+    let agentHarnessAdapter = OpenCodeHarnessAdapter()
 
     interface IEnvironment with
         member _.GetEnvVar name =
@@ -306,6 +324,10 @@ type AppDeps() =
         member _.ListAllTasks coordRoot =
             (taskStoreAdapter :> ITaskStore).ListAllTasks coordRoot
 
+    interface IAgentHarness with
+        member _.Prompt prompt debug =
+            (agentHarnessAdapter :> IAgentHarness).Prompt prompt debug
+
 // ---------------------------------------------------------------------------
 // Error formatting
 // ---------------------------------------------------------------------------
@@ -326,6 +348,17 @@ let private formatBacklogError (err: BacklogError) : string =
     | InvalidItemType value -> $"Invalid item type '{value}': must be feature | bug | chore | spike"
     | MissingTitle -> "--title is required"
     | TaskNotFound id -> $"Task not found: {TaskId.value id}"
+    | InvalidTaskState(id, current) ->
+        let stateStr =
+            match current with
+            | TaskState.Planning -> "planning"
+            | TaskState.Planned -> "planned"
+            | TaskState.Approved -> "approved"
+            | TaskState.InProgress -> "in_progress"
+            | TaskState.Implemented -> "implemented"
+            | TaskState.Validated -> "validated"
+            | TaskState.Archived -> "archived"
+        $"Cannot plan task '{TaskId.value id}': current state is '{stateStr}' (only planning or planned states are allowed)"
 
 let private formatPortfolioError (err: PortfolioError) : string =
     match err with
@@ -598,6 +631,122 @@ let private handleTaskInfo
                         AnsiConsole.Write(sibTable)
 
                 Ok()
+
+// ---------------------------------------------------------------------------
+// task plan handler
+// ---------------------------------------------------------------------------
+
+let private handleTaskPlan
+    (deps: AppDeps)
+    (resolved: ResolvedProduct)
+    (planArgs: ParseResults<TaskPlanArgs>)
+    : Result<unit, string> =
+    let coordRoot = resolved.CoordRoot.AbsolutePath
+    let rawTaskId = planArgs.GetResult TaskPlanArgs.Task_Id
+    let useAi = planArgs.Contains TaskPlanArgs.Ai
+    let debug = planArgs.Contains TaskPlanArgs.Debug
+
+    let taskId = TaskId.create rawTaskId
+    let taskStore = deps :> ITaskStore
+    let backlogStore = deps :> IBacklogStore
+    let fileSystem = deps :> IFileSystem
+
+    // Load all tasks to find the target
+    match taskStore.ListAllTasks coordRoot with
+    | Error e -> Error(formatBacklogError e)
+    | Ok allTasks ->
+        match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
+        | None -> Error(formatBacklogError (TaskNotFound taskId))
+        | Some task ->
+            // Validate state and get updated task
+            match Task.planTask task with
+            | Error e -> Error(formatBacklogError e)
+            | Ok (updatedTask, wasAlreadyPlanned) ->
+                if wasAlreadyPlanned then
+                    printfn "Re-planning task %s (was already planned)." rawTaskId
+
+                let backlogId = updatedTask.SourceBacklog
+
+                // Load backlog item for template data
+                match backlogStore.LoadBacklogItem coordRoot backlogId with
+                | Error e -> Error(formatBacklogError e)
+                | Ok backlogItem ->
+                    let repo = RepoId.value updatedTask.Repo
+                    let backlogIdStr = BacklogId.value backlogId
+                    let title = backlogItem.Title
+                    let summary = backlogItem.Summary |> Option.defaultValue ""
+                    let deps_ = backlogItem.Dependencies |> List.map BacklogId.value
+                    let ac = backlogItem.AcceptanceCriteria
+
+                    let dependenciesStr =
+                        if deps_.IsEmpty then "- none"
+                        else deps_ |> List.map (fun d -> $"- {d}") |> String.concat "\n"
+
+                    let acceptanceCriteriaStr =
+                        if ac.IsEmpty then "- none"
+                        else ac |> List.map (fun c -> $"- {c}") |> String.concat "\n"
+
+                    // Resolve asset directory relative to the executable
+                    let exeDir = AppDomain.CurrentDomain.BaseDirectory
+                    let templatePath = IO.Path.Combine(exeDir, "assets", "plan-template.md")
+                    let promptPath = IO.Path.Combine(exeDir, "assets", "plan-prompt.md")
+
+                    // Always render the template skeleton first (metadata filled, open sections intact)
+                    let skeletonResult =
+                        match fileSystem.ReadFile templatePath with
+                        | Error _ -> Error $"Could not read plan-template.md from {templatePath}"
+                        | Ok template ->
+                            let rendered =
+                                init
+                                |> add "title" title
+                                |> add "taskId" rawTaskId
+                                |> add "backlogId" backlogIdStr
+                                |> add "repo" repo
+                                |> add "summary" summary
+                                |> add "dependencies" dependenciesStr
+                                |> add "acceptanceCriteria" acceptanceCriteriaStr
+                                |> fromNoneHtmlText template
+                            Ok rendered
+
+                    // Generate plan content
+                    let planContentResult =
+                        match skeletonResult with
+                        | Error e -> Error e
+                        | Ok skeleton ->
+                            if useAi then
+                                // Send the rendered skeleton to the AI to fill the open sections
+                                match fileSystem.ReadFile promptPath with
+                                | Error _ ->
+                                    Error $"Could not read plan-prompt.md from {promptPath}"
+                                | Ok promptTemplate ->
+                                    let renderedPrompt =
+                                        init
+                                        |> add "planSkeleton" skeleton
+                                        |> fromNoneHtmlText promptTemplate
+
+                                    let harness = deps :> IAgentHarness
+                                    harness.Prompt renderedPrompt debug
+                                    |> Result.mapError (fun e -> e)
+                            else
+                                Ok skeleton
+
+                    match planContentResult with
+                    | Error msg -> Error msg
+                    | Ok planContent ->
+                        // Write plan.md
+                        let planPath =
+                            IO.Path.Combine(
+                                coordRoot, "BACKLOG", backlogIdStr, "tasks", rawTaskId, "plan.md")
+
+                        match fileSystem.WriteFile planPath planContent with
+                        | Error e -> Error $"Failed to write plan.md: %A{e}"
+                        | Ok () ->
+                            // Write updated task
+                            match taskStore.WriteTask coordRoot updatedTask with
+                            | Error e -> Error(formatBacklogError e)
+                            | Ok () ->
+                                printfn "Plan written: %s" planPath
+                                Ok()
 
 let private handleBacklogList
     (deps: AppDeps)
@@ -1379,7 +1528,40 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                             | Error msg -> Error msg
                                             | Ok resolved -> handleTaskInfo deps resolved infoArgs
 
-                            | None -> Error "Specify a task subcommand (e.g. task list or task info <id>)"
+                            | None ->
+                                match taskResults.TryGetResult TaskArgs.Plan with
+                                | Some planArgs ->
+                                    let portfolioResult =
+                                        Portfolio.loadPortfolio (Some configPath)
+                                        |> Effect.run deps
+                                        |> Result.mapError (fun e -> $"%A{e}")
+                                        |> Result.bind (fun portfolio ->
+                                            Portfolio.resolveActiveProfile portfolio profile
+                                            |> Effect.run deps
+                                            |> Result.mapError (fun e -> $"%A{e}"))
+
+                                    match portfolioResult with
+                                    | Error msg -> Error msg
+                                    | Ok activeProfile ->
+                                        match activeProfile.Products with
+                                        | [] -> Error "No products in active profile"
+                                        | productRef :: _ ->
+                                            let (ProductRoot root) = productRef.Root
+                                            let productConfig = deps :> IProductConfig
+
+                                            match productConfig.LoadProductConfig root with
+                                            | Error e -> Error(formatPortfolioError e)
+                                            | Ok definition ->
+                                                let portfolioProductResult =
+                                                    Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                                    |> Effect.run deps
+                                                    |> Result.mapError (fun e -> $"%A{e}")
+
+                                                match portfolioProductResult with
+                                                | Error msg -> Error msg
+                                                | Ok resolved -> handleTaskPlan deps resolved planArgs
+
+                                | None -> Error "Specify a task subcommand (e.g. task list or task info <id> or task plan <id>)"
 
                     | None ->
                     // Legacy behaviour: just load portfolio

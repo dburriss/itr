@@ -230,3 +230,22 @@ let getTaskDetail
               PlanExists = planExists
               PlanApproved = planApproved
               Siblings = siblings }
+
+// ---------------------------------------------------------------------------
+// planTask: pure function to validate state and return updated task
+// ---------------------------------------------------------------------------
+
+/// Validate that a task can be planned and return the task updated to Planned state.
+/// Returns (updatedTask, wasAlreadyPlanned) on success.
+/// Allowed states: Planning → Planned; Planned → Planned (re-plan).
+/// States beyond Planned return InvalidTaskState error.
+let planTask
+    (task: ItrTask)
+    : Result<ItrTask * bool, BacklogError> =
+    match task.State with
+    | TaskState.Planning ->
+        Ok ({ task with State = TaskState.Planned }, false)
+    | TaskState.Planned ->
+        Ok (task, true)
+    | other ->
+        Error (InvalidTaskState (task.Id, other))

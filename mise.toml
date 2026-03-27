@@ -30,6 +30,9 @@ depends = ["test"]
 description = "Full pre-push verification: build, format check, test."
 
 # Define tasks for running specific CLI commands using dotnet run.
+[tasks.itr]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj --"
+description = "Run the Itr CLI using dotnet run."
 
 [tasks.profiles]
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- profiles json"
@@ -73,3 +76,6 @@ description = "Run the task list command using dotnet run."
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- task info"
 description = "Run the task info command using dotnet run."
 
+[tasks.task-plan]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- task plan"
+description = "Run the task plan command using dotnet run."

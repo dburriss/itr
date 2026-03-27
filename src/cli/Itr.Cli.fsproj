@@ -11,7 +11,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="assets/plan-template.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="assets/plan-prompt.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Argu" Version="6.2.4" />
+    <PackageReference Include="Fue" Version="2.2.0" />
     <PackageReference Include="Spectre.Console" Version="0.49.1" />
   </ItemGroup>
 
