@@ -1,0 +1,19 @@
+id: backlog-add-interactive
+title: Adds --interactive flag to adding a backlog item
+repos:
+- itr
+type: feature
+priority: 
+summary: |-
+  When adding a backlog item, allow users to use an --interactive flag that prompts them for the necessary fields, 
+  including (title, description, priority, type, dependencies) in a guided manner. 
+  This would be an alternative to providing all fields as command-line arguments and would help users who prefer a more conversational input method.
+acceptance_criteria:
+- repos field is pre-filled with current repo by default
+- select type from a list of valid types (e.g., feature, bug, chore)
+- select priority from a list of valid priorities (e.g., low, medium, high)
+- allow entering dependencies as a multi-select from existing backlog items
+- validate inputs and provide error messages for invalid entries 
+dependencies: 
+- backlog-item-create
+created_at: 2026-03-27
