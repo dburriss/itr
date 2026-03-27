@@ -16,6 +16,7 @@ items:
   - backlog-view-list
   - backlog-view-info
   - cli-plain-text-output
+  - backlog-view-improvements
   - task-plan
   - task-plan-approval
   - task-start
@@ -23,3 +24,4 @@ items:
   - task-validate
   - task-archive
   - backlog-item-archive
+  - step-commit
