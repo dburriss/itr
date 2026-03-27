@@ -1,0 +1,63 @@
+## ADDED Requirements
+
+### Requirement: Generate a plan document for a task
+The system SHALL provide a `task plan <task-id>` subcommand that generates a `plan.md` file in the task directory (`<coordRoot>/BACKLOG/<backlogId>/tasks/<taskId>/plan.md`) and transitions the task state from `planning` to `planned`.
+
+#### Scenario: Plan created for a task in planning state
+- **WHEN** `itr task plan <task-id>` is run for a task with state `planning`
+- **THEN** `plan.md` is written to the task directory and the task state is updated to `planned`
+
+#### Scenario: Plan output path is reported
+- **WHEN** `itr task plan <task-id>` completes successfully
+- **THEN** stdout includes `Plan written: <path>` showing the full path to `plan.md`
+
+### Requirement: Stub plan from template
+The system SHALL render the plan document from a file-backed template (`plan-template.md`) populated with metadata from the source backlog item: title, task id, backlog item id, repo, summary, dependencies (as bullet list or "none"), and acceptance criteria (as bullet list).
+
+#### Scenario: Plan contains metadata from backlog item
+- **WHEN** `itr task plan <task-id>` is run without `--ai`
+- **THEN** the generated `plan.md` contains the task id, backlog item id, repo, and acceptance criteria from the source item
+
+#### Scenario: Plan contains all required sections
+- **WHEN** `itr task plan <task-id>` is run without `--ai`
+- **THEN** the generated `plan.md` contains sections: Description, Scope, Steps, Dependencies, Acceptance Criteria, Impact, Risks, Open Questions
+
+### Requirement: Re-planning an already-planned task
+The system SHALL allow re-running `task plan` when the task is already in `planned` state, overwriting the existing `plan.md` and printing a re-plan notice.
+
+#### Scenario: Re-plan overwrites existing plan
+- **WHEN** `itr task plan <task-id>` is run on a task already in `planned` state
+- **THEN** `plan.md` is overwritten, a notice `Re-planning task <id> (was already planned).` is printed, and the state remains `planned`
+
+### Requirement: Planning blocked for tasks beyond planned state
+The system SHALL reject `task plan` for tasks in states beyond `planned` (e.g. `approved`, `in_progress`, `implemented`, `validated`, `archived`), returning an error and writing no files.
+
+#### Scenario: Error for task in approved state
+- **WHEN** `itr task plan <task-id>` is run for a task with state `approved`
+- **THEN** the command exits with a non-zero code, an error is printed, and no files are written
+
+#### Scenario: Error for task not found
+- **WHEN** `itr task plan unknown-id` is run and no such task exists
+- **THEN** the command exits with a non-zero code and outputs an appropriate error message
+
+### Requirement: AI-generated plan via OpenCode
+The system SHALL support a `--ai` flag that connects to a locally running OpenCode server at `http://127.0.0.1:4096`, creates a named session (`[itr] planning | <task-id>`), sends a planning prompt, and uses the response as the plan content instead of the stub template.
+
+#### Scenario: AI plan generated when server is running
+- **WHEN** `itr task plan <task-id> --ai` is run and the OpenCode server is reachable
+- **THEN** a session is created, the planning prompt is sent, and the response is written as `plan.md`
+
+#### Scenario: Error when OpenCode server is unreachable
+- **WHEN** `itr task plan <task-id> --ai` is run and no OpenCode server is running at `http://127.0.0.1:4096`
+- **THEN** the command exits with a non-zero code, outputs an error message suggesting `opencode serve`, and no files are written
+
+#### Scenario: AI harness error prevents file write
+- **WHEN** `itr task plan <task-id> --ai` is run and the harness returns an error
+- **THEN** no `plan.md` is written and no state transition occurs
+
+### Requirement: Debug mode for OpenCode interaction
+The system SHALL support a `--debug` flag that prints raw HTTP JSON response bodies to stderr at each step of the OpenCode interaction.
+
+#### Scenario: Debug output shown on stderr
+- **WHEN** `itr task plan <task-id> --ai --debug` is run
+- **THEN** raw HTTP JSON responses from each OpenCode API call are printed to stderr
