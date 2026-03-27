@@ -15,10 +15,11 @@ summary: >
 
 acceptance_criteria:
   - A command generates a plan artifact such as plan.md inside a task directory
-  - A task is considered planned when its plan artifact exists
+  - A task is considered planned when its plan artifact exists and task.yaml has a state of planned
   - The generated plan references the source backlog item and the task's scoped repo
   - Re-running planning updates the plan artifact without losing task identity metadata
-
+  - The plan contains at least the following sections; Description, Scope, Steps, and Dependencies, Acceptance Criteria, and Impact, and implementation details
+  - If the command has the flag --ai, the plan is generated using an AI model based on the backlog item description and other metadata
 dependencies:
   - task-promotion
 
