@@ -58,3 +58,14 @@ The system SHALL support `--output json` to emit the task detail as structured J
 #### Scenario: JSON siblings array contains sibling entries
 - **WHEN** `itr task info <id> --output json` is run and siblings exist
 - **THEN** each element in `siblings` has fields `id`, `repo`, and `state`
+
+### Requirement: Text output mode for task info
+The system SHALL accept `--output text` on `task info` to emit one field per line as tab-separated `<key>\t<value>` pairs. The branch field SHALL be `-` when no branch is associated.
+
+#### Scenario: Text output contains key-value lines
+- **WHEN** `itr task info <id> --output text` is run
+- **THEN** stdout contains lines: `id\t<id>`, `state\t<state>`, `repo\t<repo>`, `backlog\t<backlog-id>`, `branch\t<branch or ->`
+
+#### Scenario: Branch field is dash when absent
+- **WHEN** a task has no associated branch and `--output text` is used
+- **THEN** the `branch` line shows `-`

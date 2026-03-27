@@ -86,3 +86,18 @@ The system SHALL display `task list` results as a formatted table by default, wi
 - **THEN** the `Plan Approved` column shows `yes`
 - **WHEN** a task has `planApproved = false`
 - **THEN** the `Plan Approved` column shows `no`
+
+### Requirement: Text output mode for task list
+The system SHALL accept `--output text` on `task list` to emit one task per line as tab-separated values in the order: `id`, `state`, `repo`, `backlog-id`.
+
+#### Scenario: Text output contains tab-separated fields
+- **WHEN** `itr task list --output text` is run against a fixture with known tasks
+- **THEN** each line matches `<id>\t<state>\t<repo>\t<backlog>`
+
+#### Scenario: No tasks produces no output lines
+- **WHEN** `itr task list --output text` is run and no tasks exist
+- **THEN** stdout is empty (no lines, no headers)
+
+#### Scenario: Text output is suitable for awk processing
+- **WHEN** `itr task list --output text | awk -F'\t' '{print $1}'` is run
+- **THEN** each line of output contains exactly one task id
