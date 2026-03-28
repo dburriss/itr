@@ -12,6 +12,7 @@
     <Compile Include="TaskListAcceptanceTests.fs" />
     <Compile Include="TaskInfoAcceptanceTests.fs" />
     <Compile Include="TaskPlanAcceptanceTests.fs" />
+    <Compile Include="TaskApproveAcceptanceTests.fs" />
     <Compile Include="BacklogAcceptanceTests.fs" />
     <Compile Include="YamlAdapterTests.fs" />
     <Compile Include="OutputFormatTests.fs" />

@@ -12,6 +12,7 @@
     <Compile Include="TaskListDomainTests.fs" />
     <Compile Include="TaskInfoDomainTests.fs" />
     <Compile Include="BacklogDomainTests.fs" />
+    <Compile Include="TaskApproveDomainTests.fs" />
     <Compile Include="Tests.fs" />
   </ItemGroup>
 

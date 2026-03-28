@@ -59,7 +59,6 @@ description = "Run the backlog add command using dotnet run."
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog take"
 description = "Run the backlog take command using dotnet run."
 
-
 [tasks.backlog-list]
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog list"
 description = "Run the backlog list command using dotnet run."
@@ -79,3 +78,7 @@ description = "Run the task info command using dotnet run."
 [tasks.task-plan]
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- task plan"
 description = "Run the task plan command using dotnet run."
+
+[tasks.task-approve]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- task approve"
+description = "Run the task approve command using dotnet run."

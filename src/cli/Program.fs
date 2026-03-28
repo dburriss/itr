@@ -203,10 +203,20 @@ type TaskPlanArgs =
             | Debug -> "print raw HTTP responses to stderr during AI interaction"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
+type TaskApproveArgs =
+    | [<MainCommand; Mandatory>] Task_Id of task_id: string
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Task_Id _ -> "task id to approve"
+
+[<CliPrefix(CliPrefix.DoubleDash)>]
 type TaskArgs =
     | [<CliPrefix(CliPrefix.None)>] List of ParseResults<TaskListArgs>
     | [<CliPrefix(CliPrefix.None)>] Info of ParseResults<TaskInfoArgs>
     | [<CliPrefix(CliPrefix.None)>] Plan of ParseResults<TaskPlanArgs>
+    | [<CliPrefix(CliPrefix.None)>] Approve of ParseResults<TaskApproveArgs>
 
     interface IArgParserTemplate with
         member this.Usage =
@@ -214,6 +224,7 @@ type TaskArgs =
             | List _ -> "list all tasks across a product"
             | Info _ -> "show detailed information about a task"
             | Plan _ -> "generate a plan for a task"
+            | Approve _ -> "approve a task plan"
 
 type CliArgs =
     | [<AltCommandLine("-p")>] Profile of string
@@ -358,7 +369,8 @@ let private formatBacklogError (err: BacklogError) : string =
             | TaskState.Implemented -> "implemented"
             | TaskState.Validated -> "validated"
             | TaskState.Archived -> "archived"
-        $"Cannot plan task '{TaskId.value id}': current state is '{stateStr}' (only planning or planned states are allowed)"
+        $"Invalid state transition for task '{TaskId.value id}': current state is '{stateStr}'"
+    | MissingPlanArtifact id -> $"Cannot approve task '{TaskId.value id}': plan artifact does not exist"
 
 let private formatPortfolioError (err: PortfolioError) : string =
     match err with
@@ -747,6 +759,46 @@ let private handleTaskPlan
                             | Ok () ->
                                 printfn "Plan written: %s" planPath
                                 Ok()
+
+// ---------------------------------------------------------------------------
+// task approve handler
+// ---------------------------------------------------------------------------
+
+let private handleTaskApprove
+    (deps: AppDeps)
+    (resolved: ResolvedProduct)
+    (approveArgs: ParseResults<TaskApproveArgs>)
+    : Result<unit, string> =
+    let coordRoot = resolved.CoordRoot.AbsolutePath
+    let rawTaskId = approveArgs.GetResult TaskApproveArgs.Task_Id
+    let taskId = TaskId.create rawTaskId
+    let taskStore = deps :> ITaskStore
+    let fileSystem = deps :> IFileSystem
+
+    match taskStore.ListAllTasks coordRoot with
+    | Error e -> Error(formatBacklogError e)
+    | Ok allTasks ->
+        match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
+        | None -> Error(formatBacklogError (TaskNotFound taskId))
+        | Some task ->
+            let backlogId = BacklogId.value task.SourceBacklog
+            let planPath =
+                System.IO.Path.Combine(
+                    coordRoot, "BACKLOG", backlogId, "tasks", rawTaskId, "plan.md")
+            let planExists = fileSystem.FileExists planPath
+
+            match Task.approveTask task planExists with
+            | Error e -> Error(formatBacklogError e)
+            | Ok (updatedTask, wasAlreadyApproved) ->
+                if wasAlreadyApproved then
+                    printfn "Task '%s' is already approved." rawTaskId
+                    Ok()
+                else
+                    match taskStore.WriteTask coordRoot updatedTask with
+                    | Error e -> Error(formatBacklogError e)
+                    | Ok () ->
+                        printfn "Task '%s' approved." rawTaskId
+                        Ok()
 
 let private handleBacklogList
     (deps: AppDeps)
@@ -1552,16 +1604,49 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                             match productConfig.LoadProductConfig root with
                                             | Error e -> Error(formatPortfolioError e)
                                             | Ok definition ->
-                                                let portfolioProductResult =
-                                                    Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
-                                                    |> Effect.run deps
-                                                    |> Result.mapError (fun e -> $"%A{e}")
+                                                 let portfolioProductResult =
+                                                     Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                                     |> Effect.run deps
+                                                     |> Result.mapError (fun e -> $"%A{e}")
 
-                                                match portfolioProductResult with
-                                                | Error msg -> Error msg
-                                                | Ok resolved -> handleTaskPlan deps resolved planArgs
+                                                 match portfolioProductResult with
+                                                 | Error msg -> Error msg
+                                                 | Ok resolved -> handleTaskPlan deps resolved planArgs
 
-                                | None -> Error "Specify a task subcommand (e.g. task list or task info <id> or task plan <id>)"
+                                 | None ->
+                                     match taskResults.TryGetResult TaskArgs.Approve with
+                                     | Some approveArgs ->
+                                         let portfolioResult =
+                                             Portfolio.loadPortfolio (Some configPath)
+                                             |> Effect.run deps
+                                             |> Result.mapError (fun e -> $"%A{e}")
+                                             |> Result.bind (fun portfolio ->
+                                                 Portfolio.resolveActiveProfile portfolio profile
+                                                 |> Effect.run deps
+                                                 |> Result.mapError (fun e -> $"%A{e}"))
+
+                                         match portfolioResult with
+                                         | Error msg -> Error msg
+                                         | Ok activeProfile ->
+                                             match activeProfile.Products with
+                                             | [] -> Error "No products in active profile"
+                                             | productRef :: _ ->
+                                                 let (ProductRoot root) = productRef.Root
+                                                 let productConfig = deps :> IProductConfig
+
+                                                 match productConfig.LoadProductConfig root with
+                                                 | Error e -> Error(formatPortfolioError e)
+                                                 | Ok definition ->
+                                                     let portfolioProductResult =
+                                                         Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                                         |> Effect.run deps
+                                                         |> Result.mapError (fun e -> $"%A{e}")
+
+                                                     match portfolioProductResult with
+                                                     | Error msg -> Error msg
+                                                     | Ok resolved -> handleTaskApprove deps resolved approveArgs
+
+                                     | None -> Error "Specify a task subcommand (e.g. task list or task info <id> or task plan <id> or task approve <id>)"
 
                     | None ->
                     // Legacy behaviour: just load portfolio

@@ -249,3 +249,26 @@ let planTask
         Ok (task, true)
     | other ->
         Error (InvalidTaskState (task.Id, other))
+
+// ---------------------------------------------------------------------------
+// approveTask: pure function to validate state and return updated task
+// ---------------------------------------------------------------------------
+
+/// Validate that a task can be approved and return the task updated to Approved state.
+/// Returns (updatedTask, wasAlreadyApproved) on success.
+/// Requires planExists = true; Planned → Approved; Approved → Approved (idempotent).
+/// Other states return InvalidTaskState error.
+let approveTask
+    (task: ItrTask)
+    (planExists: bool)
+    : Result<ItrTask * bool, BacklogError> =
+    match task.State with
+    | TaskState.Approved ->
+        Ok (task, true)
+    | TaskState.Planned ->
+        if planExists then
+            Ok ({ task with State = TaskState.Approved }, false)
+        else
+            Error (MissingPlanArtifact task.Id)
+    | other ->
+        Error (InvalidTaskState (task.Id, other))

@@ -191,6 +191,7 @@ type BacklogError =
     | MissingTitle
     | TaskNotFound of TaskId
     | InvalidTaskState of taskId: TaskId * current: TaskState
+    | MissingPlanArtifact of TaskId
 
 /// Computed status of a backlog item derived from its tasks
 type BacklogItemStatus =
