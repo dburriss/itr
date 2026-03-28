@@ -19,6 +19,7 @@ items:
   - backlog-view-improvements
   - task-plan
   - task-plan-approval
+  - task-spec
   - task-start
   - task-done
   - task-validate
