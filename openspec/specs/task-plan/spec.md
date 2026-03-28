@@ -34,7 +34,7 @@ The system SHALL reject `task plan` for tasks in states beyond `planned` (e.g. `
 
 #### Scenario: Error for task in approved state
 - **WHEN** `itr task plan <task-id>` is run for a task with state `approved`
-- **THEN** the command exits with a non-zero code, an error is printed, and no files are written
+- **THEN** the command exits with a non-zero code, an error is printed indicating an invalid state transition for the task, and no files are written
 
 #### Scenario: Error for task not found
 - **WHEN** `itr task plan unknown-id` is run and no such task exists
