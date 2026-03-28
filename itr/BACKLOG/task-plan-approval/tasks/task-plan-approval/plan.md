@@ -4,7 +4,6 @@ I now have a comprehensive understanding of the codebase. Here is the completed 
 
 **Task ID:** task-plan-approval
 **Backlog Item:** task-plan-approval
-**Repo:** itr
 
 ## Description
 
@@ -69,7 +68,7 @@ Allow users to explicitly approve a task plan so planning has a clear handoff be
 ## Acceptance Criteria
 
 - A command marks an existing task plan as approved
-- Approval metadata is recorded in task coordination data
+- Approval metadata is recorded in task coordination data i.e. in task.yaml `state: approved`
 - Approval is rejected when a task does not yet have a plan artifact
 - Approved status is visible in task list and task detail output
 
