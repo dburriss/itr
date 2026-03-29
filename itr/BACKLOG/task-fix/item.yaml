@@ -1,0 +1,17 @@
+id: task-fix
+title: Fix a task after validation findings
+repos:
+- itr
+type: feature
+priority: high
+summary: |-
+  Kicks off a fix session based on the findings from the validate phase. The validation results will be available for the task and the ai agent will be asked to fix them.
+acceptance_criteria:
+- All findings of the validate step are addressed
+- Build and test is run before starting work
+- A test is written to validate failure
+- All tests pass
+- Can be called multiple times
+dependencies:
+- task-validate
+created_at: 2026-03-29
