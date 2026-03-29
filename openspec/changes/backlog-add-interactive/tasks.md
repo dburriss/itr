@@ -1,0 +1,45 @@
+## 1. Prepare AddArgs
+
+- [ ] 1.1 Remove `[<Mandatory>]` attribute from `Backlog_Id` in `AddArgs` DU in `src/cli/Program.fs`
+- [ ] 1.2 Remove `[<Mandatory>]` attribute from `Title` in `AddArgs` DU in `src/cli/Program.fs`
+- [ ] 1.3 Add `| Interactive` case to `AddArgs` with `[<AltCommandLine("-i")>]` and appropriate CLI help text
+
+## 2. Runtime Validation
+
+- [ ] 2.1 In `handleBacklogAdd`, add a guard that checks: if `--interactive` is NOT set and `Backlog_Id` is missing, return a clear error message
+- [ ] 2.2 In `handleBacklogAdd`, add a guard that checks: if `--interactive` is NOT set and `Title` is missing, return a clear error message
+
+## 3. InteractivePrompts Module
+
+- [ ] 3.1 Create `src/cli/InteractivePrompts.fs` with module `InteractivePrompts`
+- [ ] 3.2 Add `InteractivePrompts.fs` to the `<Compile>` list in `src/cli/Itr.Cli.fsproj` before `Program.fs`
+- [ ] 3.3 Implement non-TTY detection: check `Console.IsInputRedirected` and return `Error` with a clear message when true
+- [ ] 3.4 Implement `backlog-id` prompt using `TextPrompt<string>` with slug validation (non-empty, no spaces)
+- [ ] 3.5 Implement `title` prompt using `TextPrompt<string>` (required, non-empty)
+- [ ] 3.6 Implement `type` prompt using `SelectionPrompt` with choices derived from `BacklogItemType` cases (`feature`, `bug`, `chore`, `spike`)
+- [ ] 3.7 Implement `priority` prompt using `SelectionPrompt` with choices `["low"; "medium"; "high"]`
+- [ ] 3.8 Implement `summary` prompt using `TextPrompt<string>` (optional, allow empty)
+- [ ] 3.9 Implement `repo` logic: auto-fill for single-repo products; `SelectionPrompt` from product repos for multi-repo products
+- [ ] 3.10 Implement `dependencies` prompt using `MultiSelectionPrompt` populated from `IBacklogStore.ListBacklogItems` sorted by id, allowing zero selections
+- [ ] 3.11 Implement `acceptance_criteria` loop: prompt for entries one at a time until user submits an empty entry
+- [ ] 3.12 Implement confirmation summary: display all collected field values and ask yes/no before returning
+- [ ] 3.13 Return `Ok CreateBacklogItemInput` on confirmation, `Error "Cancelled"` on rejection
+
+## 4. Wire Interactive Flow into handleBacklogAdd
+
+- [ ] 4.1 In `handleBacklogAdd`, detect `--interactive` flag and call `InteractivePrompts.promptBacklogAdd`
+- [ ] 4.2 Merge explicit CLI args as pre-filled defaults (skip prompts for fields already provided)
+- [ ] 4.3 On `Error` from prompt function, print error message and exit with non-zero code
+- [ ] 4.4 On `Ok input`, pass the merged `CreateBacklogItemInput` to the existing create use case
+
+## 5. Tests
+
+- [ ] 5.1 Add unit tests for the argument-merging logic (explicit args override interactive defaults)
+- [ ] 5.2 Add unit tests for non-TTY guard returning an appropriate error
+- [ ] 5.3 Add unit tests for missing `Backlog_Id` without `--interactive` returning an error
+- [ ] 5.4 Add unit tests for missing `Title` without `--interactive` returning an error
+
+## 6. Verify
+
+- [ ] 6.1 Run `dotnet build` and confirm zero errors
+- [ ] 6.2 Run `dotnet test` and confirm all tests pass
