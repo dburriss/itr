@@ -14,6 +14,7 @@
     <Compile Include="TaskPlanAcceptanceTests.fs" />
     <Compile Include="TaskApproveAcceptanceTests.fs" />
     <Compile Include="BacklogAcceptanceTests.fs" />
+    <Compile Include="BacklogAddInteractiveTests.fs" />
     <Compile Include="YamlAdapterTests.fs" />
     <Compile Include="OutputFormatTests.fs" />
     <Compile Include="Tests.fs" />
@@ -28,11 +29,13 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="Testably.Abstractions" Version="10.1.0" />
     <PackageReference Include="Testably.Abstractions.Testing" Version="5.3.1" />
+    <PackageReference Include="Spectre.Console" Version="0.49.1" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\features\Itr.Features.fsproj" />
     <ProjectReference Include="..\..\src\adapters\Itr.Adapters.fsproj" />
+    <ProjectReference Include="..\..\src\cli\Itr.Cli.fsproj" />
   </ItemGroup>
 
 </Project>

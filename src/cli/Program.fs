@@ -38,13 +38,14 @@ type TakeArgs =
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
 type AddArgs =
-    | [<MainCommand; Mandatory>] Backlog_Id of backlog_id: string
-    | [<Mandatory>] Title of title: string
+    | [<MainCommand>] Backlog_Id of backlog_id: string
+    | Title of title: string
     | Repo of repo: string
     | Item_Type of item_type: string
     | Summary of summary: string
     | Priority of priority: string
     | Depends_On of depends_on: string
+    | [<AltCommandLine("-i")>] Interactive
 
     interface IArgParserTemplate with
         member this.Usage =
@@ -56,6 +57,7 @@ type AddArgs =
             | Summary _ -> "longer description of the item"
             | Priority _ -> "priority label (e.g. high, medium, low)"
             | Depends_On _ -> "backlog item id this item depends on (can be repeated)"
+            | Interactive -> "prompt for each field interactively"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
 type ListArgs =
@@ -1150,51 +1152,106 @@ let private handleBacklogAdd
     (outputJson: bool)
     : Result<unit, string> =
     let coordRoot = resolved.CoordRoot.AbsolutePath
-    let rawBacklogId = addArgs.GetResult AddArgs.Backlog_Id
-    let title = addArgs.GetResult AddArgs.Title
+    let isInteractive = addArgs.Contains AddArgs.Interactive
+    let rawBacklogIdOpt = addArgs.TryGetResult AddArgs.Backlog_Id
+    let titleOpt = addArgs.TryGetResult AddArgs.Title
     let repo = addArgs.TryGetResult AddArgs.Repo
     let itemType = addArgs.TryGetResult AddArgs.Item_Type
     let summary = addArgs.TryGetResult AddArgs.Summary
     let priority = addArgs.TryGetResult AddArgs.Priority
     let dependsOn = addArgs.GetResults AddArgs.Depends_On
 
-    let productConfig = toProductConfig resolved.Definition
-    let backlogStore = deps :> IBacklogStore
+    // Runtime validation for non-interactive mode
+    if not isInteractive then
+        match rawBacklogIdOpt with
+        | None -> Error "--backlog-id is required when not using --interactive"
+        | Some _ ->
+        match titleOpt with
+        | None -> Error "--title is required when not using --interactive"
+        | Some _ ->
 
-    // Check for duplicate
-    match BacklogId.tryCreate rawBacklogId with
-    | Error _ -> Error $"Invalid backlog id '{rawBacklogId}': must match [a-z0-9][a-z0-9-]*"
-    | Ok backlogId ->
-        if backlogStore.BacklogItemExists coordRoot backlogId then
-            Error(formatBacklogError (DuplicateBacklogId backlogId))
-        else
-            let input: Backlog.CreateBacklogItemInput =
-                { BacklogId = rawBacklogId
-                  Title = title
-                  Repos = repo |> Option.toList
-                  ItemType = itemType
-                  Priority = priority
-                  Summary = summary
-                  AcceptanceCriteria = []
-                  DependsOn = dependsOn }
+        let rawBacklogId = rawBacklogIdOpt.Value
+        let title = titleOpt.Value
+        let productConfig = toProductConfig resolved.Definition
+        let backlogStore = deps :> IBacklogStore
 
-            let today = DateOnly.FromDateTime(DateTime.UtcNow)
+        // Check for duplicate
+        match BacklogId.tryCreate rawBacklogId with
+        | Error _ -> Error $"Invalid backlog id '{rawBacklogId}': must match [a-z0-9][a-z0-9-]*"
+        | Ok backlogId ->
+            if backlogStore.BacklogItemExists coordRoot backlogId then
+                Error(formatBacklogError (DuplicateBacklogId backlogId))
+            else
+                let input: Backlog.CreateBacklogItemInput =
+                    { BacklogId = rawBacklogId
+                      Title = title
+                      Repos = repo |> Option.toList
+                      ItemType = itemType
+                      Priority = priority
+                      Summary = summary
+                      AcceptanceCriteria = []
+                      DependsOn = dependsOn }
 
-            match Backlog.createBacklogItem productConfig input today with
-            | Error e -> Error(formatBacklogError e)
-            | Ok item ->
-                match backlogStore.WriteBacklogItem coordRoot item with
+                let today = DateOnly.FromDateTime(DateTime.UtcNow)
+
+                match Backlog.createBacklogItem productConfig input today with
                 | Error e -> Error(formatBacklogError e)
-                | Ok() ->
-                    let id = BacklogId.value item.Id
-                    let path = System.IO.Path.Combine(coordRoot, "BACKLOG", id, "item.yaml")
+                | Ok item ->
+                    match backlogStore.WriteBacklogItem coordRoot item with
+                    | Error e -> Error(formatBacklogError e)
+                    | Ok() ->
+                        let id = BacklogId.value item.Id
+                        let path = System.IO.Path.Combine(coordRoot, "BACKLOG", id, "item.yaml")
 
-                    if outputJson then
-                        printfn """{ "ok": true, "id": "%s" }""" id
-                    else
-                        printfn "Created backlog item '%s' → %s" id path
+                        if outputJson then
+                            printfn """{ "ok": true, "id": "%s" }""" id
+                        else
+                            printfn "Created backlog item '%s' → %s" id path
 
-                    Ok()
+                        Ok()
+    else
+        // Interactive mode
+        let backlogStore = deps :> IBacklogStore
+        let productConfig = toProductConfig resolved.Definition
+
+        let prefilled: InteractivePrompts.PrefilledArgs =
+            { BacklogId = rawBacklogIdOpt
+              Title = titleOpt
+              Repo = repo
+              ItemType = itemType
+              Priority = priority
+              Summary = summary
+              DependsOn = dependsOn }
+
+        match InteractivePrompts.promptBacklogAdd backlogStore coordRoot productConfig prefilled with
+        | Error msg ->
+            eprintfn "Error: %s" msg
+            Error msg
+        | Ok input ->
+            // Check for duplicate before creating
+            match BacklogId.tryCreate input.BacklogId with
+            | Error _ -> Error $"Invalid backlog id '{input.BacklogId}': must match [a-z0-9][a-z0-9-]*"
+            | Ok backlogId ->
+                if backlogStore.BacklogItemExists coordRoot backlogId then
+                    Error(formatBacklogError (DuplicateBacklogId backlogId))
+                else
+                    let today = DateOnly.FromDateTime(DateTime.UtcNow)
+
+                    match Backlog.createBacklogItem productConfig input today with
+                    | Error e -> Error(formatBacklogError e)
+                    | Ok item ->
+                        match backlogStore.WriteBacklogItem coordRoot item with
+                        | Error e -> Error(formatBacklogError e)
+                        | Ok() ->
+                            let id = BacklogId.value item.Id
+                            let path = System.IO.Path.Combine(coordRoot, "BACKLOG", id, "item.yaml")
+
+                            if outputJson then
+                                printfn """{ "ok": true, "id": "%s" }""" id
+                            else
+                                printfn "Created backlog item '%s' → %s" id path
+
+                            Ok()
 
 // ---------------------------------------------------------------------------
 // product register handler
