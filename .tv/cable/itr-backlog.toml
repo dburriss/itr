@@ -6,10 +6,9 @@ description = "Browse backlog items and take them"
 [source]
 # Fields: id\ttype\tpriority\tstatus\tview\ttaskCount\tcreatedAt\ttitle
 command = [
-    "mise run backlog-list --output text",
-    "mise run backlog-list --status in-progress --output text",
-    "mise run backlog-list --status planned --output text",
     "mise run backlog-list --status created --output text",
+    "mise run backlog-list --status planning --output text",
+    "mise run backlog-list --status planned --output text",
 ]
 display = "{split:\t:3|pad:12} {split:\t:2|pad:8} {split:\t:0}"
 output = "{split:\t:0}"
