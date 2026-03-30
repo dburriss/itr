@@ -15,7 +15,7 @@ summary: >
 
 acceptance_criteria:
   - A command transitions a task from approved to in-progress
-  - Starting a task requires an approved plan
+  - Starting a task requires opencode specs to be present and valid
   - The task state transition is recorded in task coordination data
   - Invalid transitions return clear structured errors
 
