@@ -184,10 +184,11 @@ let ``5.1 explicit depends-on skips dependencies prompt`` () =
         if Directory.Exists(root) then Directory.Delete(root, true)
 
 // ---------------------------------------------------------------------------
-// 5.2 Non-TTY guard returns error
+// 5.2 Non-TTY guard (skipped - Zellij panes are interactive but report stdin
+//     as redirected; Spectre.Console handles its own TTY detection)
 // ---------------------------------------------------------------------------
 
-[<Fact>]
+[<Fact(Skip = "Non-TTY guard disabled: Zellij command panes report stdin as redirected but are still interactive")>]
 let ``5.2 non-TTY returns error with helpful message`` () =
     let (store, coordRoot, root) = emptyBacklogStore()
     try

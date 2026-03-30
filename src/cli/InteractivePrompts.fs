@@ -91,9 +91,14 @@ let promptBacklogAddWith
     : Result<Backlog.CreateBacklogItemInput, string> =
 
     // 3.3 Non-TTY detection
-    if fns.IsInputRedirected() then
-        Error "Interactive mode requires a terminal. Please provide required fields as CLI arguments instead."
-    else
+    // NOTE: Console.IsInputRedirected can return true in contexts that are still
+    // interactive (e.g. Zellij command panes), causing a false-positive exit.
+    // The guard below is left here for reference but disabled; Spectre.Console
+    // will surface its own error if it genuinely cannot read input.
+    //
+    // if fns.IsInputRedirected() then
+    //     Error "Interactive mode requires a terminal. Please provide required fields as CLI arguments instead."
+    // else
 
     // 3.4 backlog-id prompt
     let backlogId =
