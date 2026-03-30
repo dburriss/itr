@@ -34,6 +34,10 @@ description = "Full pre-push verification: build, format check, test."
 run = "dotnet run --project src/cli/Itr.Cli.fsproj --"
 description = "Run the Itr CLI using dotnet run."
 
+[tasks.itr-help]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- --help"
+description = "Show help for the Itr CLI."
+
 [tasks.profiles]
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- profiles json"
 description = "Run the profiles command using dotnet run."
