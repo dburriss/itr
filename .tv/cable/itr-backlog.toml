@@ -36,5 +36,5 @@ mode = "fork"
 
 [actions.add]
 description = "Add new backlog item (interactive)"
-command = "mise run backlog-add"
-mode = "execute"
+command = "zellij action new-pane --floating --close-on-exit -- mise run backlog-add"
+mode = "fork"
