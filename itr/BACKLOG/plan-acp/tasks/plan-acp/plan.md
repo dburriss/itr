@@ -152,5 +152,5 @@ in automated acceptance tests (requires a live agent subprocess).
 
 ## Open Questions
 
-- Should `args` in `AgentConfig` support shell-style quoting (e.g. `--flag "value with spaces"`), or is a string array sufficient? A string array is simpler and avoids a shell-parsing dependency.
-- Should the local `itr.json` be documented as an opt-in file (user creates it manually) or should `itr product init` scaffold it? Out of scope for this task; manual creation is sufficient for now.
+- ~~Should `args` in `AgentConfig` support shell-style quoting (e.g. `--flag "value with spaces"`), or is a string array sufficient?~~ **Resolved:** String array is sufficient; no shell-parsing dependency.
+- ~~Should the local `itr.json` be documented as an opt-in file (user creates it manually) or should `itr product init` scaffold it?~~ **Resolved:** Out of scope. `itr.json` is created by `itr init`; manual creation is sufficient for this task.
