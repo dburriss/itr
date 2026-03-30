@@ -1,0 +1,16 @@
+id: task-spec
+title: Create Opencode Spec docs for the given plan
+repos:
+- itr
+type: feature
+priority: high
+summary: |-
+  Before implementing we want to generate the openspec docs to guide the implementation. This requires running /opsx-ff <path-to-plan.md>
+acceptance_criteria:
+- Check that plan exists before running
+- Checks that status is approved before running
+- After proposal.md exists
+- After design.md exists
+- After at least 1 spec exists
+dependencies: 
+created_at: 2026-03-30
