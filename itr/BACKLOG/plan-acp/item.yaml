@@ -1,0 +1,17 @@
+id: plan-acp
+title: Use ACP protocol for AI planning
+repos:
+- itr
+type: feature
+priority: medium
+summary: |-
+  Replace the OpenCode HTTP adapter with an ACP stdio adapter so the plan command works with any ACP-compatible agent. OpenCode HTTP remains the default; ACP is opt-in via config.
+acceptance_criteria:
+- Global itr.json supports an agent section (protocol, command, args)
+- A local itr.json at the product root can override the global agent config
+- New AcpHarnessAdapter launches the agent as a subprocess and communicates via JSON-RPC over stdio
+- Agent message chunks are streamed to stdout as they arrive
+- protocol defaults to opencode-http; existing behaviour is unchanged
+- plan command works end-to-end with protocol set to acp
+dependencies: 
+created_at: 2026-03-30
