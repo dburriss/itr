@@ -27,8 +27,14 @@ size = 66
 [keybindings]
 shortcut = "f7"
 ctrl-t = "actions:take"
+ctrl-a = "actions:add"
 
 [actions.take]
 description = "Take backlog item (create tasks)"
 command = "mise run backlog-take '{split:\t:0}'"
 mode = "fork"
+
+[actions.add]
+description = "Add new backlog item (interactive)"
+command = "mise run backlog-add"
+mode = "execute"
