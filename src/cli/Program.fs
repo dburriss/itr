@@ -728,6 +728,25 @@ let private handleTaskPlan
                         | Error e -> Error e
                         | Ok skeleton ->
                             if useAi then
+                                // Load global agent config from the active profile
+                                let globalAgentConfig = resolved.Profile.AgentConfig
+
+                                // Load local config from the product root and merge
+                                let (ProductRoot productRoot) = resolved.Product.Root
+                                let agentConfig =
+                                    match PortfolioAdapter.LoadLocalConfig productRoot with
+                                    | Some localConfig -> localConfig
+                                    | None -> globalAgentConfig
+
+                                // Select adapter based on protocol
+                                let harness : IAgentHarness =
+                                    match agentConfig.Protocol with
+                                    | "acp" ->
+                                        AcpHarnessAdapter(agentConfig.Command, agentConfig.Args, coordRoot)
+                                        :> IAgentHarness
+                                    | _ ->
+                                        OpenCodeHarnessAdapter() :> IAgentHarness
+
                                 // Send the rendered skeleton to the AI to fill the open sections
                                 match fileSystem.ReadFile promptPath with
                                 | Error _ ->
@@ -738,7 +757,6 @@ let private handleTaskPlan
                                         |> add "planSkeleton" skeleton
                                         |> fromNoneHtmlText promptTemplate
 
-                                    let harness = deps :> IAgentHarness
                                     harness.Prompt renderedPrompt debug
                                     |> Result.mapError (fun e -> e)
                             else

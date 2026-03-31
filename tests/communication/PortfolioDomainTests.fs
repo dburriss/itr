@@ -20,7 +20,8 @@ let private mkProductRef root = { Root = ProductRoot root }
 let private mkProfile name products =
     { Name = ProfileName.create name
       Products = products
-      GitIdentity = None }
+      GitIdentity = None
+      AgentConfig = { Protocol = "opencode-http"; Command = "opencode"; Args = [] } }
 
 /// Test deps for environment operations
 type TestEnvDeps(envVars: Map<string, string>) =
@@ -363,7 +364,8 @@ let private mkRegPortfolio profileName products =
     let profile =
         { Name = ProfileName.create profileName
           Products = products
-          GitIdentity = None }
+          GitIdentity = None
+          AgentConfig = { Protocol = "opencode-http"; Command = "opencode"; Args = [] } }
 
     DomainPortfolio.tryCreate (Some(ProfileName.create profileName)) [ profile ]
     |> Result.defaultWith (fun e -> failwithf "failed to build portfolio: %A" e)
@@ -519,7 +521,8 @@ let private mkInitPortfolio () =
     let profile =
         { Name = ProfileName.create "default"
           Products = []
-          GitIdentity = None }
+          GitIdentity = None
+          AgentConfig = { Protocol = "opencode-http"; Command = "opencode"; Args = [] } }
 
     DomainPortfolio.tryCreate (Some(ProfileName.create "default")) [ profile ]
     |> Result.defaultWith (fun e -> failwithf "failed to build test portfolio: %A" e)

@@ -40,7 +40,13 @@ A `<productRoot>/itr.json` file (gitignored) containing only an `agent` section 
 If the `agent` section is absent from the global config or the protocol is unrecognised, fall back to `OpenCodeHarnessAdapter`. This preserves backward compatibility without any migration.
 
 ### ACP message sequence
-Follow the ACP spec: `initialize` (id=0) → `session/new { cwd }` (extract `sessionId`) → `session/prompt { sessionId, prompt }` → read `session/update` chunks until final `session/prompt` response → kill process.
+Follow the ACP spec: `initialize` (id=0, `protocolVersion: 1` integer) → `session/new { cwd, mcpServers: [] }` (extract `sessionId`) → `session/prompt { sessionId, prompt: [{type, text}] }` → read `session/update` notifications until final `session/prompt` response → kill process.
+
+`session/update` chunk notifications have the shape:
+```json
+{"method":"session/update","params":{"sessionId":"...","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"..."}}}}
+```
+Extract text from `params.update.content.text` when `params.update.sessionUpdate == "agent_message_chunk"`.
 
 ### Timeout and error handling
 Set a configurable (or fixed) timeout on the subprocess. Kill on timeout and return `Error`. Non-JSON stdout lines from the subprocess are logged to stderr in debug mode and skipped.

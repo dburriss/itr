@@ -10,6 +10,7 @@
     <Compile Include="PortfolioAdapter.fs" />
     <Compile Include="YamlAdapter.fs" />
     <Compile Include="OpenCodeAdapter.fs" />
+    <Compile Include="AcpAdapter.fs" />
   </ItemGroup>
 
   <ItemGroup>

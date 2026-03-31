@@ -61,10 +61,10 @@ terminates the process when done.
    `AcpHarnessAdapter(command, args, cwd)` implementing `IAgentHarness`:
    - Launch subprocess via `System.Diagnostics.Process` with stdin/stdout redirected
    - Write newline-delimited JSON-RPC messages to stdin using `System.Text.Json`
-   - Send `initialize` (id=0), read response
-   - Send `session/new { cwd }`, read response → extract `sessionId`
+   - Send `initialize` (id=0, `protocolVersion: 1` integer), read response
+   - Send `session/new { cwd, mcpServers: [] }`, read response → extract `sessionId`
    - Send `session/prompt { sessionId, prompt: [{type:"text", text: <prompt>}] }`
-   - Read loop: on `session/update` with `agent_message_chunk` → print text chunk to stdout; on final `session/prompt` response → stop
+   - Read loop: on `session/update` where `params.update.sessionUpdate == "agent_message_chunk"` → print `params.update.content.text` to stdout; on final `session/prompt` response (has `id` + `result`) → stop
    - Kill subprocess; return `Ok (accumulated text)` or `Error message`
    - Capture stderr and emit on debug
 
@@ -127,10 +127,10 @@ No changes to feature or domain usecases. `StubHarness` in acceptance tests is u
 
 ### Unit tests (new)
 Pure-function tests for JSON-RPC message construction and response parsing:
-- `initialize` request serialises correctly
-- `session/new` request includes correct `cwd`
-- `session/prompt` request wraps text in `ContentBlock`
-- `session/update` chunk extraction returns text content
+- `initialize` request: `protocolVersion` is integer `1`, not a string
+- `session/new` request includes correct `cwd` and empty `mcpServers` array
+- `session/prompt` request uses `prompt: [{type:"text", text:"..."}]` (not `messages`)
+- `session/update` chunk extraction reads `params.update.content.text` when `params.update.sessionUpdate == "agent_message_chunk"`
 - `session/new` response `sessionId` extraction handles valid and malformed input
 
 ### Acceptance tests (existing, unchanged)

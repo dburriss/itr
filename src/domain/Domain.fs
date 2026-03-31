@@ -40,10 +40,17 @@ and RepoConfig = { Path: string; Url: string option }
 
 type ProductRef = { Root: ProductRoot }
 
+/// Configuration for the AI agent harness
+type AgentConfig =
+    { Protocol: string
+      Command: string
+      Args: string list }
+
 type Profile =
     { Name: ProfileName
       Products: ProductRef list
-      GitIdentity: GitIdentity option }
+      GitIdentity: GitIdentity option
+      AgentConfig: AgentConfig }
 
 type Portfolio =
     { DefaultProfile: ProfileName option

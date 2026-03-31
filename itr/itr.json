@@ -1,0 +1,7 @@
+{
+  "agent": {
+    "protocol": "acp",
+    "command": "opencode",
+    "args": ["acp"]
+  }
+}

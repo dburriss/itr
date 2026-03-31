@@ -167,7 +167,8 @@ let addProfile<'deps when 'deps :> IPortfolioConfig>
                     let newProfile =
                         { Name = profileName
                           Products = []
-                          GitIdentity = input.GitIdentity }
+                          GitIdentity = input.GitIdentity
+                          AgentConfig = { Protocol = "opencode-http"; Command = "opencode"; Args = [] } }
 
                     let updatedProfiles = portfolio.Profiles |> Map.add profileName newProfile
 

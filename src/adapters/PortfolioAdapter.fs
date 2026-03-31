@@ -8,9 +8,16 @@ open System.Collections.Generic
 open Itr.Domain
 
 [<CLIMutable>]
+type AgentConfigDto =
+    { protocol: string
+      command: string
+      args: string array }
+
+[<CLIMutable>]
 type ProfileDto =
     { products: string array
-      gitIdentity: GitIdentity option }
+      gitIdentity: GitIdentity option
+      agent: AgentConfigDto option }
 
 [<CLIMutable>]
 type PortfolioDto =
@@ -45,6 +52,18 @@ let expandPath (homeDir: string) (value: string) : string =
 
         expandedHome |> expandUnixEnvVars |> Environment.ExpandEnvironmentVariables
 
+let private defaultAgentConfig () : AgentConfig =
+    { Protocol = "opencode-http"; Command = "opencode"; Args = [] }
+
+let private mapAgentConfig (dto: AgentConfigDto option) : AgentConfig =
+    match dto with
+    | None -> defaultAgentConfig ()
+    | Some d ->
+        let protocol = if String.IsNullOrWhiteSpace(d.protocol) then "opencode-http" else d.protocol
+        let command = if String.IsNullOrWhiteSpace(d.command) then "opencode" else d.command
+        let args = if isNull d.args then [] else d.args |> Array.toList
+        { Protocol = protocol; Command = command; Args = args }
+
 let private mapProduct homeDir (rootPath: string) : ProductRef =
     { Root = ProductRoot(expandPath homeDir rootPath) }
 
@@ -55,7 +74,8 @@ let private mapProfile homeDir (name: string) (dto: ProfileDto) =
 
     { Name = ProfileName.create name
       Products = productRefs
-      GitIdentity = dto.gitIdentity }
+      GitIdentity = dto.gitIdentity
+      AgentConfig = mapAgentConfig dto.agent }
 
 let private mapPortfolio homeDir (dto: PortfolioDto) =
     if isNull dto.profiles then
@@ -121,9 +141,15 @@ let writeConfig (fs: IFileSystem) (homeDir: string) (path: string) (portfolio: P
                 |> List.map (fun p -> let (ProductRoot root) = p.Root in root)
                 |> List.toArray
 
+            let agentDto =
+                { protocol = profile.AgentConfig.Protocol
+                  command = profile.AgentConfig.Command
+                  args = profile.AgentConfig.Args |> List.toArray }
+
             profiles.[name] <-
                 { products = products
-                  gitIdentity = profile.GitIdentity }
+                  gitIdentity = profile.GitIdentity
+                  agent = Some agentDto }
 
         let dto =
             { defaultProfile = portfolio.DefaultProfile |> Option.map ProfileName.value
@@ -158,3 +184,25 @@ type PortfolioConfigAdapter(env: IEnvironment, fs: IFileSystem) =
         member _.LoadConfig path = readConfig fs homeDir path
 
         member _.SaveConfig path portfolio = writeConfig fs homeDir path portfolio
+
+[<CLIMutable>]
+type LocalConfigDto = { agent: AgentConfigDto option }
+
+/// Read the optional `<productRoot>/itr.json` and extract the `agent` section.
+/// Returns `Some AgentConfig` if the file exists and contains an `agent` section;
+/// returns `None` if the file is absent or has no `agent` section.
+let LoadLocalConfig (productRoot: string) : AgentConfig option =
+    let path = System.IO.Path.Combine(productRoot, "itr.json")
+
+    if not (System.IO.File.Exists(path)) then
+        None
+    else
+        try
+            let json = System.IO.File.ReadAllText(path)
+            let dto = JsonSerializer.Deserialize<LocalConfigDto>(json, jsonOptions ()) |> Option.ofObj
+
+            match dto with
+            | None -> None
+            | Some d -> d.agent |> Option.map (fun a -> mapAgentConfig (Some a))
+        with _ ->
+            None

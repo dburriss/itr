@@ -321,10 +321,12 @@ let ``writeConfig then readConfig round-trip preserves defaultProfile and all pr
                 (Some(ProfileName.create "work"))
                 [ { Name = ProfileName.create "work"
                     Products = []
-                    GitIdentity = None }
+                    GitIdentity = None
+                    AgentConfig = { Protocol = "opencode-http"; Command = "opencode"; Args = [] } }
                   { Name = ProfileName.create "personal"
                     Products = []
-                    GitIdentity = Some { Name = "Alice"; Email = Some "alice@example.com" } } ]
+                    GitIdentity = Some { Name = "Alice"; Email = Some "alice@example.com" }
+                    AgentConfig = { Protocol = "opencode-http"; Command = "opencode"; Args = [] } } ]
             |> Result.defaultWith (fun e -> failwithf "failed to build test portfolio: %A" e)
 
         match writeConfig fs homeDir configPath portfolio with
