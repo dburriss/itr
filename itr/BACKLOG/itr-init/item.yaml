@@ -9,14 +9,14 @@ summary: >
 
 acceptance_criteria:
 - A command initializes itr.json with provided settings when values are submitted
-- A command interactively prompts for settings and initializes itr.json when no values are submitted
+- A command interactively prompts for settings and initializes itr.json when no values are submitted if --interactive flag is provided
 - The command validates submitted settings and returns clear errors for invalid input
 - The command does not overwrite existing itr.json without confirmation
-- The command detects if in an existing product root and prompts to register that product root directory
+- The command detects if in an existing product root and prompts to register that product root directory if it is not already registered
 - The command can create a local settings file or a global settings file based on user choice
-- The command supports initializing settings for the agent protocol (opencode-http or acp)
 - The command creates itr.json in ~/.config/itr/ for global settings 
 - The command creates itr.json in ./.itr/itr.json for local settings (--local flag)
+- The command supports initializing settings for the agent protocol (opencode-http or acp)
 
 dependencies: []
 created_at: 2026-03-20
