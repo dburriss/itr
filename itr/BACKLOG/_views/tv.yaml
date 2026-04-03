@@ -1,0 +1,13 @@
+id: tv
+
+description: Still needed to navigate and action via television.
+
+items:
+  - profile-command-rename
+  - profile-list
+  - profile-selection
+  - product-list
+  - product-info
+  - backlog-item-path
+  - task-paths
+

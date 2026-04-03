@@ -5,4 +5,5 @@ description: Backlog management - creating items, views, and managing view membe
 items:
   - backlog-view-create
   - backlog-view-membership
+  - profile-info
   - backlog-next
