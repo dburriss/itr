@@ -1518,7 +1518,7 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                             |> Result.mapError formatPortfolioError
                             |> Result.map (fun () -> printfn "Added profile '%s'." name)
 
-                | None -> Error "Specify a profiles subcommand (e.g. profiles add <name>)"
+                | None -> Error "Specify a profile subcommand (e.g. profile add <name>)"
 
             | None ->
                 match results.TryGetResult Product with
