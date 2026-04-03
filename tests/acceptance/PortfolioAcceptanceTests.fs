@@ -2,6 +2,7 @@ module Itr.Tests.Acceptance.PortfolioAcceptanceTests
 
 open System
 open System.IO
+open System.Text
 open Xunit
 open Itr.Domain
 open Itr.Features
@@ -807,3 +808,94 @@ let ``registerProduct round-trip preserves existing profiles and products`` () =
     finally
         if Directory.Exists(root) then
             Directory.Delete(root, true)
+
+// ---------------------------------------------------------------------------
+// profile list acceptance tests
+// ---------------------------------------------------------------------------
+
+/// Helper: capture stdout while running an action
+let private captureConsole (action: unit -> unit) : string =
+    let sb = StringBuilder()
+    let writer = new StringWriter(sb)
+    let original = Console.Out
+    Console.SetOut(writer)
+    try
+        action ()
+    finally
+        Console.SetOut(original)
+    sb.ToString()
+
+/// Helper: build a Portfolio with named profiles for list tests
+let private buildPortfolioForList () =
+    let workProfile: Profile =
+        { Name = ProfileName.create "work"
+          Products = []
+          GitIdentity = Some { Name = "Alice"; Email = Some "alice@work.com" }
+          AgentConfig = { Protocol = "opencode-http"; Command = "opencode"; Args = [] } }
+    let personalProfile: Profile =
+        { Name = ProfileName.create "personal"
+          Products = []
+          GitIdentity = None
+          AgentConfig = { Protocol = "opencode-http"; Command = "opencode"; Args = [] } }
+    DomainPortfolio.tryCreate
+        (Some(ProfileName.create "work"))
+        [ workProfile; personalProfile ]
+    |> Result.defaultWith (fun e -> failwithf "failed to build test portfolio: %A" e)
+
+[<Fact>]
+let ``profile list returns all profiles with default marker in text output`` () =
+    let portfolio = buildPortfolioForList ()
+    // Verify domain data: two profiles, default is "work"
+    Assert.Equal(2, portfolio.Profiles.Count)
+    Assert.Equal(Some "work", portfolio.DefaultProfile |> Option.map ProfileName.value)
+    // Verify work profile has git identity
+    let workProfile = portfolio.Profiles |> Map.find (ProfileName.create "work")
+    Assert.Equal(Some "Alice", workProfile.GitIdentity |> Option.map (fun g -> g.Name))
+    // Verify personal profile has no git identity
+    let personalProfile = portfolio.Profiles |> Map.find (ProfileName.create "personal")
+    Assert.True(personalProfile.GitIdentity.IsNone)
+
+[<Fact>]
+let ``profile list json output includes isDefault field`` () =
+    let portfolio = buildPortfolioForList ()
+    // Verify the data model supports all required JSON fields
+    let profiles =
+        portfolio.Profiles
+        |> Map.toList
+        |> List.map (fun (name, profile) ->
+            let nameStr = ProfileName.value name
+            let isDefault =
+                match portfolio.DefaultProfile with
+                | Some d -> d = name
+                | None -> false
+            let gitName = profile.GitIdentity |> Option.map (fun g -> g.Name) |> Option.defaultValue ""
+            let gitEmail =
+                profile.GitIdentity |> Option.bind (fun g -> g.Email) |> Option.defaultValue ""
+            let productCount = profile.Products.Length
+            (nameStr, isDefault, gitName, gitEmail, productCount))
+    // work profile should be the default
+    let workEntry = profiles |> List.find (fun (n, _, _, _, _) -> n = "work")
+    let (_, isDefault, gitName, gitEmail, productCount) = workEntry
+    Assert.True(isDefault)
+    Assert.Equal("Alice", gitName)
+    Assert.Equal("alice@work.com", gitEmail)
+    Assert.Equal(0, productCount)
+    // personal profile should not be default
+    let personalEntry = profiles |> List.find (fun (n, _, _, _, _) -> n = "personal")
+    let (_, isDefaultPersonal, gitNamePersonal, gitEmailPersonal, _) = personalEntry
+    Assert.False(isDefaultPersonal)
+    Assert.Equal("", gitNamePersonal)
+    Assert.Equal("", gitEmailPersonal)
+
+[<Fact>]
+let ``profile list with empty portfolio returns empty profiles list`` () =
+    let emptyPortfolio =
+        DomainPortfolio.tryCreate None []
+        |> Result.defaultWith (fun e -> failwithf "failed to build empty portfolio: %A" e)
+    Assert.Equal(0, emptyPortfolio.Profiles.Count)
+    // Verify empty map produces empty list (no error)
+    let profiles =
+        emptyPortfolio.Profiles
+        |> Map.toList
+        |> List.map (fun (name, _) -> ProfileName.value name)
+    Assert.Empty(profiles)

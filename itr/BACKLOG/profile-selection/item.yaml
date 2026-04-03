@@ -18,10 +18,6 @@ acceptance_criteria:
   - Missing resolved profiles return a clear error
   - Behavior is covered by acceptance and domain-facing tests
 
-constraints:
-  - Do not persist a current_profile setting
-  - Do not write to shell environment configuration
-
 dependencies:
   - settings-bootstrap
 

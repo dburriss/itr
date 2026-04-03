@@ -116,13 +116,24 @@ type ProfileAddArgs =
             | Set_Default -> "set this profile as the default"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
+type ProfileListArgs =
+    | Output of output: string
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Output _ -> "output mode: table (default) | json | text"
+
+[<CliPrefix(CliPrefix.DoubleDash)>]
 type ProfileArgs =
     | [<CliPrefix(CliPrefix.None)>] Add of ParseResults<ProfileAddArgs>
+    | [<CliPrefix(CliPrefix.None)>] List of ParseResults<ProfileListArgs>
 
     interface IArgParserTemplate with
         member this.Usage =
             match this with
             | Add _ -> "add a new profile to the portfolio"
+            | List _ -> "list all profiles in the portfolio"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
 type ProductInitArgs =
@@ -819,6 +830,70 @@ let private handleTaskApprove
                     | Ok () ->
                         printfn "Task '%s' approved." rawTaskId
                         Ok()
+
+// ---------------------------------------------------------------------------
+// profile list handler
+// ---------------------------------------------------------------------------
+
+let private handleProfileList
+    (configPath: string)
+    (portfolio: Portfolio)
+    (listArgs: ParseResults<ProfileListArgs>)
+    : Result<unit, string> =
+    let format = listArgs.TryGetResult ProfileListArgs.Output |> parseOutputFormat
+
+    let profiles =
+        portfolio.Profiles
+        |> Map.toList
+        |> List.map (fun (name, profile) ->
+            let nameStr = ProfileName.value name
+            let isDefault =
+                match portfolio.DefaultProfile with
+                | Some d -> d = name
+                | None -> false
+            let gitName =
+                profile.GitIdentity |> Option.map (fun g -> g.Name) |> Option.defaultValue ""
+            let gitEmail =
+                profile.GitIdentity
+                |> Option.bind (fun g -> g.Email)
+                |> Option.defaultValue ""
+            let productCount = profile.Products.Length
+            (nameStr, isDefault, gitName, gitEmail, productCount))
+
+    match format with
+    | JsonOutput ->
+        let items =
+            profiles
+            |> List.map (fun (name, isDefault, gitName, gitEmail, productCount) ->
+                let isDefaultStr = if isDefault then "true" else "false"
+                sprintf "  { \"name\": \"%s\", \"isDefault\": %s, \"gitName\": \"%s\", \"gitEmail\": \"%s\", \"productCount\": %d }"
+                    name isDefaultStr gitName gitEmail productCount)
+            |> String.concat ",\n"
+        printfn "["
+        if not profiles.IsEmpty then
+            printfn "%s" items
+        printfn "]"
+    | TextOutput ->
+        profiles
+        |> List.iter (fun (name, isDefault, gitName, gitEmail, productCount) ->
+            let marker = if isDefault then "*" else " "
+            printfn "%s | %s | %s | %s | %d" marker name gitName gitEmail productCount)
+    | TableOutput ->
+        let table = Table()
+        table.AddColumn("Default") |> ignore
+        table.AddColumn("Name") |> ignore
+        table.AddColumn("Git Name") |> ignore
+        table.AddColumn("Git Email") |> ignore
+        table.AddColumn("Products") |> ignore
+
+        profiles
+        |> List.iter (fun (name, isDefault, gitName, gitEmail, productCount) ->
+            let marker = if isDefault then "*" else ""
+            table.AddRow(marker, name, gitName, gitEmail, string productCount) |> ignore)
+
+        AnsiConsole.Write(table)
+
+    Ok()
 
 let private handleBacklogList
     (deps: AppDeps)
@@ -1518,7 +1593,19 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                             |> Result.mapError formatPortfolioError
                             |> Result.map (fun () -> printfn "Added profile '%s'." name)
 
-                | None -> Error "Specify a profile subcommand (e.g. profile add <name>)"
+                | None ->
+                    match profilesResults.TryGetResult ProfileArgs.List with
+                    | Some listArgs ->
+                        let portfolioResult =
+                            Portfolio.loadPortfolio (Some configPath)
+                            |> Effect.run deps
+                            |> Result.mapError formatPortfolioError
+
+                        match portfolioResult with
+                        | Error msg -> Error msg
+                        | Ok portfolio -> handleProfileList configPath portfolio listArgs
+
+                    | None -> Error "Specify a profile subcommand (e.g. profile add <name> or profile list)"
 
             | None ->
                 match results.TryGetResult Product with
