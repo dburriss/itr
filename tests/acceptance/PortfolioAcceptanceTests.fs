@@ -354,7 +354,7 @@ let ``writeConfig then readConfig round-trip preserves defaultProfile and all pr
             Directory.Delete(root, true)
 
 // ---------------------------------------------------------------------------
-// profiles add acceptance tests
+// profile add acceptance tests
 // ---------------------------------------------------------------------------
 
 /// Helper: run addProfile usecase and persist result via SaveConfig
@@ -366,7 +366,7 @@ let private runAddProfile (deps: TestDeps) (configPath: string) (input: FeatureP
     |> Result.bind (fun updatedPortfolio -> portfolioConfig.SaveConfig configPath updatedPortfolio)
 
 [<Fact>]
-let ``profiles add writes new profile to itr.json`` () =
+let ``profile add writes new profile to itr.json`` () =
     let root =
         Path.Combine(Path.GetTempPath(), $"itr-profiles-add-{Guid.NewGuid():N}")
 
@@ -390,7 +390,7 @@ let ``profiles add writes new profile to itr.json`` () =
             Directory.Delete(root, true)
 
 [<Fact>]
-let ``profiles add with --set-default updates defaultProfile`` () =
+let ``profile add with --set-default updates defaultProfile`` () =
     let root =
         Path.Combine(Path.GetTempPath(), $"itr-profiles-setdefault-{Guid.NewGuid():N}")
 
@@ -418,7 +418,7 @@ let ``profiles add with --set-default updates defaultProfile`` () =
             Directory.Delete(root, true)
 
 [<Fact>]
-let ``profiles add duplicate name returns error and file is unchanged`` () =
+let ``profile add duplicate name returns error and file is unchanged`` () =
     let root =
         Path.Combine(Path.GetTempPath(), $"itr-profiles-dup-{Guid.NewGuid():N}")
 
@@ -445,7 +445,7 @@ let ``profiles add duplicate name returns error and file is unchanged`` () =
             Directory.Delete(root, true)
 
 [<Fact>]
-let ``profiles add preserves existing profiles`` () =
+let ``profile add preserves existing profiles`` () =
     let root =
         Path.Combine(Path.GetTempPath(), $"itr-profiles-preserve-{Guid.NewGuid():N}")
 
@@ -477,7 +477,7 @@ let ``profiles add preserves existing profiles`` () =
             Directory.Delete(root, true)
 
 [<Fact>]
-let ``profiles add git-email without git-name is caught by CLI validation`` () =
+let ``profile add git-email without git-name is caught by CLI validation`` () =
     // This test verifies the domain/usecase correctly adds a profile with gitName only (no email),
     // and that a git identity with no name but with email is not created by the usecase
     // (the CLI guards this, not the usecase itself - so we test via CLI logic)

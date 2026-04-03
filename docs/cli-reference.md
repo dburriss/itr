@@ -69,18 +69,18 @@ Writes the item to `<coord-root>/BACKLOG/<backlog-id>/item.yaml`. Fails if the I
 
 ---
 
-### `profiles`
+### `profile`
 
 Manage portfolio profiles in `itr.json`.
 
 ---
 
-#### `profiles add`
+#### `profile add`
 
 Add a new profile.
 
 ```
-itr profiles add <name> [--git-name <name>] [--git-email <email>] [--set-default]
+itr profile add <name> [--git-name <name>] [--git-email <email>] [--set-default]
 ```
 
 | Argument | Required | Description |
@@ -154,7 +154,7 @@ itr [--profile|-p <profile>] [--output <format>]
 │                         [--summary <text>]
 │                         [--priority <label>]
 │                         [--depends-on <id>]  (repeatable)
-├── profiles
+├── profile
 │   └── add <name> [--git-name <name>]
 │                  [--git-email <email>]
 │                  [--set-default]

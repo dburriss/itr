@@ -9,14 +9,14 @@ An agentic workflow tool
 - `--profile` / `-p` — select a portfolio profile
 - `--output json` — machine-readable output
 
-### profiles
+### profile
 
 ```bash
 # Add a profile
-itr profiles add work
+itr profile add work
 
 # Add with git identity and set as default
-itr profiles add work --git-name "Jane Smith" --git-email "jane@example.com" --set-default
+itr profile add work --git-name "Jane Smith" --git-email "jane@example.com" --set-default
 ```
 
 ### product

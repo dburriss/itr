@@ -101,7 +101,7 @@ type BacklogArgs =
             | Info _ -> "show detailed information about a backlog item"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
-type ProfilesAddArgs =
+type ProfileAddArgs =
     | [<MainCommand; Mandatory>] Name of name: string
     | Git_Name of git_name: string
     | Git_Email of git_email: string
@@ -116,8 +116,8 @@ type ProfilesAddArgs =
             | Set_Default -> "set this profile as the default"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
-type ProfilesArgs =
-    | [<CliPrefix(CliPrefix.None)>] Add of ParseResults<ProfilesAddArgs>
+type ProfileArgs =
+    | [<CliPrefix(CliPrefix.None)>] Add of ParseResults<ProfileAddArgs>
 
     interface IArgParserTemplate with
         member this.Usage =
@@ -232,7 +232,7 @@ type CliArgs =
     | [<AltCommandLine("-p")>] Profile of string
     | Output of string
     | [<CliPrefix(CliPrefix.None)>] Backlog of ParseResults<BacklogArgs>
-    | [<CliPrefix(CliPrefix.None)>] Profiles of ParseResults<ProfilesArgs>
+    | [<CustomCommandLine("profile")>] ProfileCmd of ParseResults<ProfileArgs>
     | [<CliPrefix(CliPrefix.None)>] Product of ParseResults<ProductArgs>
     | [<CliPrefix(CliPrefix.None)>] Task of ParseResults<TaskArgs>
 
@@ -242,7 +242,7 @@ type CliArgs =
             | Profile _ -> "select active portfolio profile"
             | Output _ -> "set output mode (for example: json)"
             | Backlog _ -> "backlog commands"
-            | Profiles _ -> "profile management commands"
+            | ProfileCmd _ -> "profile management commands"
             | Product _ -> "product management commands"
             | Task _ -> "task commands"
 
@@ -1481,14 +1481,14 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                         | None -> Error "Specify a backlog subcommand (e.g. backlog take <id> or backlog add <id> or backlog list or backlog info <id>)"
 
         | None ->
-            match results.TryGetResult Profiles with
+            match results.TryGetResult CliArgs.ProfileCmd with
             | Some profilesResults ->
-                match profilesResults.TryGetResult ProfilesArgs.Add with
+                match profilesResults.TryGetResult ProfileArgs.Add with
                 | Some addArgs ->
-                    let name = addArgs.GetResult ProfilesAddArgs.Name
-                    let gitName = addArgs.TryGetResult ProfilesAddArgs.Git_Name
-                    let gitEmail = addArgs.TryGetResult ProfilesAddArgs.Git_Email
-                    let setDefault = addArgs.Contains ProfilesAddArgs.Set_Default
+                    let name = addArgs.GetResult ProfileAddArgs.Name
+                    let gitName = addArgs.TryGetResult ProfileAddArgs.Git_Name
+                    let gitEmail = addArgs.TryGetResult ProfileAddArgs.Git_Email
+                    let setDefault = addArgs.Contains ProfileAddArgs.Set_Default
 
                     // Validate: --git-email requires --git-name
                     match gitEmail, gitName with
