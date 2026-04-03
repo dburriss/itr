@@ -34,6 +34,7 @@ module BacklogItem =
     let itemFile (coordRoot: string) (id: BacklogId) =
         System.IO.Path.Combine(coordRoot, "BACKLOG", BacklogId.value id, "item.yaml")
 
+    // TODO: use itemDir in the itemFile function instead of reconstructing the itemDir path separately
     let itemDir (coordRoot: string) (id: BacklogId) =
         System.IO.Path.Combine(coordRoot, "BACKLOG", BacklogId.value id)
 ```
@@ -48,7 +49,8 @@ module ItrTask =
 
     let planFile (coordRoot: string) (backlogId: BacklogId) (taskId: TaskId) =
         System.IO.Path.Combine(coordRoot, "BACKLOG", BacklogId.value backlogId, "tasks", TaskId.value taskId, "plan.md")
-
+    
+    // TODO: use taskDir in the taskFile and planFile functions instead of reconstructing the taskDir path separately
     let taskDir (coordRoot: string) (backlogId: BacklogId) (taskId: TaskId) =
         System.IO.Path.Combine(coordRoot, "BACKLOG", BacklogId.value backlogId, "tasks", TaskId.value taskId)
 ```
