@@ -1,0 +1,12 @@
+id: profile-list
+title: List profiles
+repos:
+- itr
+type: feature
+priority: medium
+summary: |-
+  List the profiles registerd in itr.json. Should return return git name, git details, and number of products.
+acceptance_criteria:
+- Should support json, text, and table(default) outputs
+dependencies: 
+created_at: 2026-04-03
