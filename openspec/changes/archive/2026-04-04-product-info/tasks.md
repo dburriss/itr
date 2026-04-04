@@ -27,4 +27,4 @@
 
 - [x] 5.1 Run `dotnet build` and fix any compilation errors
 - [x] 5.2 Run `dotnet test` and verify all tests pass
-- [ ] 5.3 Manually test `itr product info itr` (by ID) and `itr product info` (from a product directory) in both table and json output modes
+- [x] 5.3 Manually test `itr product info itr` (by ID) and `itr product info` (from a product directory) in both table and json output modes
