@@ -165,9 +165,10 @@ let promptBacklogAddWith
             match backlogStore.ListBacklogItems coordRoot with
             | Error _ -> []
             | Ok items ->
-                if items.IsEmpty then []
+                let itemList = items |> List.map fst
+                if itemList.IsEmpty then []
                 else
-                    let sorted = items |> List.sortBy (fun i -> BacklogId.value i.Id) |> List.map (fun i -> BacklogId.value i.Id)
+                    let sorted = itemList |> List.sortBy (fun i -> BacklogId.value i.Id) |> List.map (fun i -> BacklogId.value i.Id)
                     fns.AskMultiSelect "Dependencies (space to select, enter to confirm):" sorted
 
     // 3.11 acceptance criteria loop

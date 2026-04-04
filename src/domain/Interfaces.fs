@@ -55,10 +55,10 @@ type IProductConfig =
 /// Capability interface for loading backlog items
 type IBacklogStore =
     /// Load a backlog item from <coordRoot>/BACKLOG/<backlog-id>/item.yaml
-    abstract LoadBacklogItem: coordRoot: string -> backlogId: BacklogId -> Result<BacklogItem, BacklogError>
+    abstract LoadBacklogItem: coordRoot: string -> backlogId: BacklogId -> Result<BacklogItem * string, BacklogError>
     /// Load an archived backlog item by scanning <coordRoot>/BACKLOG/_archive/ for a folder whose item.yaml has a matching id.
-    /// Returns Ok(Some item) if found, Ok None if not present, Error on parse failure.
-    abstract LoadArchivedBacklogItem: coordRoot: string -> backlogId: BacklogId -> Result<BacklogItem option, BacklogError>
+    /// Returns Ok(Some(item, path)) if found, Ok None if not present, Error on parse failure.
+    abstract LoadArchivedBacklogItem: coordRoot: string -> backlogId: BacklogId -> Result<(BacklogItem * string) option, BacklogError>
     /// Archive a backlog item by moving <coordRoot>/BACKLOG/<backlog-id>/ to <coordRoot>/BACKLOG/_archive/<date>-<backlog-id>/
     abstract ArchiveBacklogItem: coordRoot: string -> backlogId: BacklogId -> date: string -> Result<unit, BacklogError>
     /// Check whether a backlog item already exists at <coordRoot>/BACKLOG/<backlog-id>/item.yaml
@@ -66,9 +66,9 @@ type IBacklogStore =
     /// Write a backlog item to <coordRoot>/BACKLOG/<backlog-id>/item.yaml
     abstract WriteBacklogItem: coordRoot: string -> item: BacklogItem -> Result<unit, BacklogError>
     /// List all backlog items under <coordRoot>/BACKLOG/, skipping names starting with '_'
-    abstract ListBacklogItems: coordRoot: string -> Result<BacklogItem list, BacklogError>
+    abstract ListBacklogItems: coordRoot: string -> Result<(BacklogItem * string) list, BacklogError>
     /// List all archived backlog items under <coordRoot>/BACKLOG/_archive/; returns Ok [] if absent
-    abstract ListArchivedBacklogItems: coordRoot: string -> Result<BacklogItem list, BacklogError>
+    abstract ListArchivedBacklogItems: coordRoot: string -> Result<(BacklogItem * string) list, BacklogError>
 
 /// A named view that groups backlog items
 type BacklogView =

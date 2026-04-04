@@ -93,7 +93,7 @@ let private runTake productRoot coordRoot backlogIdStr (taskIdOverride: string o
 
             backlogStore.LoadBacklogItem coordRoot backlogId
             |> Result.mapError (sprintf "%A")
-            |> Result.bind (fun backlogItem ->
+            |> Result.bind (fun (backlogItem, _) ->
                 taskStore.ListTasks coordRoot backlogId
                 |> Result.mapError (sprintf "%A")
                 |> Result.bind (fun existingTasks ->

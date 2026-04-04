@@ -249,14 +249,16 @@ type BacklogItemSummary =
     { Item: BacklogItem
       Status: BacklogItemStatus
       ViewId: string option
-      TaskCount: int }
+      TaskCount: int
+      Path: string }
 
 /// Detailed view of a single backlog item including its tasks
 type BacklogItemDetail =
     { Item: BacklogItem
       Status: BacklogItemStatus
       ViewId: string option
-      Tasks: ItrTask list }
+      Tasks: ItrTask list
+      Path: string }
 
 /// Snapshot of all backlog items loaded for a given coordination root
 type BacklogSnapshot =
@@ -313,3 +315,22 @@ module TaskId =
 [<RequireQualifiedAccess>]
 module RepoId =
     let value (RepoId v) = v
+
+[<RequireQualifiedAccess>]
+module BacklogItem =
+    let itemDir (coordRoot: string) (backlogId: BacklogId) =
+        System.IO.Path.Combine(coordRoot, "BACKLOG", BacklogId.value backlogId)
+
+    let itemFile (coordRoot: string) (backlogId: BacklogId) =
+        System.IO.Path.Combine(coordRoot, "BACKLOG", BacklogId.value backlogId, "item.yaml")
+
+[<RequireQualifiedAccess>]
+module ItrTask =
+    let taskDir (coordRoot: string) (backlogId: BacklogId) (taskId: TaskId) =
+        System.IO.Path.Combine(coordRoot, "BACKLOG", BacklogId.value backlogId, "tasks", TaskId.value taskId)
+
+    let taskFile (coordRoot: string) (backlogId: BacklogId) (taskId: TaskId) =
+        System.IO.Path.Combine(coordRoot, "BACKLOG", BacklogId.value backlogId, "tasks", TaskId.value taskId, "task.yaml")
+
+    let planFile (coordRoot: string) (backlogId: BacklogId) (taskId: TaskId) =
+        System.IO.Path.Combine(coordRoot, "BACKLOG", BacklogId.value backlogId, "tasks", TaskId.value taskId, "plan.md")

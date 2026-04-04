@@ -617,10 +617,8 @@ let private handleTaskInfo
         match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
         | None -> Error(formatBacklogError (TaskNotFound taskId))
         | Some targetTask ->
-            let backlogId = BacklogId.value targetTask.SourceBacklog
-            let planPath =
-                System.IO.Path.Combine(
-                    coordRoot, "BACKLOG", backlogId, "tasks", rawTaskId, "plan.md")
+            let backlogId = targetTask.SourceBacklog
+            let planPath = ItrTask.planFile coordRoot backlogId (TaskId.create rawTaskId)
             let planExists = fileSystem.FileExists planPath
 
             match Task.getTaskDetail taskId allTasks planExists with
@@ -737,7 +735,7 @@ let private handleTaskPlan
                 // Load backlog item for template data
                 match backlogStore.LoadBacklogItem coordRoot backlogId with
                 | Error e -> Error(formatBacklogError e)
-                | Ok backlogItem ->
+                | Ok (backlogItem, _) ->
                     let repo = RepoId.value updatedTask.Repo
                     let backlogIdStr = BacklogId.value backlogId
                     let title = backlogItem.Title
@@ -819,9 +817,7 @@ let private handleTaskPlan
                     | Error msg -> Error msg
                     | Ok planContent ->
                         // Write plan.md
-                        let planPath =
-                            IO.Path.Combine(
-                                coordRoot, "BACKLOG", backlogIdStr, "tasks", rawTaskId, "plan.md")
+                        let planPath = ItrTask.planFile coordRoot backlogId (TaskId.create rawTaskId)
 
                         match fileSystem.WriteFile planPath planContent with
                         | Error e -> Error $"Failed to write plan.md: %A{e}"
@@ -854,10 +850,7 @@ let private handleTaskApprove
         match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
         | None -> Error(formatBacklogError (TaskNotFound taskId))
         | Some task ->
-            let backlogId = BacklogId.value task.SourceBacklog
-            let planPath =
-                System.IO.Path.Combine(
-                    coordRoot, "BACKLOG", backlogId, "tasks", rawTaskId, "plan.md")
+            let planPath = ItrTask.planFile coordRoot task.SourceBacklog (TaskId.create rawTaskId)
             let planExists = fileSystem.FileExists planPath
 
             match Task.approveTask task planExists with
@@ -1188,8 +1181,8 @@ let private handleBacklogList
                     let status = backlogItemStatusToString s.Status
                     let viewId = s.ViewId |> Option.defaultValue ""
                     let createdAt = s.Item.CreatedAt.ToString("yyyy-MM-dd")
-                    sprintf """  { "id": "%s", "type": "%s", "priority": "%s", "status": "%s", "view": "%s", "taskCount": %d, "createdAt": "%s" }"""
-                        id itemType priority status viewId s.TaskCount createdAt)
+                    sprintf """  { "id": "%s", "type": "%s", "priority": "%s", "status": "%s", "view": "%s", "taskCount": %d, "createdAt": "%s", "path": "%s" }"""
+                        id itemType priority status viewId s.TaskCount createdAt (s.Path.Replace("\\", "\\\\")))
                 |> String.concat ",\n"
             printfn "["
             if not (List.isEmpty items) then
@@ -1205,7 +1198,7 @@ let private handleBacklogList
                 let viewId = s.ViewId |> Option.defaultValue "-"
                 let createdAt = s.Item.CreatedAt.ToString("yyyy-MM-dd")
                 let title = s.Item.Title
-                printfn "%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s" id itemType priority status viewId s.TaskCount createdAt title)
+                printfn "%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\t%s" id itemType priority status viewId s.TaskCount createdAt title s.Path)
         | TableOutput ->
             let table = Table()
             table.AddColumn("ID") |> ignore
@@ -1215,6 +1208,7 @@ let private handleBacklogList
             table.AddColumn("View") |> ignore
             table.AddColumn("Tasks") |> ignore
             table.AddColumn("Created") |> ignore
+            table.AddColumn("Path") |> ignore
 
             items
             |> List.iter (fun s ->
@@ -1224,7 +1218,7 @@ let private handleBacklogList
                 let status = backlogItemStatusToString s.Status
                 let viewId = s.ViewId |> Option.defaultValue "-"
                 let createdAt = s.Item.CreatedAt.ToString("yyyy-MM-dd")
-                table.AddRow(id, itemType, priority, status, viewId, string s.TaskCount, createdAt) |> ignore)
+                table.AddRow(id, itemType, priority, status, viewId, string s.TaskCount, createdAt, s.Path) |> ignore)
 
             AnsiConsole.Write(table)
 
@@ -1315,7 +1309,8 @@ let private handleBacklogInfo
                 printfn "  \"createdAt\": \"%s\"," createdAt
                 printfn "  \"tasks\": ["
                 if not (List.isEmpty detail.Tasks) then printfn "%s" tasksJson
-                printfn "  ]"
+                printfn "  ],"
+                printfn "  \"path\": \"%s\"" (detail.Path.Replace("\\", "\\\\"))
                 printfn "}"
             | TextOutput ->
                 let priorityStr = item.Priority |> Option.defaultValue "-"
@@ -1342,6 +1337,7 @@ let private handleBacklogInfo
                 printfn "created\t%s" createdAt
                 printfn "taskCount\t%d" detail.Tasks.Length
                 printfn "tasks\t%s" tasksStr
+                printfn "path\t%s" detail.Path
             | TableOutput ->
                 // Detail table
                 let infoTable = Table()
@@ -1358,6 +1354,7 @@ let private handleBacklogInfo
                 infoTable.AddRow("dependencies", String.concat ", " deps_) |> ignore
                 infoTable.AddRow("repos", String.concat ", " repos) |> ignore
                 infoTable.AddRow("created", createdAt) |> ignore
+                infoTable.AddRow("path", detail.Path) |> ignore
                 AnsiConsole.Write(infoTable)
 
                 // Tasks table
@@ -1415,7 +1412,7 @@ let private handleBacklogTake
         let result =
             backlogStore.LoadBacklogItem coordRoot backlogId
             |> Result.mapError formatBacklogError
-            |> Result.bind (fun backlogItem ->
+            |> Result.bind (fun (backlogItem, _) ->
                 taskStore.ListTasks coordRoot backlogId
                 |> Result.mapError formatBacklogError
                 |> Result.bind (fun existingTasks ->
@@ -1434,17 +1431,7 @@ let private handleBacklogTake
                                 taskStore.WriteTask coordRoot task
                                 |> Result.map (fun () ->
                                     let taskId = TaskId.value task.Id
-
-                                    let path =
-                                        System.IO.Path.Combine(
-                                            coordRoot,
-                                            "BACKLOG",
-                                            BacklogId.value backlogId,
-                                            "tasks",
-                                            taskId,
-                                            "task.yaml"
-                                        )
-
+                                    let path = ItrTask.taskFile coordRoot task.SourceBacklog task.Id
                                     (taskId, path))
                                 |> Result.mapError formatBacklogError)
 
@@ -1542,7 +1529,7 @@ let private handleBacklogAdd
                     | Error e -> Error(formatBacklogError e)
                     | Ok() ->
                         let id = BacklogId.value item.Id
-                        let path = System.IO.Path.Combine(coordRoot, "BACKLOG", id, "item.yaml")
+                        let path = BacklogItem.itemFile coordRoot item.Id
 
                         if outputJson then
                             printfn """{ "ok": true, "id": "%s" }""" id
@@ -1585,7 +1572,7 @@ let private handleBacklogAdd
                         | Error e -> Error(formatBacklogError e)
                         | Ok() ->
                             let id = BacklogId.value item.Id
-                            let path = System.IO.Path.Combine(coordRoot, "BACKLOG", id, "item.yaml")
+                            let path = BacklogItem.itemFile coordRoot item.Id
 
                             if outputJson then
                                 printfn """{ "ok": true, "id": "%s" }""" id

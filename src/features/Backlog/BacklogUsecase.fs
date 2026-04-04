@@ -117,12 +117,12 @@ let loadSnapshot
     // 1. Load active items
     match backlogStore.ListBacklogItems coordRoot with
     | Error e -> Error e
-    | Ok activeItems ->
+    | Ok activeItemTuples ->
 
     // 2. Load archived items
     match backlogStore.ListArchivedBacklogItems coordRoot with
     | Error e -> Error e
-    | Ok archivedItems ->
+    | Ok archivedItemTuples ->
 
     // 3. Load views
     match viewStore.ListViews coordRoot with
@@ -145,8 +145,8 @@ let loadSnapshot
 
     // 5. Build summaries for active items
     let activeSummaryResults =
-        activeItems
-        |> List.map (fun item ->
+        activeItemTuples
+        |> List.map (fun (item, path) ->
             let id = BacklogId.value item.Id
             match taskStore.ListTasks coordRoot item.Id with
             | Error e -> Error e
@@ -156,12 +156,13 @@ let loadSnapshot
                     { Item = item
                       Status = status
                       ViewId = Map.tryFind id itemViewMap
-                      TaskCount = tasks.Length })
+                      TaskCount = tasks.Length
+                      Path = path })
 
     // 6. Build summaries for archived items
     let archivedSummaryResults =
-        archivedItems
-        |> List.map (fun item ->
+        archivedItemTuples
+        |> List.map (fun (item, path) ->
             let id = BacklogId.value item.Id
             match taskStore.ListArchivedTasks coordRoot item.Id with
             | Error e -> Error e
@@ -171,7 +172,8 @@ let loadSnapshot
                     { Item = item
                       Status = status
                       ViewId = Map.tryFind id itemViewMap
-                      TaskCount = tasks.Length })
+                      TaskCount = tasks.Length
+                      Path = path })
 
     let allResults = activeSummaryResults @ archivedSummaryResults
 
@@ -235,17 +237,17 @@ let getBacklogItemDetail
     // 1. Try loading the active item; on not-found, check archive
     let itemResult =
         match backlogStore.LoadBacklogItem coordRoot backlogId with
-        | Ok item -> Ok(item, false)
+        | Ok (item, path) -> Ok(item, path, false)
         | Error(BacklogItemNotFound _) ->
             match backlogStore.LoadArchivedBacklogItem coordRoot backlogId with
             | Error e -> Error e
             | Ok None -> Error(BacklogItemNotFound backlogId)
-            | Ok(Some item) -> Ok(item, true)
+            | Ok(Some (item, path)) -> Ok(item, path, true)
         | Error e -> Error e
 
     match itemResult with
     | Error e -> Error e
-    | Ok(item, isArchived) ->
+    | Ok(item, itemPath, isArchived) ->
 
     // 2. Load tasks — archived items have tasks under the archive folder
     let tasksResult =
@@ -277,4 +279,5 @@ let getBacklogItemDetail
         { Item = item
           Status = status
           ViewId = viewId
-          Tasks = tasks }
+          Tasks = tasks
+          Path = itemPath }

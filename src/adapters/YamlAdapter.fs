@@ -305,7 +305,7 @@ type BacklogStoreAdapter() =
     interface IBacklogStore with
         member _.LoadBacklogItem (coordRoot: string) (backlogId: BacklogId) =
             let id = BacklogId.value backlogId
-            let path = Path.Combine(coordRoot, "BACKLOG", id, "item.yaml")
+            let path = BacklogItem.itemFile coordRoot backlogId
 
             if not (File.Exists(path)) then
                 Error(BacklogItemNotFound backlogId)
@@ -350,7 +350,7 @@ type BacklogStoreAdapter() =
                             | true, d -> d
                             | _ -> DateOnly.MinValue
 
-                        Ok
+                        Ok(
                             { Id = backlogId
                               Title = if isNull dto.Title then id else dto.Title
                               Repos = repos
@@ -359,7 +359,8 @@ type BacklogStoreAdapter() =
                               Summary = if isNull dto.Summary || dto.Summary = "" then None else Some dto.Summary
                               AcceptanceCriteria = ac
                               Dependencies = deps
-                              CreatedAt = createdAt }
+                              CreatedAt = createdAt },
+                            path)
                 with ex ->
                     Error(ProductConfigParseError(path, ex.Message))
 
@@ -414,7 +415,7 @@ type BacklogStoreAdapter() =
                                                 match DateOnly.TryParse(dto.CreatedAt) with
                                                 | true, d -> d
                                                 | _ -> DateOnly.MinValue
-                                            Ok(Some(
+                                            let item : BacklogItem =
                                                 { Id = backlogId
                                                   Title = if isNull dto.Title then idStr else dto.Title
                                                   Repos = repos
@@ -423,7 +424,8 @@ type BacklogStoreAdapter() =
                                                   Summary = if isNull dto.Summary || dto.Summary = "" then None else Some dto.Summary
                                                   AcceptanceCriteria = ac
                                                   Dependencies = deps
-                                                  CreatedAt = createdAt } : BacklogItem))
+                                                  CreatedAt = createdAt }
+                                            Ok(Some(item, path))
                                 with ex ->
                                     Error(ProductConfigParseError(path, ex.Message))
 
@@ -433,7 +435,7 @@ type BacklogStoreAdapter() =
 
         member _.ArchiveBacklogItem (coordRoot: string) (backlogId: BacklogId) (date: string) =
             let id = BacklogId.value backlogId
-            let sourcePath = Path.Combine(coordRoot, "BACKLOG", id)
+            let sourcePath = BacklogItem.itemDir coordRoot backlogId
             let archiveDir = Path.Combine(coordRoot, "BACKLOG", "_archive")
             let destPath = Path.Combine(archiveDir, $"{date}-{id}")
 
@@ -458,14 +460,13 @@ type BacklogStoreAdapter() =
                     Error(ProductConfigParseError(sourcePath, ex.Message))
 
         member _.BacklogItemExists (coordRoot: string) (backlogId: BacklogId) =
-            let id = BacklogId.value backlogId
-            let path = Path.Combine(coordRoot, "BACKLOG", id, "item.yaml")
+            let path = BacklogItem.itemFile coordRoot backlogId
             File.Exists(path)
 
         member _.WriteBacklogItem (coordRoot: string) (item: BacklogItem) =
             let id = BacklogId.value item.Id
-            let itemDir = Path.Combine(coordRoot, "BACKLOG", id)
-            let path = Path.Combine(itemDir, "item.yaml")
+            let itemDir = BacklogItem.itemDir coordRoot item.Id
+            let path = BacklogItem.itemFile coordRoot item.Id
 
             try
                 Directory.CreateDirectory(itemDir) |> ignore
@@ -528,7 +529,7 @@ type BacklogStoreAdapter() =
                         Ok(
                             results
                             |> List.choose (function
-                                | Ok item -> Some item
+                                | Ok tuple -> Some tuple
                                 | Error _ -> None)
                         )
                 with ex ->
@@ -589,7 +590,7 @@ type BacklogStoreAdapter() =
                                                 | true, d -> d
                                                 | _ -> DateOnly.MinValue
 
-                                            Ok(Some(
+                                            let item : BacklogItem =
                                                 { Id = backlogId
                                                   Title = if isNull dto.Title then dto.Id else dto.Title
                                                   Repos = repos
@@ -598,7 +599,8 @@ type BacklogStoreAdapter() =
                                                   Summary = if isNull dto.Summary || dto.Summary = "" then None else Some dto.Summary
                                                   AcceptanceCriteria = ac
                                                   Dependencies = deps
-                                                  CreatedAt = createdAt } : BacklogItem))
+                                                  CreatedAt = createdAt }
+                                            Ok(Some(item, path))
                                 with ex ->
                                     Error(ProductConfigParseError(path, ex.Message)))
 
@@ -611,7 +613,7 @@ type BacklogStoreAdapter() =
                     match errors with
                     | e :: _ -> Error e
                     | [] ->
-                        Ok(results |> List.choose (function Ok(Some item) -> Some item | _ -> None))
+                        Ok(results |> List.choose (function Ok(Some tuple) -> Some tuple | _ -> None))
                 with ex ->
                     Error(ProductConfigParseError(archiveDir, ex.Message))
 
@@ -714,10 +716,8 @@ type TaskStoreAdapter() =
                     Error(ProductConfigParseError(archiveDir, ex.Message))
 
         member _.WriteTask (coordRoot: string) (task: ItrTask) =
-            let taskId = TaskId.value task.Id
-            let backlogId = BacklogId.value task.SourceBacklog
-            let taskDir = Path.Combine(coordRoot, "BACKLOG", backlogId, "tasks", taskId)
-            let path = Path.Combine(taskDir, "task.yaml")
+            let taskDir = ItrTask.taskDir coordRoot task.SourceBacklog task.Id
+            let path = ItrTask.taskFile coordRoot task.SourceBacklog task.Id
 
             try
                 Directory.CreateDirectory(taskDir) |> ignore
@@ -730,10 +730,9 @@ type TaskStoreAdapter() =
                 Error(ProductConfigParseError(path, ex.Message))
 
         member _.ArchiveTask (coordRoot: string) (backlogId: BacklogId) (taskId: TaskId) (date: string) =
-            let bid = BacklogId.value backlogId
             let tid = TaskId.value taskId
-            let sourcePath = Path.Combine(coordRoot, "BACKLOG", bid, "tasks", tid)
-            let destPath = Path.Combine(coordRoot, "BACKLOG", bid, "tasks", $"{date}-{tid}")
+            let sourcePath = ItrTask.taskDir coordRoot backlogId taskId
+            let destPath = Path.Combine(coordRoot, "BACKLOG", BacklogId.value backlogId, "tasks", $"{date}-{tid}")
 
             if not (Directory.Exists(sourcePath)) then
                 Error(ProductConfigParseError(sourcePath, $"Task folder not found: {sourcePath}"))
