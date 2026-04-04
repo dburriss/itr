@@ -5,7 +5,9 @@ repos:
 type: feature
 priority: medium
 summary: |-
-  Adds a product info command that takes in a product id, or if no id and in a directory or subdirectory of an existing product will show the info for that product. Shows id, description(new), docs, repos, and the coordination type and details
+  Adds a product info command that takes in a product id.
+  If no id and in a directory or subdirectory of an existing product. 
+  Shows the info for that product: id, description(new), docs, repos, coord type, coord details
 acceptance_criteria:
 - Prints in table format by default
 - Can print as json
