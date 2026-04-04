@@ -643,7 +643,10 @@ type TaskStoreAdapter() =
 
                             match parseYaml<ItrTaskDto> content with
                             | Error msg -> Error(ProductConfigParseError(path, msg))
-                            | Ok dto -> mapTaskDto dto)
+                            | Ok dto ->
+                                match mapTaskDto dto with
+                                | Error e -> Error e
+                                | Ok task -> Ok(task, path))
 
                     let errors =
                         results
@@ -657,7 +660,7 @@ type TaskStoreAdapter() =
                         Ok(
                             results
                             |> List.choose (function
-                                | Ok t -> Some t
+                                | Ok tuple -> Some tuple
                                 | Error _ -> None)
                         )
                 with ex ->
@@ -748,7 +751,7 @@ type TaskStoreAdapter() =
             let archiveDir = Path.Combine(coordRoot, "BACKLOG", "_archive")
 
             /// Read all task.yaml files from tasks/ subdirs under a given backlog directory
-            let readTasksFromBacklogDir (dir: string) : Result<ItrTask list, BacklogError> =
+            let readTasksFromBacklogDir (dir: string) : Result<(ItrTask * string) list, BacklogError> =
                 let tasksDir = Path.Combine(dir, "tasks")
                 if not (Directory.Exists(tasksDir)) then
                     Ok []
@@ -765,11 +768,14 @@ type TaskStoreAdapter() =
                                 let content = File.ReadAllText(path)
                                 match parseYaml<ItrTaskDto> content with
                                 | Error msg -> Error(ProductConfigParseError(path, msg))
-                                | Ok dto -> mapTaskDto dto)
+                                | Ok dto ->
+                                    match mapTaskDto dto with
+                                    | Error e -> Error e
+                                    | Ok task -> Ok(task, path))
                         let errors = results |> List.choose (function Error e -> Some e | Ok _ -> None)
                         match errors with
                         | e :: _ -> Error e
-                        | [] -> Ok(results |> List.choose (function Ok t -> Some t | Error _ -> None))
+                        | [] -> Ok(results |> List.choose (function Ok tuple -> Some tuple | Error _ -> None))
                     with ex ->
                         Error(ProductConfigParseError(tasksDir, ex.Message))
 

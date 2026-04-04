@@ -151,9 +151,9 @@ let ``planTask integration writes task state to planned`` () =
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let taskId = TaskId.create "my-feature"
-            match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
+            match allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) with
             | None -> failwith "task not found"
-            | Some task ->
+            | Some (task, _) ->
                 match Task.planTask task with
                 | Error e -> failwithf "planTask failed: %A" e
                 | Ok (updatedTask, _) ->
@@ -165,9 +165,9 @@ let ``planTask integration writes task state to planned`` () =
                         match taskStore.ListAllTasks root with
                         | Error e -> failwithf "reload failed: %A" e
                         | Ok reloadedTasks ->
-                            match reloadedTasks |> List.tryFind (fun t -> t.Id = taskId) with
+                            match reloadedTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) with
                             | None -> failwith "task not found after write"
-                            | Some reloaded ->
+                            | Some (reloaded, _) ->
                                 Assert.Equal(TaskState.Planned, reloaded.State)
     finally
         Directory.Delete(root, true)
@@ -202,9 +202,9 @@ let ``stub harness error prevents plan from being written`` () =
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let taskId = TaskId.create "my-feature"
-            match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
+            match allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) with
             | None -> failwith "task not found"
-            | Some task ->
+            | Some (task, _) ->
                 match Task.planTask task with
                 | Error e -> failwithf "planTask failed: %A" e
                 | Ok (_, _) ->

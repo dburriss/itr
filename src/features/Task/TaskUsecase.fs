@@ -1,5 +1,6 @@
 module Itr.Features.Task
 
+open System.IO
 open Itr.Domain
 
 // ---------------------------------------------------------------------------
@@ -8,7 +9,9 @@ open Itr.Domain
 
 type TaskSummary =
     { Task: ItrTask
-      PlanApproved: bool }
+      PlanApproved: bool
+      TaskYamlPath: string
+      PlanMdPath: string option }
 
 // ---------------------------------------------------------------------------
 // SiblingTask type (used in TaskDetail)
@@ -27,17 +30,20 @@ type TaskDetail =
     { Task: ItrTask
       PlanExists: bool
       PlanApproved: bool
-      Siblings: SiblingTask list }
+      Siblings: SiblingTask list
+      TaskYamlPath: string
+      PlanMdPath: string option }
 
 // ---------------------------------------------------------------------------
-// listTasks: wraps a list of ItrTask into TaskSummary list
+// listTasks: wraps a list of (ItrTask * taskYamlPath) into TaskSummary list
 // ---------------------------------------------------------------------------
 
-/// Wrap raw tasks into TaskSummary values.
+/// Wrap raw tasks (with their yaml paths) into TaskSummary values.
 /// PlanApproved = true for Approved | InProgress | Implemented | Validated | Archived.
-let listTasks (tasks: ItrTask list) : TaskSummary list =
+/// PlanMdPath is Some if plan.md exists alongside task.yaml.
+let listTasks (tasks: (ItrTask * string) list) : TaskSummary list =
     tasks
-    |> List.map (fun task ->
+    |> List.map (fun (task, taskYamlPath) ->
         let planApproved =
             match task.State with
             | TaskState.Approved
@@ -46,7 +52,13 @@ let listTasks (tasks: ItrTask list) : TaskSummary list =
             | TaskState.Validated
             | TaskState.Archived -> true
             | _ -> false
-        { Task = task; PlanApproved = planApproved })
+        let planMdPath =
+            let dir = Path.GetDirectoryName(taskYamlPath)
+            if isNull dir || dir = "" then None
+            else
+                let candidate = Path.Combine(dir, "plan.md")
+                if File.Exists(candidate) then Some candidate else None
+        { Task = task; PlanApproved = planApproved; TaskYamlPath = taskYamlPath; PlanMdPath = planMdPath })
 
 // ---------------------------------------------------------------------------
 // filterTasks: apply optional AND filters to a TaskSummary list
@@ -200,12 +212,13 @@ let takeBacklogItem
 // ---------------------------------------------------------------------------
 
 /// Return the full detail record for the task with the given id.
-/// planExists must be resolved by the caller (IO concern).
+/// taskYamlPath is the absolute path to task.yaml (provided by caller).
+/// planMdPath is derived from taskYamlPath directory if plan.md exists.
 /// allTasks is used to find sibling tasks sharing the same SourceBacklog.
 let getTaskDetail
     (taskId: TaskId)
     (allTasks: ItrTask list)
-    (planExists: bool)
+    (taskYamlPath: string)
     : Result<TaskDetail, BacklogError> =
 
     match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
@@ -220,6 +233,15 @@ let getTaskDetail
             | TaskState.Archived -> true
             | _ -> false
 
+        let planMdPath =
+            let dir = Path.GetDirectoryName(taskYamlPath)
+            if isNull dir || dir = "" then None
+            else
+                let candidate = Path.Combine(dir, "plan.md")
+                if File.Exists(candidate) then Some candidate else None
+
+        let planExists = planMdPath.IsSome
+
         let siblings =
             allTasks
             |> List.filter (fun t -> t.Id <> taskId && t.SourceBacklog = task.SourceBacklog)
@@ -229,7 +251,9 @@ let getTaskDetail
             { Task = task
               PlanExists = planExists
               PlanApproved = planApproved
-              Siblings = siblings }
+              Siblings = siblings
+              TaskYamlPath = taskYamlPath
+              PlanMdPath = planMdPath }
 
 // ---------------------------------------------------------------------------
 // planTask: pure function to validate state and return updated task

@@ -62,7 +62,7 @@ let ``ListAllTasks returns tasks from multiple active backlog items`` () =
             Assert.Equal(2, tasks.Length)
             // No archived tasks in the default unfiltered result — but ListAllTasks returns everything
             // Archived exclusion is in the CLI handler; here verify both tasks are present
-            let ids = tasks |> List.map (fun t -> TaskId.value t.Id) |> Set.ofList
+            let ids = tasks |> List.map (fun (t, _) -> TaskId.value t.Id) |> Set.ofList
             Assert.Contains("feat-a", ids)
             Assert.Contains("feat-b", ids)
     finally
@@ -89,7 +89,7 @@ let ``ListAllTasks does not include archived tasks implicitly - all tasks return
         | Ok tasks ->
             // Adapter returns all tasks; archived exclusion is CLI responsibility
             Assert.Equal(2, tasks.Length)
-            let ids = tasks |> List.map (fun t -> TaskId.value t.Id) |> Set.ofList
+            let ids = tasks |> List.map (fun (t, _) -> TaskId.value t.Id) |> Set.ofList
             Assert.Contains("feat-a", ids)
             Assert.Contains("archived-task", ids)
     finally

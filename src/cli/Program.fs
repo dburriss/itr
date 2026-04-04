@@ -536,7 +536,7 @@ let private handleTaskList
             // Apply implicit exclusion of archived tasks when no --state filter provided
             let tasksToProcess =
                 match stateFilter with
-                | None -> allTasks |> List.filter (fun t -> t.State <> TaskState.Archived)
+                | None -> allTasks |> List.filter (fun (t, _) -> t.State <> TaskState.Archived)
                 | Some _ -> allTasks
 
             let summaries = Task.listTasks tasksToProcess
@@ -556,9 +556,13 @@ let private handleTaskList
                             let backlog = BacklogId.value s.Task.SourceBacklog
                             let repo = RepoId.value s.Task.Repo
                             let state = taskStateToDisplayString s.Task.State
-                            let planApproved = if s.PlanApproved then "true" else "false"
-                            sprintf "    { \"id\": \"%s\", \"backlog\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\", \"planApproved\": %s }"
-                                id backlog repo state planApproved)
+                            let taskYamlPath = s.TaskYamlPath.Replace("\\", "\\\\")
+                            let planMdPathJson =
+                                match s.PlanMdPath with
+                                | Some p -> sprintf "\"%s\"" (p.Replace("\\", "\\\\"))
+                                | None -> "null"
+                            sprintf "    { \"id\": \"%s\", \"backlog\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\", \"taskYamlPath\": \"%s\", \"planMdPath\": %s }"
+                                id backlog repo state taskYamlPath planMdPathJson)
                         |> String.concat ",\n"
                     printfn "{ \"tasks\": ["
                     printfn "%s" items
@@ -570,15 +574,17 @@ let private handleTaskList
                         let backlog = BacklogId.value s.Task.SourceBacklog
                         let repo = RepoId.value s.Task.Repo
                         let state = taskStateToDisplayString s.Task.State
-                        let planApproved = if s.PlanApproved then "yes" else "no"
-                        printfn "%s\t%s\t%s\t%s\t%s" id backlog repo state planApproved)
+                        let taskYamlPath = s.TaskYamlPath
+                        let planMdPath = s.PlanMdPath |> Option.defaultValue ""
+                        printfn "%s\t%s\t%s\t%s\t%s\t%s" id backlog repo state taskYamlPath planMdPath)
                 | TableOutput ->
                     let table = Table()
                     table.AddColumn("Id") |> ignore
                     table.AddColumn("Backlog") |> ignore
                     table.AddColumn("Repo") |> ignore
                     table.AddColumn("State") |> ignore
-                    table.AddColumn("Plan Approved") |> ignore
+                    table.AddColumn("Task YAML") |> ignore
+                    table.AddColumn("Plan MD") |> ignore
 
                     filtered
                     |> List.iter (fun s ->
@@ -586,8 +592,9 @@ let private handleTaskList
                         let backlog = BacklogId.value s.Task.SourceBacklog
                         let repo = RepoId.value s.Task.Repo
                         let state = taskStateToDisplayString s.Task.State
-                        let planApproved = if s.PlanApproved then "yes" else "no"
-                        table.AddRow(id, backlog, repo, state, planApproved) |> ignore)
+                        let taskYamlPath = s.TaskYamlPath
+                        let planMdPath = s.PlanMdPath |> Option.defaultValue ""
+                        table.AddRow(id, backlog, repo, state, taskYamlPath, planMdPath) |> ignore)
 
                     AnsiConsole.Write(table)
 
@@ -608,20 +615,17 @@ let private handleTaskInfo
 
     let taskId = TaskId.create rawTaskId
     let taskStore = deps :> ITaskStore
-    let fileSystem = deps :> IFileSystem
 
     match taskStore.ListAllTasks coordRoot with
     | Error e -> Error(formatBacklogError e)
-    | Ok allTasks ->
-        // Resolve plan path: need the SourceBacklog of the target task first
-        match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
+    | Ok allTaskTuples ->
+        let allTasks = allTaskTuples |> List.map fst
+        // Resolve plan path: need the taskYamlPath of the target task
+        match allTaskTuples |> List.tryFind (fun (t, _) -> t.Id = taskId) with
         | None -> Error(formatBacklogError (TaskNotFound taskId))
-        | Some targetTask ->
-            let backlogId = targetTask.SourceBacklog
-            let planPath = ItrTask.planFile coordRoot backlogId (TaskId.create rawTaskId)
-            let planExists = fileSystem.FileExists planPath
+        | Some (_, taskYamlPath) ->
 
-            match Task.getTaskDetail taskId allTasks planExists with
+            match Task.getTaskDetail taskId allTasks taskYamlPath with
             | Error e -> Error(formatBacklogError e)
             | Ok detail ->
                 let task = detail.Task
@@ -632,6 +636,7 @@ let private handleTaskInfo
                 let createdAt = task.CreatedAt.ToString("yyyy-MM-dd")
                 let planExistsStr = if detail.PlanExists then "yes" else "no"
                 let planApprovedStr = if detail.PlanApproved then "yes" else "no"
+                let planMdPathStr = detail.PlanMdPath |> Option.defaultValue ""
 
                 match format with
                 | JsonOutput ->
@@ -643,6 +648,10 @@ let private handleTaskInfo
                                 (RepoId.value s.Repo)
                                 (taskStateToDisplayString s.State))
                         |> String.concat ",\n"
+                    let planMdPathJson =
+                        match detail.PlanMdPath with
+                        | Some p -> sprintf "\"%s\"" (p.Replace("\\", "\\\\"))
+                        | None -> "null"
                     printfn "{"
                     printfn "  \"id\": \"%s\"," id
                     printfn "  \"backlog\": \"%s\"," backlog
@@ -651,6 +660,8 @@ let private handleTaskInfo
                     printfn "  \"planExists\": %b," detail.PlanExists
                     printfn "  \"planApproved\": %b," detail.PlanApproved
                     printfn "  \"createdAt\": \"%s\"," createdAt
+                    printfn "  \"taskYamlPath\": \"%s\"," (detail.TaskYamlPath.Replace("\\", "\\\\"))
+                    printfn "  \"planMdPath\": %s," planMdPathJson
                     printfn "  \"siblings\": ["
                     if not (List.isEmpty detail.Siblings) then printfn "%s" siblingsJson
                     printfn "  ]"
@@ -667,6 +678,8 @@ let private handleTaskInfo
                     printfn "plan approved\t%s" planApprovedStr
                     printfn "created\t%s" createdAt
                     printfn "siblings\t%s" siblingsStr
+                    printfn "taskYamlPath\t%s" detail.TaskYamlPath
+                    printfn "planMdPath\t%s" planMdPathStr
                 | TableOutput ->
                     let infoTable = Table()
                     infoTable.AddColumn("Field") |> ignore
@@ -678,6 +691,8 @@ let private handleTaskInfo
                     infoTable.AddRow("plan exists", planExistsStr) |> ignore
                     infoTable.AddRow("plan approved", planApprovedStr) |> ignore
                     infoTable.AddRow("created", createdAt) |> ignore
+                    infoTable.AddRow("Task YAML", detail.TaskYamlPath) |> ignore
+                    infoTable.AddRow("Plan MD", planMdPathStr) |> ignore
                     AnsiConsole.Write(infoTable)
 
                     if detail.Siblings.IsEmpty then
@@ -719,7 +734,8 @@ let private handleTaskPlan
     // Load all tasks to find the target
     match taskStore.ListAllTasks coordRoot with
     | Error e -> Error(formatBacklogError e)
-    | Ok allTasks ->
+    | Ok allTaskTuples ->
+        let allTasks = allTaskTuples |> List.map fst
         match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
         | None -> Error(formatBacklogError (TaskNotFound taskId))
         | Some task ->
@@ -846,7 +862,8 @@ let private handleTaskApprove
 
     match taskStore.ListAllTasks coordRoot with
     | Error e -> Error(formatBacklogError e)
-    | Ok allTasks ->
+    | Ok allTaskTuples ->
+        let allTasks = allTaskTuples |> List.map fst
         match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
         | None -> Error(formatBacklogError (TaskNotFound taskId))
         | Some task ->
@@ -1415,6 +1432,7 @@ let private handleBacklogTake
             |> Result.bind (fun (backlogItem, _) ->
                 taskStore.ListTasks coordRoot backlogId
                 |> Result.mapError formatBacklogError
+                |> Result.map (List.map fst)
                 |> Result.bind (fun existingTasks ->
                     let input =
                         { Task.TakeInput.BacklogId = backlogId

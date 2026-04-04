@@ -96,7 +96,8 @@ let private runTake productRoot coordRoot backlogIdStr (taskIdOverride: string o
             |> Result.bind (fun (backlogItem, _) ->
                 taskStore.ListTasks coordRoot backlogId
                 |> Result.mapError (sprintf "%A")
-                |> Result.bind (fun existingTasks ->
+                |> Result.bind (fun existingTaskTuples ->
+                    let existingTasks = existingTaskTuples |> List.map fst
                     let input =
                         { Itr.Features.Task.TakeInput.BacklogId = backlogId
                           Itr.Features.Task.TakeInput.TaskIdOverride = taskIdOverride }

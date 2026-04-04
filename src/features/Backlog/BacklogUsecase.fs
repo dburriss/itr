@@ -150,7 +150,8 @@ let loadSnapshot
             let id = BacklogId.value item.Id
             match taskStore.ListTasks coordRoot item.Id with
             | Error e -> Error e
-            | Ok tasks ->
+            | Ok taskTuples ->
+                let tasks = taskTuples |> List.map fst
                 let status = BacklogItemStatus.compute tasks
                 Ok
                     { Item = item
@@ -255,6 +256,7 @@ let getBacklogItemDetail
             taskStore.ListArchivedTasks coordRoot backlogId
         else
             taskStore.ListTasks coordRoot backlogId
+            |> Result.map (List.map fst)
 
     match tasksResult with
     | Error e -> Error e

@@ -64,7 +64,9 @@ let ``getTaskDetail returns full detail record for a known task`` () =
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let taskId = TaskId.create "feat-a"
-            match Task.getTaskDetail taskId allTasks false with
+            let allTasksList = allTasks |> List.map fst
+            let taskYamlPath = allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) |> Option.map snd |> Option.defaultValue ""
+            match Task.getTaskDetail taskId allTasksList taskYamlPath with
             | Error e -> failwithf "expected Ok, got Error: %A" e
             | Ok detail ->
                 Assert.Equal("feat-a", TaskId.value detail.Task.Id)
@@ -95,9 +97,10 @@ let ``getTaskDetail PlanExists true when plan md file is present`` () =
         match store.ListAllTasks root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
-            let planExists = File.Exists(planPath)
             let taskId = TaskId.create "feat-a"
-            match Task.getTaskDetail taskId allTasks planExists with
+            let allTasksList = allTasks |> List.map fst
+            let taskYamlPath = allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) |> Option.map snd |> Option.defaultValue ""
+            match Task.getTaskDetail taskId allTasksList taskYamlPath with
             | Error e -> failwithf "expected Ok, got Error: %A" e
             | Ok detail ->
                 Assert.True(detail.PlanExists)
@@ -111,16 +114,14 @@ let ``getTaskDetail PlanExists false when plan md file is absent`` () =
         writeItemYaml root "feat-a" [ "repo-1" ]
         writeTaskYaml root "feat-a" "feat-a" "feat-a" "feat-a" "repo-1" "planning"
 
-        let planPath = Path.Combine(root, "BACKLOG", "feat-a", "tasks", "feat-a", "plan.md")
-        // Do NOT create the plan file
-
         let store = TaskStoreAdapter() :> ITaskStore
         match store.ListAllTasks root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
-            let planExists = File.Exists(planPath)
             let taskId = TaskId.create "feat-a"
-            match Task.getTaskDetail taskId allTasks planExists with
+            let allTasksList = allTasks |> List.map fst
+            let taskYamlPath = allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) |> Option.map snd |> Option.defaultValue ""
+            match Task.getTaskDetail taskId allTasksList taskYamlPath with
             | Error e -> failwithf "expected Ok, got Error: %A" e
             | Ok detail ->
                 Assert.False(detail.PlanExists)
@@ -144,7 +145,9 @@ let ``getTaskDetail shows siblings that share the same backlog item`` () =
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let taskId = TaskId.create "feat-a-repo1"
-            match Task.getTaskDetail taskId allTasks false with
+            let allTasksList = allTasks |> List.map fst
+            let taskYamlPath = allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) |> Option.map snd |> Option.defaultValue ""
+            match Task.getTaskDetail taskId allTasksList taskYamlPath with
             | Error e -> failwithf "expected Ok, got Error: %A" e
             | Ok detail ->
                 Assert.Equal(1, detail.Siblings.Length)
@@ -169,7 +172,9 @@ let ``getTaskDetail shows no siblings when task is the only one for its backlog`
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let taskId = TaskId.create "feat-a"
-            match Task.getTaskDetail taskId allTasks false with
+            let allTasksList = allTasks |> List.map fst
+            let taskYamlPath = allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) |> Option.map snd |> Option.defaultValue ""
+            match Task.getTaskDetail taskId allTasksList taskYamlPath with
             | Error e -> failwithf "expected Ok, got Error: %A" e
             | Ok detail ->
                 Assert.Empty(detail.Siblings)
@@ -193,7 +198,9 @@ let ``getTaskDetail returns data suitable for valid JSON output`` () =
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let taskId = TaskId.create "feat-a-r1"
-            match Task.getTaskDetail taskId allTasks false with
+            let allTasksList = allTasks |> List.map fst
+            let taskYamlPath = allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) |> Option.map snd |> Option.defaultValue ""
+            match Task.getTaskDetail taskId allTasksList taskYamlPath with
             | Error e -> failwithf "expected Ok, got Error: %A" e
             | Ok detail ->
                 // Verify all JSON fields are accessible (id, backlog, repo, state,
@@ -227,7 +234,9 @@ let ``getTaskDetail siblings is empty list when no siblings exist`` () =
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let taskId = TaskId.create "feat-a"
-            match Task.getTaskDetail taskId allTasks false with
+            let allTasksList = allTasks |> List.map fst
+            let taskYamlPath = allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) |> Option.map snd |> Option.defaultValue ""
+            match Task.getTaskDetail taskId allTasksList taskYamlPath with
             | Error e -> failwithf "expected Ok, got Error: %A" e
             | Ok detail ->
                 Assert.Empty(detail.Siblings)
@@ -250,7 +259,8 @@ let ``getTaskDetail returns TaskNotFound error for unknown task id`` () =
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let missingId = TaskId.create "unknown-id"
-            match Task.getTaskDetail missingId allTasks false with
+            let allTasksList = allTasks |> List.map fst
+            match Task.getTaskDetail missingId allTasksList "" with
             | Ok _ -> failwith "expected Error, got Ok"
             | Error(TaskNotFound id) ->
                 Assert.Equal("unknown-id", TaskId.value id)

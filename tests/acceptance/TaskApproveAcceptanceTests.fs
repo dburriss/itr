@@ -64,9 +64,9 @@ let ``approveTask integration writes task state to approved`` () =
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let taskId = TaskId.create "my-feature"
-            match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
+            match allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) with
             | None -> failwith "task not found"
-            | Some task ->
+            | Some (task, _) ->
                 let planPath = Path.Combine(root, "BACKLOG", "my-feature", "tasks", "my-feature", "plan.md")
                 let planExists = File.Exists(planPath)
 
@@ -79,9 +79,9 @@ let ``approveTask integration writes task state to approved`` () =
                         match taskStore.ListAllTasks root with
                         | Error e -> failwithf "reload failed: %A" e
                         | Ok reloadedTasks ->
-                            match reloadedTasks |> List.tryFind (fun t -> t.Id = taskId) with
+                            match reloadedTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) with
                             | None -> failwith "task not found after write"
-                            | Some reloaded ->
+                            | Some (reloaded, _) ->
                                 Assert.Equal(TaskState.Approved, reloaded.State)
     finally
         Directory.Delete(root, true)
@@ -104,9 +104,9 @@ let ``approveTask returns MissingPlanArtifact when plan md does not exist`` () =
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let taskId = TaskId.create "my-feature"
-            match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
+            match allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) with
             | None -> failwith "task not found"
-            | Some task ->
+            | Some (task, _) ->
                 let planPath = Path.Combine(root, "BACKLOG", "my-feature", "tasks", "my-feature", "plan.md")
                 let planExists = File.Exists(planPath)
 
@@ -136,9 +136,9 @@ let ``approveTask returns InvalidTaskState when task is in planning state`` () =
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let taskId = TaskId.create "my-feature"
-            match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
+            match allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) with
             | None -> failwith "task not found"
-            | Some task ->
+            | Some (task, _) ->
                 let planPath = Path.Combine(root, "BACKLOG", "my-feature", "tasks", "my-feature", "plan.md")
                 let planExists = File.Exists(planPath)
 

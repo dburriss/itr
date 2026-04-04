@@ -84,7 +84,8 @@ type IViewStore =
 /// Capability interface for reading and writing task files
 type ITaskStore =
     /// List all tasks for a given backlog id from <coordRoot>/BACKLOG/<backlog-id>/tasks/
-    abstract ListTasks: coordRoot: string -> backlogId: BacklogId -> Result<ItrTask list, BacklogError>
+    /// Returns tuples of (task, taskYamlPath) where taskYamlPath is the absolute path to task.yaml
+    abstract ListTasks: coordRoot: string -> backlogId: BacklogId -> Result<(ItrTask * string) list, BacklogError>
     /// List all tasks for an archived backlog item by scanning <coordRoot>/BACKLOG/_archive/ for the matching folder
     abstract ListArchivedTasks: coordRoot: string -> backlogId: BacklogId -> Result<ItrTask list, BacklogError>
     /// Write a task file to <coordRoot>/BACKLOG/<backlog-id>/tasks/<task-id>/task.yaml
@@ -95,7 +96,8 @@ type ITaskStore =
         coordRoot: string -> backlogId: BacklogId -> taskId: TaskId -> date: string -> Result<unit, BacklogError>
 
     /// List all tasks across all backlog items (active and archived) under <coordRoot>/BACKLOG/
-    abstract ListAllTasks: coordRoot: string -> Result<ItrTask list, BacklogError>
+    /// Returns tuples of (task, taskYamlPath) where taskYamlPath is the absolute path to task.yaml
+    abstract ListAllTasks: coordRoot: string -> Result<(ItrTask * string) list, BacklogError>
 
 /// Capability interface for AI agent harness interactions
 type IAgentHarness =

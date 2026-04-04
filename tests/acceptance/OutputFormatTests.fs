@@ -168,7 +168,9 @@ let ``task info text output contains key-value lines`` () =
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let taskId = TaskId.create "feat-a"
-            match Task.getTaskDetail taskId allTasks false with
+            let allTasksList = allTasks |> List.map fst
+            let taskYamlPath = allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) |> Option.map snd |> Option.defaultValue ""
+            match Task.getTaskDetail taskId allTasksList taskYamlPath with
             | Error e -> failwithf "expected Ok, got Error: %A" e
             | Ok detail ->
                 let task = detail.Task

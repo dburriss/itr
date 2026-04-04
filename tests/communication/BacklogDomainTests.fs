@@ -145,7 +145,7 @@ let ``mapTaskState round-trip for planned`` () =
             | Error e -> failwithf "%A" e
         match store.ListTasks root backlogId with
         | Error e -> failwithf "expected Ok, got %A" e
-        | Ok [ task ] -> Assert.Equal(TaskState.Planned, task.State)
+        | Ok [ (task, _) ] -> Assert.Equal(TaskState.Planned, task.State)
         | Ok tasks -> failwithf "expected 1 task, got %d" tasks.Length
     finally
         if Directory.Exists(root) then Directory.Delete(root, true)
@@ -163,7 +163,7 @@ let ``mapTaskState round-trip for approved`` () =
             | Error e -> failwithf "%A" e
         match store.ListTasks root backlogId with
         | Error e -> failwithf "expected Ok, got %A" e
-        | Ok [ task ] -> Assert.Equal(TaskState.Approved, task.State)
+        | Ok [ (task, _) ] -> Assert.Equal(TaskState.Approved, task.State)
         | Ok tasks -> failwithf "expected 1 task, got %d" tasks.Length
     finally
         if Directory.Exists(root) then Directory.Delete(root, true)
@@ -181,7 +181,7 @@ let ``mapTaskState round-trip for archived`` () =
             | Error e -> failwithf "%A" e
         match store.ListTasks root backlogId with
         | Error e -> failwithf "expected Ok, got %A" e
-        | Ok [ task ] -> Assert.Equal(TaskState.Archived, task.State)
+        | Ok [ (task, _) ] -> Assert.Equal(TaskState.Archived, task.State)
         | Ok tasks -> failwithf "expected 1 task, got %d" tasks.Length
     finally
         if Directory.Exists(root) then Directory.Delete(root, true)
