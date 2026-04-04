@@ -67,7 +67,7 @@ let private backlogStatusToString (s: BacklogItemStatus) =
     | BacklogItemStatus.Archived -> "archived"
 
 // ---------------------------------------------------------------------------
-// 8.1 task list text output — id, backlog, repo, state, planApproved
+// 8.1 task list text output — id, repo, state, planApproved
 // ---------------------------------------------------------------------------
 
 [<Fact>]
@@ -83,29 +83,27 @@ let ``task list text output contains tab-separated fields`` () =
         | Ok allTasks ->
             let summaries = Task.listTasks allTasks
 
-            // Simulate text output: <id>\t<backlog>\t<repo>\t<state>\t<planApproved>
+            // Simulate text output: <id>\t<repo>\t<state>\t<planApproved>
             let lines =
                 summaries
                 |> List.map (fun s ->
                     let id = TaskId.value s.Task.Id
-                    let backlog = BacklogId.value s.Task.SourceBacklog
                     let repo = RepoId.value s.Task.Repo
                     let state = taskStateToString s.Task.State
                     let planApproved = if s.PlanApproved then "yes" else "no"
-                    sprintf "%s\t%s\t%s\t%s\t%s" id backlog repo state planApproved)
+                    sprintf "%s\t%s\t%s\t%s" id repo state planApproved)
 
             Assert.Equal(1, lines.Length)
             let line = lines.[0]
             // Must contain tabs
             Assert.Contains("\t", line)
-            // Must have exactly 4 tabs (5 fields)
+            // Must have exactly 3 tabs (4 fields)
             let parts = line.Split('\t')
-            Assert.Equal(5, parts.Length)
+            Assert.Equal(4, parts.Length)
             Assert.Equal("feat-a", parts.[0]) // id
-            Assert.Equal("feat-a", parts.[1]) // backlog
-            Assert.Equal("repo-1", parts.[2]) // repo
-            Assert.Equal("planning", parts.[3]) // state
-            Assert.Equal("no", parts.[4])      // planApproved
+            Assert.Equal("repo-1", parts.[1]) // repo
+            Assert.Equal("planning", parts.[2]) // state
+            Assert.Equal("no", parts.[3])      // planApproved
     finally
         Directory.Delete(root, true)
 
@@ -301,16 +299,15 @@ let ``text output has no ANSI sequences`` () =
         | Ok allTasks ->
             let summaries = Task.listTasks allTasks
 
-            // Build text output lines exactly as the CLI does (id, backlog, repo, state, planApproved)
+            // Build text output lines exactly as the CLI does (id, repo, state, planApproved)
             let lines =
                 summaries
                 |> List.map (fun s ->
                     let id = TaskId.value s.Task.Id
-                    let backlog = BacklogId.value s.Task.SourceBacklog
                     let repo = RepoId.value s.Task.Repo
                     let state = taskStateToString s.Task.State
                     let planApproved = if s.PlanApproved then "yes" else "no"
-                    sprintf "%s\t%s\t%s\t%s\t%s" id backlog repo state planApproved)
+                    sprintf "%s\t%s\t%s\t%s" id repo state planApproved)
 
             let output = String.concat "\n" lines
 

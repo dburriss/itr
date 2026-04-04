@@ -553,7 +553,6 @@ let private handleTaskList
                         filtered
                         |> List.map (fun s ->
                             let id = TaskId.value s.Task.Id
-                            let backlog = BacklogId.value s.Task.SourceBacklog
                             let repo = RepoId.value s.Task.Repo
                             let state = taskStateToDisplayString s.Task.State
                             let taskYamlPath = s.TaskYamlPath.Replace("\\", "\\\\")
@@ -561,8 +560,8 @@ let private handleTaskList
                                 match s.PlanMdPath with
                                 | Some p -> sprintf "\"%s\"" (p.Replace("\\", "\\\\"))
                                 | None -> "null"
-                            sprintf "    { \"id\": \"%s\", \"backlog\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\", \"taskYamlPath\": \"%s\", \"planMdPath\": %s }"
-                                id backlog repo state taskYamlPath planMdPathJson)
+                            sprintf "    { \"id\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\", \"taskYamlPath\": \"%s\", \"planMdPath\": %s }"
+                                id repo state taskYamlPath planMdPathJson)
                         |> String.concat ",\n"
                     printfn "{ \"tasks\": ["
                     printfn "%s" items
@@ -571,16 +570,14 @@ let private handleTaskList
                     filtered
                     |> List.iter (fun s ->
                         let id = TaskId.value s.Task.Id
-                        let backlog = BacklogId.value s.Task.SourceBacklog
                         let repo = RepoId.value s.Task.Repo
                         let state = taskStateToDisplayString s.Task.State
                         let taskYamlPath = s.TaskYamlPath
                         let planMdPath = s.PlanMdPath |> Option.defaultValue ""
-                        printfn "%s\t%s\t%s\t%s\t%s\t%s" id backlog repo state taskYamlPath planMdPath)
+                        printfn "%s\t%s\t%s\t%s\t%s" id repo state taskYamlPath planMdPath)
                 | TableOutput ->
                     let table = Table()
                     table.AddColumn("Id") |> ignore
-                    table.AddColumn("Backlog") |> ignore
                     table.AddColumn("Repo") |> ignore
                     table.AddColumn("State") |> ignore
                     table.AddColumn("Task YAML") |> ignore
@@ -589,12 +586,11 @@ let private handleTaskList
                     filtered
                     |> List.iter (fun s ->
                         let id = TaskId.value s.Task.Id
-                        let backlog = BacklogId.value s.Task.SourceBacklog
                         let repo = RepoId.value s.Task.Repo
                         let state = taskStateToDisplayString s.Task.State
                         let taskYamlPath = s.TaskYamlPath
                         let planMdPath = s.PlanMdPath |> Option.defaultValue ""
-                        table.AddRow(id, backlog, repo, state, taskYamlPath, planMdPath) |> ignore)
+                        table.AddRow(id, repo, state, taskYamlPath, planMdPath) |> ignore)
 
                     AnsiConsole.Write(table)
 
@@ -1135,7 +1131,7 @@ let private handleProfileList
         profiles
         |> List.iter (fun (name, isDefault, gitName, gitEmail, productCount) ->
             let marker = if isDefault then "*" else " "
-            printfn "%s | %s | %s | %s | %d" marker name gitName gitEmail productCount)
+            printfn "%s\t%s\t%s\t%s\t%d" marker name gitName gitEmail productCount)
     | TableOutput ->
         let table = Table()
         table.AddColumn("Default") |> ignore
