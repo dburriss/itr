@@ -5,10 +5,9 @@ repos:
 type: feature
 priority: medium
 summary: |-
-  Set the given profile as the default. Flags control whether env vars are set or local or global.
+  Set the given profile as the default. Flags control whether local or global config is updated.
 acceptance_criteria:
-- If no flags it will set where ever the profile is coming from (ITR_PROFILE > local itr.json > global itr.json)
-- If --env, ITR_PROFILE will be set
+- If no flags it will set wherever the profile is coming from (local itr.json > global itr.json)
 - If --local, defaultProfile in a local itr.json (creates if does not exist)
 - If --global, defaultProfile in global itr.json
 dependencies: 
