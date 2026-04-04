@@ -28,7 +28,7 @@ The system SHALL support `--output` flag with values `table` (default), `json`, 
 
 #### Scenario: Text output
 - **WHEN** the user runs `itr profile list --output text`
-- **THEN** one line per profile is printed in the format `[*]<name> | <gitName> | <gitEmail> | <productCount>` where `*` prefix only appears for the default
+- **THEN** one line per profile is printed as tab-separated values in the format `<marker>\t<name>\t<gitName>\t<gitEmail>\t<productCount>` where `<marker>` is `*` for the default profile and a space for others
 
 #### Scenario: Invalid output format falls back to table
 - **WHEN** the user runs `itr profile list --output bogus`
