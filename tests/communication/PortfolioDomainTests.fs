@@ -173,6 +173,122 @@ let ``resolveActiveProfile lookup is case-insensitive`` () =
     | Error e -> failwithf "expected success, got %A" e
 
 // ---------------------------------------------------------------------------
+// resolveActiveProfile — whitespace fallthrough (2.1–2.3)
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``resolveActiveProfile whitespace-only flag falls through to ITR_PROFILE env var`` () =
+    let work = mkProfile "work" []
+    let personal = mkProfile "personal" []
+
+    let portfolio =
+        DomainPortfolio.tryCreate (Some(ProfileName.create "work")) [ work; personal ]
+        |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+    let deps = TestEnvDeps(Map.ofList [ "ITR_PROFILE", "personal" ])
+
+    match FeaturePortfolio.resolveActiveProfile portfolio (Some "   ") |> Effect.run deps with
+    | Ok profile -> Assert.Equal("personal", profile.Name |> ProfileName.value)
+    | Error e -> failwithf "expected success, got %A" e
+
+[<Fact>]
+let ``resolveActiveProfile whitespace-only flag falls through to defaultProfile`` () =
+    let work = mkProfile "work" []
+
+    let portfolio =
+        DomainPortfolio.tryCreate (Some(ProfileName.create "work")) [ work ]
+        |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+    let deps = TestEnvDeps(Map.empty)
+
+    match FeaturePortfolio.resolveActiveProfile portfolio (Some "   ") |> Effect.run deps with
+    | Ok profile -> Assert.Equal("work", profile.Name |> ProfileName.value)
+    | Error e -> failwithf "expected success, got %A" e
+
+[<Fact>]
+let ``resolveActiveProfile whitespace-only ITR_PROFILE falls through to defaultProfile`` () =
+    let work = mkProfile "work" []
+
+    let portfolio =
+        DomainPortfolio.tryCreate (Some(ProfileName.create "work")) [ work ]
+        |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+    let deps = TestEnvDeps(Map.ofList [ "ITR_PROFILE", "   " ])
+
+    match FeaturePortfolio.resolveActiveProfile portfolio None |> Effect.run deps with
+    | Ok profile -> Assert.Equal("work", profile.Name |> ProfileName.value)
+    | Error e -> failwithf "expected success, got %A" e
+
+// ---------------------------------------------------------------------------
+// resolveActiveProfile — ProfileNotFound via env and default (3.1–3.2)
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``resolveActiveProfile ITR_PROFILE names non-existent profile returns ProfileNotFound`` () =
+    let work = mkProfile "work" []
+
+    let portfolio =
+        DomainPortfolio.tryCreate (Some(ProfileName.create "work")) [ work ]
+        |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+    let deps = TestEnvDeps(Map.ofList [ "ITR_PROFILE", "xyz" ])
+
+    match FeaturePortfolio.resolveActiveProfile portfolio None |> Effect.run deps with
+    | Error(ProfileNotFound name) -> Assert.Equal("xyz", name)
+    | other -> failwithf "expected ProfileNotFound \"xyz\", got %A" other
+
+[<Fact>]
+let ``resolveActiveProfile defaultProfile names non-existent profile returns ProfileNotFound`` () =
+    let work = mkProfile "work" []
+
+    // Portfolio whose defaultProfile is "xyz" but only "work" profile exists.
+    // resolveActiveProfile will extract "xyz" as the name and fail to find it.
+    let portfolioXyzDefault =
+        DomainPortfolio.tryCreate (Some(ProfileName.create "xyz")) [ work ]
+        |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+    let deps = TestEnvDeps(Map.empty)
+
+    match FeaturePortfolio.resolveActiveProfile portfolioXyzDefault None |> Effect.run deps with
+    | Error(ProfileNotFound name) -> Assert.Equal("xyz", name)
+    | other -> failwithf "expected ProfileNotFound \"xyz\", got %A" other
+
+// ---------------------------------------------------------------------------
+// resolveActiveProfile — case-insensitive lookup via env and default (4.1–4.2)
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``resolveActiveProfile ITR_PROFILE=WORK matches profile named work`` () =
+    let work = mkProfile "work" []
+
+    let portfolio =
+        DomainPortfolio.tryCreate None [ work ]
+        |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+    let deps = TestEnvDeps(Map.ofList [ "ITR_PROFILE", "WORK" ])
+
+    match FeaturePortfolio.resolveActiveProfile portfolio None |> Effect.run deps with
+    | Ok profile -> Assert.Equal("work", profile.Name |> ProfileName.value)
+    | Error e -> failwithf "expected success, got %A" e
+
+[<Fact>]
+let ``resolveActiveProfile defaultProfile=Work matches profile named work`` () =
+    let work = mkProfile "work" []
+
+    // Use ProfileName.create (not tryCreate) to bypass the slug validation and store "Work"
+    // as the DefaultProfile value — simulating a config file with mixed-case default.
+    // resolveActiveProfile extracts the raw string and passes it to tryFindProfileCaseInsensitive.
+    let portfolioMixedCaseDefault =
+        DomainPortfolio.tryCreate (Some(ProfileName.create "Work")) [ work ]
+        |> Result.defaultWith (fun e -> failwithf "%A" e)
+
+    let deps = TestEnvDeps(Map.empty)
+
+    match FeaturePortfolio.resolveActiveProfile portfolioMixedCaseDefault None |> Effect.run deps with
+    | Ok profile -> Assert.Equal("work", profile.Name |> ProfileName.value)
+    | Error e -> failwithf "expected success, got %A" e
+
+// ---------------------------------------------------------------------------
 // Helpers to build a ProductDefinition for test stubs
 // ---------------------------------------------------------------------------
 

@@ -810,8 +810,119 @@ let ``registerProduct round-trip preserves existing profiles and products`` () =
             Directory.Delete(root, true)
 
 // ---------------------------------------------------------------------------
-// profile list acceptance tests
+// profile resolution acceptance tests (5.2)
 // ---------------------------------------------------------------------------
+
+/// TestDeps variant that accepts a controlled env-var map for profile resolution tests
+type TestDepsWithEnv(portfolioPath: string, envVars: Map<string, string>) =
+    let fsAdapter = FileSystemAdapter()
+    let envAdapter = EnvironmentAdapter()
+    let productConfigAdapter = YamlAdapter.ProductConfigAdapter()
+    let homeDir = (envAdapter :> IEnvironment).HomeDirectory()
+
+    interface IEnvironment with
+        member _.GetEnvVar name = envVars |> Map.tryFind name
+        member _.HomeDirectory() = homeDir
+
+    interface IFileSystem with
+        member _.ReadFile path = (fsAdapter :> IFileSystem).ReadFile path
+        member _.WriteFile path content = (fsAdapter :> IFileSystem).WriteFile path content
+        member _.FileExists path = (fsAdapter :> IFileSystem).FileExists path
+        member _.DirectoryExists path = (fsAdapter :> IFileSystem).DirectoryExists path
+
+    interface IPortfolioConfig with
+        member _.ConfigPath() = portfolioPath
+        member _.LoadConfig path = readConfig (fsAdapter :> IFileSystem) homeDir path
+        member _.SaveConfig path portfolio = writeConfig (fsAdapter :> IFileSystem) homeDir path portfolio
+
+    interface IProductConfig with
+        member _.LoadProductConfig root =
+            (productConfigAdapter :> IProductConfig).LoadProductConfig root
+
+/// Fixture with three named profiles: "work", "personal", "side" for profile resolution tests
+type MultiProfileFixture() =
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-multi-profile-{Guid.NewGuid():N}")
+
+    let portfolioPath = Path.Combine(root, "itr.json")
+
+    do
+        Directory.CreateDirectory(root) |> ignore
+
+        let config =
+            $"""{{
+  "defaultProfile": "work",
+  "profiles": {{
+    "work": {{ "products": [] }},
+    "personal": {{ "products": [] }},
+    "side": {{ "products": [] }}
+  }}
+}}"""
+
+        File.WriteAllText(portfolioPath, config)
+
+    member _.PortfolioPath = portfolioPath
+
+    interface IDisposable with
+        member _.Dispose() =
+            if Directory.Exists(root) then
+                Directory.Delete(root, true)
+
+[<Fact>]
+let ``profile resolution flag overrides ITR_PROFILE and defaultProfile`` () =
+    use fixture = new MultiProfileFixture()
+    // ITR_PROFILE=personal; flag="side" → flag wins
+    let deps = TestDepsWithEnv(fixture.PortfolioPath, Map.ofList [ "ITR_PROFILE", "personal" ])
+
+    let profile =
+        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        |> Effect.run deps
+        |> Result.bind (fun portfolio -> FeaturePortfolio.resolveActiveProfile portfolio (Some "side") |> Effect.run deps)
+        |> getResult
+
+    Assert.Equal("side", profile.Name |> ProfileName.value)
+
+[<Fact>]
+let ``profile resolution ITR_PROFILE overrides defaultProfile when flag absent`` () =
+    use fixture = new MultiProfileFixture()
+    // defaultProfile=work; ITR_PROFILE=personal; flag absent → env wins
+    let deps = TestDepsWithEnv(fixture.PortfolioPath, Map.ofList [ "ITR_PROFILE", "personal" ])
+
+    let profile =
+        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        |> Effect.run deps
+        |> Result.bind (fun portfolio -> FeaturePortfolio.resolveActiveProfile portfolio None |> Effect.run deps)
+        |> getResult
+
+    Assert.Equal("personal", profile.Name |> ProfileName.value)
+
+[<Fact>]
+let ``profile resolution falls through to defaultProfile when flag and ITR_PROFILE absent`` () =
+    use fixture = new MultiProfileFixture()
+    // defaultProfile=work; no flag; no ITR_PROFILE → default wins
+    let deps = TestDepsWithEnv(fixture.PortfolioPath, Map.empty)
+
+    let profile =
+        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        |> Effect.run deps
+        |> Result.bind (fun portfolio -> FeaturePortfolio.resolveActiveProfile portfolio None |> Effect.run deps)
+        |> getResult
+
+    Assert.Equal("work", profile.Name |> ProfileName.value)
+
+[<Fact>]
+let ``profile resolution whitespace-only flag falls through to ITR_PROFILE then default`` () =
+    use fixture = new MultiProfileFixture()
+    // Whitespace flag → should fall through to ITR_PROFILE=side
+    let deps = TestDepsWithEnv(fixture.PortfolioPath, Map.ofList [ "ITR_PROFILE", "side" ])
+
+    let profile =
+        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        |> Effect.run deps
+        |> Result.bind (fun portfolio -> FeaturePortfolio.resolveActiveProfile portfolio (Some "   ") |> Effect.run deps)
+        |> getResult
+
+    Assert.Equal("side", profile.Name |> ProfileName.value)
 
 /// Helper: capture stdout while running an action
 let private captureConsole (action: unit -> unit) : string =
