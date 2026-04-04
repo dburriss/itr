@@ -1,0 +1,13 @@
+id: list-column-fixes
+title: Fixes to list commands for tv integration
+repos:
+- itr
+type: chore
+priority: low
+summary: |-
+  `task-list` has id and backlog columns. Backlog column should be removed. `profile list` uses | instead of tab as the delimeter.
+acceptance_criteria:
+- '`task-list` has id column and not backlog column'
+- profile list --output text uses tab not |
+dependencies: 
+created_at: 2026-04-04
