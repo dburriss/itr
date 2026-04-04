@@ -11,4 +11,5 @@ items:
   - product-info
   - backlog-item-path
   - task-paths
+  - profile-list-delimiter-fix
 
