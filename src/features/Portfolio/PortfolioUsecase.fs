@@ -50,7 +50,7 @@ let resolveActiveProfile<'deps when 'deps :> IEnvironment>
 
 /// Load all product definitions from registered roots, detecting duplicates.
 /// Returns a list of (ProductRef * ProductDefinition) pairs.
-let private loadAllDefinitions<'deps when 'deps :> IProductConfig and 'deps :> IFileSystem>
+let loadAllDefinitions<'deps when 'deps :> IProductConfig and 'deps :> IFileSystem>
     (profile: Profile)
     (deps: 'deps)
     : Result<(ProductRef * ProductDefinition) list, PortfolioError> =

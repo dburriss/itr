@@ -181,15 +181,28 @@ type ProductRegisterArgs =
             | Path _ -> "path to an existing product root directory"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
+type ProductListArgs =
+    | Profile of profile: string
+    | Output of output: string
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Profile _ -> "profile name (defaults to active profile)"
+            | Output _ -> "output mode: table (default) | json | text"
+
+[<CliPrefix(CliPrefix.DoubleDash)>]
 type ProductArgs =
     | [<CliPrefix(CliPrefix.None)>] Init of ParseResults<ProductInitArgs>
     | [<CliPrefix(CliPrefix.None)>] Register of ParseResults<ProductRegisterArgs>
+    | [<CliPrefix(CliPrefix.None)>] List of ParseResults<ProductListArgs>
 
     interface IArgParserTemplate with
         member this.Usage =
             match this with
             | Init _ -> "scaffold a new product"
             | Register _ -> "register an existing product root in the portfolio"
+            | List _ -> "list products registered in the active profile"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
 type TaskListArgs =
@@ -846,6 +859,74 @@ let private handleTaskApprove
                     | Ok () ->
                         printfn "Task '%s' approved." rawTaskId
                         Ok()
+
+// ---------------------------------------------------------------------------
+// product list handler
+// ---------------------------------------------------------------------------
+
+let private handleProductList
+    (configPath: string)
+    (deps: AppDeps)
+    (listArgs: ParseResults<ProductListArgs>)
+    : Result<unit, string> =
+    let portfolioResult =
+        Portfolio.loadPortfolio (Some configPath)
+        |> Effect.run deps
+        |> Result.mapError formatPortfolioError
+
+    match portfolioResult with
+    | Error msg -> Error msg
+    | Ok portfolio ->
+        // Return error when portfolio has no profiles
+        if portfolio.Profiles.IsEmpty then
+            Error "No profiles found. Run 'itr profile add <name>' to create one."
+        else
+            let flagProfile = listArgs.TryGetResult ProductListArgs.Profile
+            let format = listArgs.TryGetResult ProductListArgs.Output |> parseOutputFormat
+
+            match Portfolio.resolveActiveProfile portfolio flagProfile |> Effect.run deps with
+            | Error e -> Error(formatPortfolioError e)
+            | Ok profile ->
+                match Portfolio.loadAllDefinitions profile deps with
+                | Error e -> Error(formatPortfolioError e)
+                | Ok pairs ->
+                    let rows =
+                        pairs
+                        |> List.map (fun (_, definition) ->
+                            let id = ProductId.value definition.Id
+                            let repoCount = definition.Repos.Count
+                            let coordRoot = definition.CoordRoot.AbsolutePath
+                            (id, repoCount, coordRoot))
+
+                    match format with
+                    | JsonOutput ->
+                        let items =
+                            rows
+                            |> List.map (fun (id, repoCount, coordRoot) ->
+                                sprintf "  { \"id\": \"%s\", \"repoCount\": %d, \"coordRoot\": \"%s\" }"
+                                    id repoCount coordRoot)
+                            |> String.concat ",\n"
+                        printfn "["
+                        if not rows.IsEmpty then
+                            printfn "%s" items
+                        printfn "]"
+                    | TextOutput ->
+                        rows
+                        |> List.iter (fun (id, repoCount, coordRoot) ->
+                            printfn "%s\t%d\t%s" id repoCount coordRoot)
+                    | TableOutput ->
+                        let table = Table()
+                        table.AddColumn("Id") |> ignore
+                        table.AddColumn("Repo Count") |> ignore
+                        table.AddColumn("Coord Root") |> ignore
+
+                        rows
+                        |> List.iter (fun (id, repoCount, coordRoot) ->
+                            table.AddRow(id, string repoCount, coordRoot) |> ignore)
+
+                        AnsiConsole.Write(table)
+
+                    Ok()
 
 // ---------------------------------------------------------------------------
 // profile list handler
@@ -1753,7 +1834,11 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                         match productResults.TryGetResult Register with
                         | Some registerArgs ->
                             handleProductRegister deps configPath profile registerArgs outputJson
-                        | None -> Error "Specify a product subcommand (e.g. product init <path> or product register <path>)"
+                        | None ->
+                            match productResults.TryGetResult ProductArgs.List with
+                            | Some listArgs ->
+                                handleProductList configPath deps listArgs
+                            | None -> Error "Specify a product subcommand (e.g. product init <path>, product register <path>, or product list)"
 
                 | None ->
                     match results.TryGetResult Task with

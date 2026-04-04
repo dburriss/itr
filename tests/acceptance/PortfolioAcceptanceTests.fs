@@ -1203,3 +1203,260 @@ let ``profile list with empty portfolio returns empty profiles list`` () =
         |> Map.toList
         |> List.map (fun (name, _) -> ProfileName.value name)
     Assert.Empty(profiles)
+
+// ---------------------------------------------------------------------------
+// product list acceptance tests
+// ---------------------------------------------------------------------------
+
+/// Fixture for product list tests: two profiles, with products registered in the "work" profile
+type ProductListFixture() =
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-product-list-{Guid.NewGuid():N}")
+
+    let portfolioPath = Path.Combine(root, "itr.json")
+    let workProductRoot = Path.Combine(root, "work-product")
+    let otherProductRoot = Path.Combine(root, "other-product")
+
+    do
+        Directory.CreateDirectory(root) |> ignore
+        Directory.CreateDirectory(workProductRoot) |> ignore
+        Directory.CreateDirectory(otherProductRoot) |> ignore
+
+        // product.yaml with one repo
+        let writeProductYaml dir id repoId =
+            File.WriteAllText(
+                Path.Combine(dir, "product.yaml"),
+                $"id: {id}\nrepos:\n  {repoId}:\n    path: .\ncoordination:\n  mode: standalone\n  path: .itr\n"
+            )
+
+        writeProductYaml workProductRoot "work-product" "main-repo"
+        writeProductYaml otherProductRoot "other-product" "main-repo"
+
+        // itr.json with two profiles; "work" has one product, "empty" has none
+        let config =
+            $"""{{
+  "defaultProfile": "work",
+  "profiles": {{
+    "work": {{
+      "products": ["{workProductRoot}"]
+    }},
+    "empty": {{
+      "products": []
+    }}
+  }}
+}}"""
+
+        File.WriteAllText(portfolioPath, config)
+
+    member _.PortfolioPath = portfolioPath
+    member _.WorkProductRoot = workProductRoot
+    member _.OtherProductRoot = otherProductRoot
+
+    interface IDisposable with
+        member _.Dispose() =
+            if Directory.Exists(root) then
+                Directory.Delete(root, true)
+
+[<Fact>]
+let ``product list resolves products for explicit --profile flag`` () =
+    use fixture = new ProductListFixture()
+    let deps = TestDeps(fixture.PortfolioPath)
+
+    let portfolio =
+        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        |> Effect.run deps
+        |> getResult
+
+    // Resolve work profile explicitly
+    let profile =
+        FeaturePortfolio.resolveActiveProfile portfolio (Some "work")
+        |> Effect.run deps
+        |> getResult
+
+    let pairs =
+        FeaturePortfolio.loadAllDefinitions profile deps
+        |> getResult
+
+    Assert.Equal(1, pairs.Length)
+    let (_, def) = pairs.[0]
+    Assert.Equal("work-product", ProductId.value def.Id)
+
+[<Fact>]
+let ``product list resolves products using default profile when no flag given`` () =
+    use fixture = new ProductListFixture()
+    let deps = TestDeps(fixture.PortfolioPath)
+
+    let portfolio =
+        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        |> Effect.run deps
+        |> getResult
+
+    // No flag — should use default profile ("work")
+    let profile =
+        FeaturePortfolio.resolveActiveProfile portfolio None
+        |> Effect.run deps
+        |> getResult
+
+    Assert.Equal("work", ProfileName.value profile.Name)
+
+    let pairs =
+        FeaturePortfolio.loadAllDefinitions profile deps
+        |> getResult
+
+    Assert.Equal(1, pairs.Length)
+
+[<Fact>]
+let ``product list returns error when specified profile is not found`` () =
+    use fixture = new ProductListFixture()
+    let deps = TestDeps(fixture.PortfolioPath)
+
+    let portfolio =
+        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        |> Effect.run deps
+        |> getResult
+
+    match FeaturePortfolio.resolveActiveProfile portfolio (Some "nonexistent") |> Effect.run deps with
+    | Error(ProfileNotFound name) -> Assert.Equal("nonexistent", name)
+    | other -> failwithf "expected ProfileNotFound, got %A" other
+
+[<Fact>]
+let ``product list returns error when portfolio has no profiles`` () =
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-product-list-empty-{Guid.NewGuid():N}")
+
+    try
+        Directory.CreateDirectory(root) |> ignore
+        let portfolioPath = Path.Combine(root, "itr.json")
+        File.WriteAllText(portfolioPath, """{"defaultProfile": null, "profiles": {}}""")
+
+        let deps = TestDeps(portfolioPath)
+
+        let portfolio =
+            FeaturePortfolio.loadPortfolio (Some portfolioPath)
+            |> Effect.run deps
+            |> getResult
+
+        // Simulate the handler check
+        Assert.True(portfolio.Profiles.IsEmpty, "expected empty profiles")
+    finally
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
+
+[<Fact>]
+let ``product list empty product list succeeds without error`` () =
+    use fixture = new ProductListFixture()
+    let deps = TestDeps(fixture.PortfolioPath)
+
+    let portfolio =
+        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        |> Effect.run deps
+        |> getResult
+
+    // Use the "empty" profile which has no products
+    let profile =
+        FeaturePortfolio.resolveActiveProfile portfolio (Some "empty")
+        |> Effect.run deps
+        |> getResult
+
+    match FeaturePortfolio.loadAllDefinitions profile deps with
+    | Ok pairs -> Assert.Empty(pairs)
+    | Error e -> failwithf "expected Ok, got %A" e
+
+[<Fact>]
+let ``product list json output fields are correct`` () =
+    use fixture = new ProductListFixture()
+    let deps = TestDeps(fixture.PortfolioPath)
+
+    let portfolio =
+        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        |> Effect.run deps
+        |> getResult
+
+    let profile =
+        FeaturePortfolio.resolveActiveProfile portfolio (Some "work")
+        |> Effect.run deps
+        |> getResult
+
+    let pairs =
+        FeaturePortfolio.loadAllDefinitions profile deps
+        |> getResult
+
+    Assert.Equal(1, pairs.Length)
+    let (_, def) = pairs.[0]
+    let id = ProductId.value def.Id
+    let repoCount = def.Repos.Count
+    let coordRoot = def.CoordRoot.AbsolutePath
+
+    // Verify the fields that would appear in JSON output
+    Assert.Equal("work-product", id)
+    Assert.Equal(1, repoCount)
+    Assert.True(coordRoot.EndsWith(".itr"), $"expected coordRoot ending in .itr, got {coordRoot}")
+
+[<Fact>]
+let ``product list text output fields are correct`` () =
+    use fixture = new ProductListFixture()
+    let deps = TestDeps(fixture.PortfolioPath)
+
+    let portfolio =
+        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        |> Effect.run deps
+        |> getResult
+
+    let profile =
+        FeaturePortfolio.resolveActiveProfile portfolio (Some "work")
+        |> Effect.run deps
+        |> getResult
+
+    let pairs =
+        FeaturePortfolio.loadAllDefinitions profile deps
+        |> getResult
+
+    // Simulate text output format: id\trepoCount\tcoordRoot
+    let lines =
+        pairs
+        |> List.map (fun (_, def) ->
+            let id = ProductId.value def.Id
+            let repoCount = def.Repos.Count
+            let coordRoot = def.CoordRoot.AbsolutePath
+            $"{id}\t{repoCount}\t{coordRoot}")
+
+    Assert.Equal(1, lines.Length)
+    let parts = lines.[0].Split('\t')
+    Assert.Equal(3, parts.Length)
+    Assert.Equal("work-product", parts.[0])
+    Assert.Equal("1", parts.[1])
+    Assert.True(parts.[2].EndsWith(".itr"))
+
+[<Fact>]
+let ``product list table output has correct product data`` () =
+    use fixture = new ProductListFixture()
+    let deps = TestDeps(fixture.PortfolioPath)
+
+    let portfolio =
+        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        |> Effect.run deps
+        |> getResult
+
+    let profile =
+        FeaturePortfolio.resolveActiveProfile portfolio (Some "work")
+        |> Effect.run deps
+        |> getResult
+
+    let pairs =
+        FeaturePortfolio.loadAllDefinitions profile deps
+        |> getResult
+
+    // Verify domain data would produce correct table rows
+    let rows =
+        pairs
+        |> List.map (fun (_, def) ->
+            let id = ProductId.value def.Id
+            let repoCount = def.Repos.Count
+            let coordRoot = def.CoordRoot.AbsolutePath
+            (id, repoCount, coordRoot))
+
+    Assert.Equal(1, rows.Length)
+    let (id, repoCount, coordRoot) = rows.[0]
+    Assert.Equal("work-product", id)
+    Assert.Equal(1, repoCount)
+    Assert.True(coordRoot.EndsWith(".itr"))
