@@ -1,0 +1,22 @@
+[metadata]
+name = "itr-products"
+description = "Browse products for the active profile"
+
+[source]
+# Fields: id\trepoCount\tcoordRoot
+command = "mise run product-list --output text"
+display = "{split:\t:0|pad:20} {split:\t:1|pad:5} {split:\t:2}"
+output = "{split:\t:0}"
+no_sort = true
+
+[ui]
+layout = "landscape"
+
+[keybindings]
+shortcut = "f6"
+enter = "actions:drill"
+
+[actions.drill]
+description = "Drill into backlog for this product"
+command = "tv itr-backlog"
+mode = "execute"

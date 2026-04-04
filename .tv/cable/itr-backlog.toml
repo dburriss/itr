@@ -4,7 +4,7 @@ description = "Browse backlog items and take them"
 # requirements = ["itr"]
 
 [source]
-# Fields: id\ttype\tpriority\tstatus\tview\ttaskCount\tcreatedAt\ttitle
+# Fields: id\ttype\tpriority\tstatus\tview\ttaskCount\tcreatedAt\ttitle\tpath
 command = [
     "mise run backlog-list --status created --output text",
     "mise run backlog-list --status planning --output text",
@@ -27,6 +27,8 @@ size = 66
 shortcut = "f7"
 ctrl-t = "actions:take"
 ctrl-a = "actions:add"
+ctrl-d = "actions:drill-tasks"
+ctrl-e = "actions:edit"
 
 [actions.take]
 description = "Take backlog item (create tasks)"
@@ -36,4 +38,14 @@ mode = "fork"
 [actions.add]
 description = "Add new backlog item (interactive)"
 command = "zellij action new-pane --floating --close-on-exit -- mise run backlog-add"
+mode = "fork"
+
+[actions.drill-tasks]
+description = "Drill into tasks for this backlog item"
+command = "tv itr-tasks --input '{split:\t:0}'"
+mode = "execute"
+
+[actions.edit]
+description = "Open item.yaml in $EDITOR"
+command = "$EDITOR '{split:\t:8}'"
 mode = "fork"

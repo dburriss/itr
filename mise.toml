@@ -97,3 +97,15 @@ description = "Run the task plan command using dotnet run."
 [tasks.task-approve]
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- task approve"
 description = "Run the task approve command using dotnet run."
+
+[tasks.profiles-list]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- profile list"
+description = "Run the profiles list command using dotnet run."
+
+[tasks.profiles-set-default]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- profiles set-default"
+description = "Run the profiles set-default command using dotnet run."
+
+[tasks.product-list]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- product list"
+description = "Run the product list command using dotnet run."

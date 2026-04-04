@@ -1,0 +1,31 @@
+[metadata]
+name = "itr-profiles"
+description = "Browse profiles and switch the default"
+
+[source]
+# Fields: marker\tname\tgitName\tgitEmail\tproductCount
+command = "mise run profile list --output text"
+display = "{split:\t:0} {split:\t:1|pad:20} {split:\t:4|pad:5} {split:\t:2}"
+output = "{split:\t:1}"
+no_sort = true
+
+[preview]
+command = "mise run product list --profile '{split:\t:1}' --output text"
+
+[ui]
+layout = "landscape"
+
+[keybindings]
+shortcut = "f5"
+enter = "actions:set-default-and-drill"
+ctrl-d = "actions:drill"
+
+[actions.set-default-and-drill]
+description = "Set as default and drill into products"
+command = "mise run profile set-default '{split:\t:1}' && tv itr-products"
+mode = "execute"
+
+[actions.drill]
+description = "Drill into products without changing default"
+command = "tv itr-products"
+mode = "execute"
