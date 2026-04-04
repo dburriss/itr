@@ -8,7 +8,7 @@ summary: |-
   Include task.yaml and plan.md absolute paths in task-list and task-info
 acceptance_criteria:
 - Paths must point to correct task task.yaml and plan.md
-- Empty plan if plan.md not created yet
+- Empty plan column if plan.md not created yet
 - All paths must be absolute
 - Must appear in all output formats of text, json, table(default)
 dependencies: 
