@@ -46,6 +46,14 @@ description = "Run the profile command using dotnet run."
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- profile add"
 description = "Run the profile add command using dotnet run."
 
+[tasks.profile-list]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- profile list"
+description = "Run the profile list command using dotnet run."
+
+[tasks.profile-select]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- profile select"
+description = "Run the profile select command using dotnet run."
+
 [tasks.product-init]
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- product init"
 description = "Run the product init command using dotnet run."
