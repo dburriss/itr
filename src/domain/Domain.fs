@@ -31,6 +31,7 @@ type CoordinationConfig =
 /// Canonical product definition loaded from product.yaml
 type ProductDefinition =
     { Id: ProductId
+      Description: string option
       Repos: Map<string, RepoConfig>
       Docs: Map<string, string>
       Coordination: CoordinationConfig

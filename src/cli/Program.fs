@@ -192,10 +192,22 @@ type ProductListArgs =
             | Output _ -> "output mode: table (default) | json | text"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
+type ProductInfoArgs =
+    | [<MainCommand>] Product_Id of product_id: string
+    | [<AltCommandLine("-o")>] Output of output: string
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Product_Id _ -> "product id to inspect (optional; auto-detected from current directory if omitted)"
+            | Output _ -> "output mode: table (default) | json | text"
+
+[<CliPrefix(CliPrefix.DoubleDash)>]
 type ProductArgs =
     | [<CliPrefix(CliPrefix.None)>] Init of ParseResults<ProductInitArgs>
     | [<CliPrefix(CliPrefix.None)>] Register of ParseResults<ProductRegisterArgs>
     | [<CliPrefix(CliPrefix.None)>] List of ParseResults<ProductListArgs>
+    | [<CliPrefix(CliPrefix.None)>] Info of ParseResults<ProductInfoArgs>
 
     interface IArgParserTemplate with
         member this.Usage =
@@ -203,6 +215,7 @@ type ProductArgs =
             | Init _ -> "scaffold a new product"
             | Register _ -> "register an existing product root in the portfolio"
             | List _ -> "list products registered in the active profile"
+            | Info _ -> "show detailed information about a product"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
 type TaskListArgs =
@@ -859,6 +872,144 @@ let private handleTaskApprove
                     | Ok () ->
                         printfn "Task '%s' approved." rawTaskId
                         Ok()
+
+// ---------------------------------------------------------------------------
+// product info handler
+// ---------------------------------------------------------------------------
+
+let private handleProductInfo
+    (configPath: string)
+    (deps: AppDeps)
+    (infoArgs: ParseResults<ProductInfoArgs>)
+    : Result<unit, string> =
+    let format = infoArgs.TryGetResult ProductInfoArgs.Output |> parseOutputFormat
+    let productConfig = deps :> IProductConfig
+
+    // Resolve the ProductDefinition and its root path
+    let definitionResult : Result<string * ProductDefinition, string> =
+        match infoArgs.TryGetResult ProductInfoArgs.Product_Id with
+        | Some rawId ->
+            // Lookup by ID in active profile
+            let portfolioResult =
+                Portfolio.loadPortfolio (Some configPath)
+                |> Effect.run deps
+                |> Result.mapError formatPortfolioError
+
+            match portfolioResult with
+            | Error msg -> Error msg
+            | Ok portfolio ->
+                match Portfolio.resolveActiveProfile portfolio None |> Effect.run deps with
+                | Error e -> Error(formatPortfolioError e)
+                | Ok activeProfile ->
+                    match Portfolio.loadAllDefinitions activeProfile deps with
+                    | Error e -> Error(formatPortfolioError e)
+                    | Ok pairs ->
+                        match pairs |> List.tryFind (fun (_, def) -> ProductId.value def.Id = rawId) with
+                        | None -> Error $"Product '{rawId}' not found in active profile."
+                        | Some (productRef, definition) ->
+                            let (ProductRoot root) = productRef.Root
+                            Ok(root, definition)
+        | None ->
+            // Auto-detect: traverse up from cwd looking for product.yaml
+            let rec tryFind (dir: string) =
+                let candidate = IO.Path.Combine(dir, "product.yaml")
+                if IO.File.Exists candidate then
+                    Some dir
+                else
+                    let parent = IO.Path.GetDirectoryName(dir)
+                    if isNull parent || parent = dir then
+                        None
+                    else
+                        tryFind parent
+
+            match tryFind (IO.Directory.GetCurrentDirectory()) with
+            | None ->
+                Error "No product ID provided and no product.yaml found in current directory or any parent directory."
+            | Some productRoot ->
+                match productConfig.LoadProductConfig productRoot with
+                | Error e -> Error(formatPortfolioError e)
+                | Ok definition -> Ok(productRoot, definition)
+
+    match definitionResult with
+    | Error msg -> Error msg
+    | Ok (productRoot, definition) ->
+        let id = ProductId.value definition.Id
+        let description = definition.Description |> Option.defaultValue ""
+
+        // Resolve docs to absolute paths
+        let docs =
+            definition.Docs
+            |> Map.toList
+            |> List.map (fun (key, relPath) ->
+                let absPath = IO.Path.GetFullPath(IO.Path.Combine(productRoot, relPath))
+                key, absPath)
+
+        // Resolve repos to absolute paths (path is relative to productRoot)
+        let repos =
+            definition.Repos
+            |> Map.toList
+            |> List.map (fun (key, repoConfig) ->
+                let absPath = IO.Path.GetFullPath(IO.Path.Combine(productRoot, repoConfig.Path))
+                key, absPath, repoConfig.Url)
+
+        let coordMode = definition.Coordination.Mode
+        let coordRepo = definition.Coordination.Repo |> Option.defaultValue ""
+        let coordPath = definition.Coordination.Path |> Option.defaultValue ""
+
+        match format with
+        | JsonOutput ->
+            let docsJson =
+                docs
+                |> List.map (fun (key, absPath) ->
+                    sprintf "    \"%s\": \"%s\"" key (absPath.Replace("\\", "\\\\")))
+                |> String.concat ",\n"
+            let reposJson =
+                repos
+                |> List.map (fun (key, absPath, url) ->
+                    match url with
+                    | Some u ->
+                        sprintf "    \"%s\": { \"path\": \"%s\", \"url\": \"%s\" }" key (absPath.Replace("\\", "\\\\")) u
+                    | None ->
+                        sprintf "    \"%s\": { \"path\": \"%s\" }" key (absPath.Replace("\\", "\\\\")))
+                |> String.concat ",\n"
+            let descriptionJson =
+                description.Replace("\"", "\\\"")
+            printfn "{"
+            printfn "  \"id\": \"%s\"," id
+            printfn "  \"description\": \"%s\"," descriptionJson
+            printfn "  \"docs\": {"
+            if not docs.IsEmpty then printfn "%s" docsJson
+            printfn "  },"
+            printfn "  \"repos\": {"
+            if not repos.IsEmpty then printfn "%s" reposJson
+            printfn "  },"
+            printfn "  \"coordMode\": \"%s\"," coordMode
+            printfn "  \"coordRepo\": \"%s\"," coordRepo
+            printfn "  \"coordPath\": \"%s\"" coordPath
+            printfn "}"
+        | TextOutput ->
+            printfn "id\t%s" id
+            printfn "description\t%s" description
+            docs |> List.iter (fun (key, absPath) -> printfn "docs\t%s\t%s" key absPath)
+            repos |> List.iter (fun (key, absPath, _) -> printfn "repos\t%s\t%s" key absPath)
+            printfn "coordMode\t%s" coordMode
+            printfn "coordRepo\t%s" coordRepo
+            printfn "coordPath\t%s" coordPath
+        | TableOutput ->
+            let table = Table()
+            table.AddColumn("Field") |> ignore
+            table.AddColumn("Key") |> ignore
+            table.AddColumn("Value") |> ignore
+            table.AddRow("id", "", id) |> ignore
+            table.AddRow("description", "", description) |> ignore
+            docs |> List.iter (fun (key, absPath) -> table.AddRow("docs", key, absPath) |> ignore)
+            repos |> List.iter (fun (key, absPath, _) -> table.AddRow("repos", key, absPath) |> ignore)
+            table.AddRow("coordMode", "", coordMode) |> ignore
+            table.AddRow("coordRepo", "", coordRepo) |> ignore
+            table.AddRow("coordPath", "", coordPath) |> ignore
+            AnsiConsole.Write(table)
+
+        Ok()
 
 // ---------------------------------------------------------------------------
 // product list handler
@@ -1835,10 +1986,14 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                         | Some registerArgs ->
                             handleProductRegister deps configPath profile registerArgs outputJson
                         | None ->
-                            match productResults.TryGetResult ProductArgs.List with
-                            | Some listArgs ->
-                                handleProductList configPath deps listArgs
-                            | None -> Error "Specify a product subcommand (e.g. product init <path>, product register <path>, or product list)"
+                             match productResults.TryGetResult ProductArgs.List with
+                             | Some listArgs ->
+                                 handleProductList configPath deps listArgs
+                             | None ->
+                                 match productResults.TryGetResult ProductArgs.Info with
+                                 | Some infoArgs ->
+                                     handleProductInfo configPath deps infoArgs
+                                 | None -> Error "Specify a product subcommand (e.g. product init <path>, product register <path>, product list, or product info)"
 
                 | None ->
                     match results.TryGetResult Task with

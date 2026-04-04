@@ -33,6 +33,8 @@ type CoordinationConfigDto =
 type ProductConfigDto =
     { [<YamlMember(Alias = "id")>]
       Id: string
+      [<YamlMember(Alias = "description")>]
+      Description: string
       [<YamlMember(Alias = "repos")>]
       Repos: Dictionary<string, RepoConfigDto>
       [<YamlMember(Alias = "docs")>]
@@ -283,6 +285,11 @@ type ProductConfigAdapter() =
 
                                 Ok
                                     { Id = productId
+                                      Description =
+                                        if isNull dto.Description || dto.Description = "" then
+                                            None
+                                        else
+                                            Some dto.Description
                                       Repos = repos
                                       Docs = docs
                                       Coordination = coordConfig

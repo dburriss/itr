@@ -301,6 +301,7 @@ let private mkDefinition idStr root =
           AbsolutePath = Path.Combine(root, ".itr") }
 
     { Id = productId
+      Description = None
       Repos = Map.empty
       Docs = Map.empty
       Coordination =
@@ -662,6 +663,7 @@ type TestInitDeps
 
                 Ok
                     { Id = id
+                      Description = None
                       Repos = Map.empty
                       Docs = Map.empty
                       Coordination =
