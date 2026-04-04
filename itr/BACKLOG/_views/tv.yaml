@@ -6,6 +6,7 @@ items:
   - profile-command-rename
   - profile-list
   - profile-selection
+  - profile-set-default
   - product-list
   - product-info
   - backlog-item-path
