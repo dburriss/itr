@@ -1,0 +1,15 @@
+id: profile-set-default
+title: Set a profile as default
+repos:
+- itr
+type: feature
+priority: medium
+summary: |-
+  Set the given profile as the default. Flags control whether env vars are set or local or global.
+acceptance_criteria:
+- If no flags it will set where ever the profile is coming from (ITR_PROFILE > local itr.json > global itr.json)
+- If --env, ITR_PROFILE will be set
+- If --local, defaultProfile in a local itr.json (creates if does not exist)
+- If --global, defaultProfile in global itr.json
+dependencies: 
+created_at: 2026-04-04
