@@ -132,6 +132,30 @@ let bootstrapIfMissing<'deps when 'deps :> IFileSystem>
                 BootstrapWriteError(configPath, msg)))
 
 // ---------------------------------------------------------------------------
+// setDefaultProfile use-case
+// ---------------------------------------------------------------------------
+
+type SetDefaultProfileInput = { Name: string }
+
+/// Set an existing named profile as the default in the portfolio.
+/// Looks up the profile case-insensitively and returns the updated Portfolio.
+/// Returns ProfileNotFound if no profile with the given name exists.
+/// The caller is responsible for persisting via SaveConfig.
+let setDefaultProfile<'deps when 'deps :> IPortfolioConfig>
+    (configPath: string)
+    (input: SetDefaultProfileInput)
+    : EffectResult<'deps, DomainPortfolio, PortfolioError> =
+    Effect(fun (deps: 'deps) ->
+        let config = deps :> IPortfolioConfig
+
+        config.LoadConfig configPath
+        |> Result.bind (fun portfolio ->
+            match tryFindProfileCaseInsensitive portfolio input.Name with
+            | None -> Error(ProfileNotFound input.Name)
+            | Some profile ->
+                Ok { portfolio with DefaultProfile = Some profile.Name }))
+
+// ---------------------------------------------------------------------------
 // addProfile use-case input type
 // ---------------------------------------------------------------------------
 

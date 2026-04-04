@@ -125,15 +125,30 @@ type ProfileListArgs =
             | Output _ -> "output mode: table (default) | json | text"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
+type ProfileSetDefaultArgs =
+    | [<MainCommand; Mandatory>] Name of name: string
+    | Local
+    | Global
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Name _ -> "profile name to set as default"
+            | Local -> "update the local itr.json in the current product root"
+            | Global -> "update the global itr.json"
+
+[<CliPrefix(CliPrefix.DoubleDash)>]
 type ProfileArgs =
     | [<CliPrefix(CliPrefix.None)>] Add of ParseResults<ProfileAddArgs>
     | [<CliPrefix(CliPrefix.None)>] List of ParseResults<ProfileListArgs>
+    | [<CliPrefix(CliPrefix.None)>] Set_Default of ParseResults<ProfileSetDefaultArgs>
 
     interface IArgParserTemplate with
         member this.Usage =
             match this with
             | Add _ -> "add a new profile to the portfolio"
             | List _ -> "list all profiles in the portfolio"
+            | Set_Default _ -> "set an existing profile as the default"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
 type ProductInitArgs =
@@ -395,6 +410,7 @@ let private formatPortfolioError (err: PortfolioError) : string =
     | ProductNotFound id -> $"Product '{id}' not found."
     | CoordRootNotFound(id, path) -> $"Coordination root for '{id}' not found at: {path}"
     | DuplicateProductId(profile, id) -> $"Product '{id}' is already registered in profile '{profile}'."
+    | ProfileNotFound name -> $"Profile '{name}' not found. Run 'profile add {name}' to create it."
     | other -> $"%A{other}"
 
 // ---------------------------------------------------------------------------
@@ -1605,7 +1621,72 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                         | Error msg -> Error msg
                         | Ok portfolio -> handleProfileList configPath portfolio listArgs
 
-                    | None -> Error "Specify a profile subcommand (e.g. profile add <name> or profile list)"
+                    | None ->
+                        match profilesResults.TryGetResult ProfileArgs.Set_Default with
+                        | Some setDefaultArgs ->
+                            let name = setDefaultArgs.GetResult ProfileSetDefaultArgs.Name
+                            let useLocal = setDefaultArgs.Contains ProfileSetDefaultArgs.Local
+                            let useGlobal = setDefaultArgs.Contains ProfileSetDefaultArgs.Global
+                            let portfolioConfig = deps :> IPortfolioConfig
+                            let fs = deps :> IFileSystem
+
+                            // Determine which config path to update
+                            let targetPathResult : Result<string * string, string> =
+                                if useGlobal then
+                                    Ok(configPath, configPath)
+                                elif useLocal then
+                                    // Find product root from current directory
+                                    let cwd = System.IO.Directory.GetCurrentDirectory()
+                                    let productYamlPath = System.IO.Path.Combine(cwd, "product.yaml")
+
+                                    if fs.FileExists productYamlPath then
+                                        let localConfigPath = System.IO.Path.Combine(cwd, "itr.json")
+                                        Ok(localConfigPath, localConfigPath)
+                                    else
+                                        Error "--local flag requires a product context. Run this command from within a product directory or specify --global instead."
+                                else
+                                    // Auto-detect: check if local itr.json exists at cwd
+                                    let cwd = System.IO.Directory.GetCurrentDirectory()
+                                    let productYamlPath = System.IO.Path.Combine(cwd, "product.yaml")
+                                    let localConfigPath = System.IO.Path.Combine(cwd, "itr.json")
+
+                                    if fs.FileExists productYamlPath && fs.FileExists localConfigPath then
+                                        Ok(localConfigPath, localConfigPath)
+                                    else
+                                        Ok(configPath, configPath)
+
+                            match targetPathResult with
+                            | Error msg -> Error msg
+                            | Ok(targetPath, displayPath) ->
+                                // Bootstrap local config if it doesn't exist (only for --local or auto-local)
+                                let bootstrapResult =
+                                    if not (fs.FileExists targetPath) then
+                                        Portfolio.bootstrapIfMissing targetPath
+                                        |> Effect.run deps
+                                        |> Result.mapError formatPortfolioError
+                                        |> Result.map (fun _ -> ())
+                                    else
+                                        Ok()
+
+                                match bootstrapResult with
+                                | Error msg -> Error msg
+                                | Ok() ->
+                                    let input: Portfolio.SetDefaultProfileInput = { Name = name }
+
+                                    let result =
+                                        Portfolio.setDefaultProfile targetPath input
+                                        |> Effect.run deps
+                                        |> Result.mapError formatPortfolioError
+
+                                    match result with
+                                    | Error msg -> Error msg
+                                    | Ok updatedPortfolio ->
+                                        portfolioConfig.SaveConfig targetPath updatedPortfolio
+                                        |> Result.mapError formatPortfolioError
+                                        |> Result.map (fun () ->
+                                            printfn "Profile '%s' set as default. (%s)" name displayPath)
+
+                        | None -> Error "Specify a profile subcommand (e.g. profile add <name>, profile list, or profile set-default <name>)"
 
             | None ->
                 match results.TryGetResult Product with

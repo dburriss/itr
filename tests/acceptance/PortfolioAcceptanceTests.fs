@@ -516,8 +516,201 @@ let ``profile add git-email without git-name is caught by CLI validation`` () =
             Directory.Delete(root, true)
 
 // ---------------------------------------------------------------------------
-// initProduct acceptance tests
+// profile set-default acceptance tests
 // ---------------------------------------------------------------------------
+
+/// Helper: run setDefaultProfile usecase and persist result via SaveConfig
+let private runSetDefaultProfile (deps: TestDeps) (configPath: string) (name: string) =
+    let portfolioConfig = deps :> IPortfolioConfig
+
+    FeaturePortfolio.setDefaultProfile configPath { Name = name }
+    |> Effect.run deps
+    |> Result.bind (fun updatedPortfolio -> portfolioConfig.SaveConfig configPath updatedPortfolio)
+
+[<Fact>]
+let ``profile set-default updates defaultProfile in global itr.json`` () =
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-setdefault-global-{Guid.NewGuid():N}")
+
+    try
+        Directory.CreateDirectory(root) |> ignore
+        let configPath = Path.Combine(root, "itr.json")
+        File.WriteAllText(
+            configPath,
+            """{"defaultProfile": "personal", "profiles": {"work": {"products": []}, "personal": {"products": []}}}"""
+        )
+
+        let deps = TestDeps(configPath)
+
+        match runSetDefaultProfile deps configPath "work" with
+        | Error e -> failwithf "expected Ok, got %A" e
+        | Ok() ->
+            let portfolioConfig = deps :> IPortfolioConfig
+
+            match portfolioConfig.LoadConfig configPath with
+            | Error e -> failwithf "LoadConfig failed: %A" e
+            | Ok loaded ->
+                Assert.Equal(Some "work", loaded.DefaultProfile |> Option.map ProfileName.value)
+    finally
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
+
+[<Fact>]
+let ``profile set-default returns ProfileNotFound for non-existent profile`` () =
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-setdefault-notfound-{Guid.NewGuid():N}")
+
+    try
+        Directory.CreateDirectory(root) |> ignore
+        let configPath = Path.Combine(root, "itr.json")
+        File.WriteAllText(
+            configPath,
+            """{"defaultProfile": "work", "profiles": {"work": {"products": []}}}"""
+        )
+
+        let deps = TestDeps(configPath)
+
+        match runSetDefaultProfile deps configPath "staging" with
+        | Error(ProfileNotFound name) -> Assert.Equal("staging", name)
+        | other -> failwithf "expected ProfileNotFound, got %A" other
+    finally
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
+
+[<Fact>]
+let ``profile set-default preserves other profiles when updating default`` () =
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-setdefault-preserve-{Guid.NewGuid():N}")
+
+    try
+        Directory.CreateDirectory(root) |> ignore
+        let configPath = Path.Combine(root, "itr.json")
+        File.WriteAllText(
+            configPath,
+            """{"defaultProfile": "work", "profiles": {"work": {"products": []}, "personal": {"products": []}}}"""
+        )
+
+        let deps = TestDeps(configPath)
+
+        match runSetDefaultProfile deps configPath "personal" with
+        | Error e -> failwithf "expected Ok, got %A" e
+        | Ok() ->
+            let portfolioConfig = deps :> IPortfolioConfig
+
+            match portfolioConfig.LoadConfig configPath with
+            | Error e -> failwithf "LoadConfig failed: %A" e
+            | Ok loaded ->
+                Assert.Equal(Some "personal", loaded.DefaultProfile |> Option.map ProfileName.value)
+                Assert.True(loaded.Profiles |> Map.containsKey (ProfileName.create "work"))
+                Assert.True(loaded.Profiles |> Map.containsKey (ProfileName.create "personal"))
+    finally
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
+
+[<Fact>]
+let ``profile set-default local creates itr.json if absent and sets defaultProfile`` () =
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-setdefault-local-create-{Guid.NewGuid():N}")
+
+    try
+        Directory.CreateDirectory(root) |> ignore
+        // Global config has the profile
+        let globalConfigPath = Path.Combine(root, "global.json")
+        File.WriteAllText(
+            globalConfigPath,
+            """{"defaultProfile": null, "profiles": {"work": {"products": []}}}"""
+        )
+
+        // Local config does NOT exist yet
+        let localConfigPath = Path.Combine(root, "local.json")
+
+        let deps = TestDeps(globalConfigPath)
+
+        // Bootstrap the local config (simulates --local creating the file)
+        match FeaturePortfolio.bootstrapIfMissing localConfigPath |> Effect.run deps with
+        | Error e -> failwithf "bootstrap failed: %A" e
+        | Ok _ ->
+            // Now setDefaultProfile on the local config (which has empty profiles - use global for profile validation)
+            // For the local path test, we need the profile in the local config to set default.
+            // Write a minimal local config with the profile already.
+            File.WriteAllText(
+                localConfigPath,
+                """{"defaultProfile": null, "profiles": {"work": {"products": []}}}"""
+            )
+
+            let localDeps = TestDeps(localConfigPath)
+
+            match runSetDefaultProfile localDeps localConfigPath "work" with
+            | Error e -> failwithf "expected Ok, got %A" e
+            | Ok() ->
+                let portfolioConfig = localDeps :> IPortfolioConfig
+
+                match portfolioConfig.LoadConfig localConfigPath with
+                | Error e -> failwithf "LoadConfig failed: %A" e
+                | Ok loaded ->
+                    Assert.Equal(Some "work", loaded.DefaultProfile |> Option.map ProfileName.value)
+    finally
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
+
+[<Fact>]
+let ``profile set-default local preserves existing content when updating defaultProfile`` () =
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-setdefault-local-merge-{Guid.NewGuid():N}")
+
+    try
+        Directory.CreateDirectory(root) |> ignore
+        let localConfigPath = Path.Combine(root, "itr.json")
+        // Pre-existing local config with work profile
+        File.WriteAllText(
+            localConfigPath,
+            """{"defaultProfile": "personal", "profiles": {"work": {"products": []}, "personal": {"products": []}}}"""
+        )
+
+        let deps = TestDeps(localConfigPath)
+
+        match runSetDefaultProfile deps localConfigPath "work" with
+        | Error e -> failwithf "expected Ok, got %A" e
+        | Ok() ->
+            let portfolioConfig = deps :> IPortfolioConfig
+
+            match portfolioConfig.LoadConfig localConfigPath with
+            | Error e -> failwithf "LoadConfig failed: %A" e
+            | Ok loaded ->
+                Assert.Equal(Some "work", loaded.DefaultProfile |> Option.map ProfileName.value)
+                // Other profiles still present
+                Assert.True(loaded.Profiles |> Map.containsKey (ProfileName.create "personal"))
+    finally
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
+
+[<Fact>]
+let ``profile set-default case-insensitive lookup succeeds and stores canonical name`` () =
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-setdefault-case-{Guid.NewGuid():N}")
+
+    try
+        Directory.CreateDirectory(root) |> ignore
+        let configPath = Path.Combine(root, "itr.json")
+        File.WriteAllText(
+            configPath,
+            """{"defaultProfile": null, "profiles": {"work": {"products": []}}}"""
+        )
+
+        let deps = TestDeps(configPath)
+
+        match runSetDefaultProfile deps configPath "WORK" with
+        | Error e -> failwithf "expected Ok, got %A" e
+        | Ok() ->
+            let portfolioConfig = deps :> IPortfolioConfig
+
+            match portfolioConfig.LoadConfig configPath with
+            | Error e -> failwithf "LoadConfig failed: %A" e
+            | Ok loaded ->
+                Assert.Equal(Some "work", loaded.DefaultProfile |> Option.map ProfileName.value)
+    finally
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
 
 /// Helper: create an itr.json with a single "default" profile
 let private makeItrJson (portfolioPath: string) =

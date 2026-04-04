@@ -446,8 +446,47 @@ let ``addProfile returns InvalidProfileName for invalid name`` () =
     | other -> failwithf "expected InvalidProfileName, got %A" other
 
 // ---------------------------------------------------------------------------
-// registerProduct use-case tests
+// setDefaultProfile use-case tests
 // ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``setDefaultProfile sets DefaultProfile to matched profile name`` () =
+    let work = mkProfile "work" []
+    let personal = mkProfile "personal" []
+    let portfolio = mkPortfolio (Some "work") [ work; personal ]
+    let deps = StubPortfolioConfig(portfolio)
+
+    let input: FeaturePortfolio.SetDefaultProfileInput = { Name = "personal" }
+
+    match FeaturePortfolio.setDefaultProfile "/stub/itr.json" input |> Effect.run deps with
+    | Ok updated ->
+        Assert.Equal(Some "personal", updated.DefaultProfile |> Option.map ProfileName.value)
+    | Error e -> failwithf "expected Ok, got %A" e
+
+[<Fact>]
+let ``setDefaultProfile returns ProfileNotFound for non-existent profile`` () =
+    let work = mkProfile "work" []
+    let portfolio = mkPortfolio (Some "work") [ work ]
+    let deps = StubPortfolioConfig(portfolio)
+
+    let input: FeaturePortfolio.SetDefaultProfileInput = { Name = "staging" }
+
+    match FeaturePortfolio.setDefaultProfile "/stub/itr.json" input |> Effect.run deps with
+    | Error(ProfileNotFound name) -> Assert.Equal("staging", name)
+    | other -> failwithf "expected ProfileNotFound, got %A" other
+
+[<Fact>]
+let ``setDefaultProfile lookup is case-insensitive`` () =
+    let work = mkProfile "work" []
+    let portfolio = mkPortfolio None [ work ]
+    let deps = StubPortfolioConfig(portfolio)
+
+    let input: FeaturePortfolio.SetDefaultProfileInput = { Name = "WORK" }
+
+    match FeaturePortfolio.setDefaultProfile "/stub/itr.json" input |> Effect.run deps with
+    | Ok updated ->
+        Assert.Equal(Some "work", updated.DefaultProfile |> Option.map ProfileName.value)
+    | Error e -> failwithf "expected Ok, got %A" e
 
 /// Combined test deps for registerProduct: IPortfolioConfig + IProductConfig + IFileSystem.
 /// dirExists: controls IFileSystem.DirectoryExists
