@@ -66,6 +66,10 @@ description = "Run the product init command using dotnet run."
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- product register ./itr/"
 description = "Run the product register command using dotnet run."
 
+[tasks.backlog]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog"
+description = "Run the backlog command using dotnet run."
+
 [tasks.backlog-add]
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog add -i"
 description = "Interactively add a new backlog item."
