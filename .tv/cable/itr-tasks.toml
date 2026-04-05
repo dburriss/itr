@@ -9,8 +9,15 @@ display = "{split:\t:2|pad:15} {split:\t:1|pad:15} {split:\t:0}"
 output = "{split:\t:0}"
 no_sort = true
 
+[preview]
+command = "mise run task info '{split:\t:0}'"
+
 [ui]
 layout = "landscape"
+
+[ui.preview_panel]
+size = 66
+header = "{split:\t:0} task"
 input_header = "Tasks"
 
 [keybindings]
