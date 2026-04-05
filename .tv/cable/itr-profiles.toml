@@ -14,7 +14,7 @@ command = "mise run product list --profile '{split:\t:1}' --output text"
 
 [ui]
 layout = "landscape"
-input_header = "PROFILES"
+input_header = "Profiles"
 
 [ui.preview_panel]
 # size = 40  # 40%

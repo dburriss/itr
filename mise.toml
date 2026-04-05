@@ -42,74 +42,14 @@ description = "Show help for the Itr CLI."
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- profile"
 description = "Run the profile command using dotnet run."
 
-[tasks.profile-add]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- profile add"
-description = "Run the profile add command using dotnet run."
-
-[tasks.profile-list]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- profile list"
-description = "Run the profile list command using dotnet run."
-
-[tasks.profile-select]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- profile select"
-description = "Run the profile select command using dotnet run."
-
 [tasks.product]
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- product"
 description = "Run the product command using dotnet run."
-
-[tasks.product-init]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- product init"
-description = "Run the product init command using dotnet run."
-
-[tasks.product-register]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- product register ./itr/"
-description = "Run the product register command using dotnet run."
 
 [tasks.backlog]
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog"
 description = "Run the backlog command using dotnet run."
 
-[tasks.backlog-add]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog add -i"
-description = "Interactively add a new backlog item."
-
-[tasks.backlog-take]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog take"
-description = "Run the backlog take command using dotnet run."
-
-[tasks.backlog-list]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog list"
-description = "Run the backlog list command using dotnet run."
-
-[tasks.backlog-info]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog info"
-description = "Run the backlog info command using dotnet run."
-
-[tasks.task-list]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- task list"
-description = "Run the task list command using dotnet run."
-
-[tasks.task-info]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- task info"
-description = "Run the task info command using dotnet run."
-
-[tasks.task-plan]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- task plan"
-description = "Run the task plan command using dotnet run."
-
-[tasks.task-approve]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- task approve"
-description = "Run the task approve command using dotnet run."
-
-[tasks.profiles-list]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- profile list"
-description = "Run the profiles list command using dotnet run."
-
-[tasks.profiles-set-default]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- profiles set-default"
-description = "Run the profiles set-default command using dotnet run."
-
-[tasks.product-list]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- product list"
-description = "Run the product list command using dotnet run."
+[tasks.task]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- task"
+description = "Run the task command using dotnet run."

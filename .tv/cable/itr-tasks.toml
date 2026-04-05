@@ -4,17 +4,19 @@ description = "Browse tasks for a backlog item"
 
 [source]
 # Fields: id\trepo\tstate\ttaskYamlPath\tplanMdPath
-command = "mise run task-list --backlog-id '{input}' --output text"
+command = "mise run task list --backlog-id '{}' --output text"
 display = "{split:\t:2|pad:15} {split:\t:1|pad:15} {split:\t:0}"
 output = "{split:\t:0}"
 no_sort = true
 
 [ui]
 layout = "landscape"
+input_header = "Tasks"
 
 [keybindings]
 ctrl-e = "actions:edit-task"
 ctrl-p = "actions:edit-plan"
+ctrl-n = "actions:plan"
 
 [actions.edit-task]
 description = "Open task.yaml in $EDITOR"
@@ -24,4 +26,9 @@ mode = "fork"
 [actions.edit-plan]
 description = "Open plan.md in $EDITOR"
 command = "$EDITOR '{split:\t:4}'"
+mode = "fork"
+
+[actions.plan]
+description = "Plan task (generate + AI)"
+command = "mise run task plan '{split:\t:0}' && mise run task plan '{split:\t:0}' --ai"
 mode = "fork"

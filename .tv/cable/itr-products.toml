@@ -4,13 +4,14 @@ description = "Browse products for the active profile"
 
 [source]
 # Fields: id\trepoCount\tcoordRoot
-command = "mise run product-list --output text"
+command = "mise run product list --output text"
 display = "{split:\t:0|pad:20} {split:\t:1|pad:5} {split:\t:2}"
 output = "{split:\t:0}"
 no_sort = true
 
 [ui]
 layout = "landscape"
+input_header = "Profile Products"
 
 [keybindings]
 shortcut = "f6"

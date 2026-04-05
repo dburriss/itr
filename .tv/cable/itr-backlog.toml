@@ -15,10 +15,11 @@ output = "{split:\t:0}"
 no_sort = true
 
 [preview]
-command = "mise run backlog-info '{split:\t:0}'"
+command = "mise run backlog info '{split:\t:0}'"
 
 [ui]
 layout = "landscape"
+input_header = "Backlog Items"
 
 [ui.preview_panel]
 size = 66
@@ -26,6 +27,7 @@ header = "{split:\t:0} backlog item"
 
 [keybindings]
 shortcut = "f7"
+enter = "actions:drill-tasks"
 ctrl-t = "actions:take"
 ctrl-a = "actions:add"
 ctrl-d = "actions:drill-tasks"
@@ -33,17 +35,17 @@ ctrl-e = "actions:edit"
 
 [actions.take]
 description = "Take backlog item (create tasks)"
-command = "mise run backlog-take '{split:\t:0}'"
+command = "mise run backlog take '{split:\t:0}'"
 mode = "fork"
 
 [actions.add]
 description = "Add new backlog item (interactive)"
-command = "zellij action new-pane --floating --close-on-exit -- mise run backlog-add"
+command = "zellij action new-pane --floating --close-on-exit -- mise run backlog add -i"
 mode = "fork"
 
 [actions.drill-tasks]
 description = "Drill into tasks for this backlog item"
-command = "tv itr-tasks --input '{split:\t:0}'"
+command = "tv itr-tasks --source-command \"mise run task list --backlog-id '{split:\t:0}' --output text\""
 mode = "execute"
 
 [actions.edit]
