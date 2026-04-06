@@ -14,7 +14,7 @@ Listing backlog should be improved so the order of items is more intuitive and u
 
 **Included:**
 - CLI argument additions: `--exclude` for filtering states, `--order-by` for custom ordering
-- Filtering logic changes to hide archived items by default (unless `--status archived` or `--status` specifies archived)
+- Filtering logic changes via `--exclude` to allow hiding items by status explicitly
 - Ordering logic: default ordering (type → priority → created date), view-defined ordering, and `--order-by` overrides
 - Updates to `BacklogListFilter` type and `listBacklogItems` function
 
@@ -34,7 +34,6 @@ Listing backlog should be improved so the order of items is more intuitive and u
    - `OrderBy: string option` for custom ordering
 
 3. Modify `loadSnapshot` in `BacklogUsecase.fs`:
-   - Change default to exclude archived items from snapshot (or add a flag to include)
    - Remove hardcoded sort by `CreatedAt` - move sorting to `listBacklogItems`
 
 4. Implement default ordering in `listBacklogItems`:
@@ -67,12 +66,12 @@ Listing backlog should be improved so the order of items is more intuitive and u
 
 ## Acceptance Criteria
 
-- Running `backlog-list` does not show archived items by default
+- Running `backlog-list` shows all items including archived by default
 - Running `backlog-list --exclude xyz` excludes items in state xyz; `--exclude` can be specified multiple times for multiple statuses; valid values: created, planning, planned, approved, in-progress, completed, archived
+- Running `backlog-list --exclude archived` hides archived items
 - Running `backlog-list --state xyz` shows only tasks in state xyz, including archived ones if they are in that state
 - When listing a view with --view, only show items that are part of that view, and order them by the order defined in the view, not by the default backlog ordering.
 - Backlog items should be ordered by type (bug, then feature, then chore), then by priority (high, medium, low), then by creation date (oldest first).
-- Do not show archived unless the user explicitly requests to see archived items with --status archived.
 - When using --order-by created, items should be ordered by creation date regardless of type or priority.
 - When using --order-by priority, items should be ordered by priority regardless of type or creation date.
 - When using --order-by type, items should be ordered by type regardless of priority or creation date.
@@ -91,7 +90,6 @@ Listing backlog should be improved so the order of items is more intuitive and u
 - **Data migrations:** None required
 
 - **Breaking changes:**
-  - Default listing will no longer include archived items (previously test 8.8 shows both were included)
   - Default ordering changes from `CreatedAt` only to multi-key sorting
 
 ## Risks
@@ -99,10 +97,7 @@ Listing backlog should be improved so the order of items is more intuitive and u
 1. **Priority string format inconsistency** - Priority is stored as `string option` with canonical values "low", "medium", "high" (from `InteractivePrompts.fs`). Other formats may exist from manual edits.
    - *Mitigation:* Use case-insensitive comparison; treat unknown values as lowest priority
 
-2. **Backward compatibility** - Existing users may depend on current default behavior (showing archived items)
-   - *Mitigation:* Consider adding `--include archived` flag, or document the change. -> don't worry about backwards compatibility for this change, it's an improvement to the default behavior
-
-3. **View ordering with missing items** - If a view references items that don't exist, ordering may be inconsistent
+2. **View ordering with missing items** - If a view references items that don't exist, ordering may be inconsistent
    - *Mitigation:* Handle gracefully by placing missing items at end or ignoring. -> Display missing ones in order of the view, but add missing as the status.
 
 ## Open Questions
