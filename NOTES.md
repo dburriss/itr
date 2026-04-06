@@ -6,4 +6,5 @@
 - `profile list` uses | instead  of \t for delimiter
 - `product info` and `product list` search for product by walking up the dirctory tree. This will not work since the product.yaml is in a subdirectory. The correct way would be to look up products in active profile and the check coordination directory for each one against the current directory.
 - I am not sure about the backlog item fetching and whether it needs to have seperate methods for fetching active vs. archived backlog items. I would expect the same method to be able to fetch both, and the caller can filter as needed. Probably want to look at filtering and async...
-- `task-list` has id and backlog columns which are duplicates. One should be removed.
+- `task-list` needs backlog-id added back.
+- `backlog list` and `task list` should have a `--paths` that indicates whether the paths should be included in the output.
