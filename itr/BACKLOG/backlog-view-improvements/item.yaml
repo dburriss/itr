@@ -7,8 +7,14 @@ priority:
 summary: |-
   Listing backlog should be improved so the order of items is more intuitive and useful.
 acceptance_criteria: 
+- Running `backlog-list` shows archived tasks alongside active tasks
+- Running `backlog-list --exclude-xyz` shows all tasks (including archived unless xyz is archived), excluding ones in state xyz where xyz is any valid state e.g. --exclude-archived, --exclude-active, --exclude-planned, etc.
+- Running `backlog-list --state xyz` shows only tasks in state xyz, including archived ones if they are in that state
+- When listing a view with --view, only show items that are part of that view, and order them by the order defined in the view, not by the default backlog ordering.
 - Backlog items should be ordered by type (bug, then feature, then chore), then by priority (high, medium, low), then by creation date (oldest first).
 - Do not show archived unless the user explicitly requests to see archived items with --status archived.
-- When listing a view with --view, only show items that are part of that view, and order them by the order defined in the view, not by the default backlog ordering.
+- When using --order-by created, items should be ordered by creation date regardless of type or priority.
+- When using --order-by priority, items should be ordered by priority regardless of type or creation date.
+- When using --order-by type, items should be ordered by type regardless of priority or creation date.
 dependencies: 
 created_at: 2026-03-24
