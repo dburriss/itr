@@ -5,7 +5,7 @@ description = "Browse tasks for a backlog item"
 [source]
 # Fields: id\trepo\tstate\ttaskYamlPath\tplanMdPath
 command = "mise run task list --backlog-id '{}' --output text"
-display = "{split:\t:2|pad:15} {split:\t:1|pad:15} {split:\t:0}"
+display = "{split:\t:0|pad:30} {split:\t:2|pad:15} {split:\t:1}"
 output = "{split:\t:0}"
 no_sort = true
 

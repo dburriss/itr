@@ -1,0 +1,22 @@
+[metadata]
+name = "itr-views"
+description = "Browse views for the active product"
+
+[source]
+# Fields: id\tdescription\ttotal\tarchived
+command = "mise run view list --output text"
+display = "{split:\t:0|pad:20} {split:\t:2|pad:5} {split:\t:1}"
+output = "{split:\t:0}"
+no_sort = true
+
+[ui]
+layout = "landscape"
+input_header = "Product Views"
+
+[keybindings]
+enter = "actions:drill"
+
+[actions.drill]
+description = "Drill into backlog filtered by this view"
+command = "tv itr-backlog --source-command \"mise run backlog list --view '{split:\t:0}' --output text\""
+mode = "execute"

@@ -19,5 +19,5 @@ enter = "actions:drill"
 
 [actions.drill]
 description = "Drill into backlog for this product"
-command = "tv itr-backlog"
+command = "tv itr-views"
 mode = "execute"
