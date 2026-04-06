@@ -70,12 +70,6 @@ type IBacklogStore =
     /// List all archived backlog items under <coordRoot>/BACKLOG/_archive/; returns Ok [] if absent
     abstract ListArchivedBacklogItems: coordRoot: string -> Result<(BacklogItem * string) list, BacklogError>
 
-/// A named view that groups backlog items
-type BacklogView =
-    { Id: string
-      Description: string option
-      Items: string list }
-
 /// Capability interface for reading views from <coordRoot>/BACKLOG/_views/
 type IViewStore =
     /// List all views from <coordRoot>/BACKLOG/_views/*.yaml; returns Ok [] if directory absent

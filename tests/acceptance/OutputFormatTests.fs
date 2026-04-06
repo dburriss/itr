@@ -124,7 +124,7 @@ let ``backlog list text output contains tab-separated fields`` () =
         match Backlog.loadSnapshot backlogStore taskStore viewStore root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok snapshot ->
-            let items = Backlog.listBacklogItems { ViewId = None; Status = None; ItemType = None } snapshot
+            let items = Backlog.listBacklogItems { ViewId = None; Status = None; ItemType = None; ExcludeStatuses = []; OrderBy = None } snapshot
 
             // Simulate text output: <id>\t<type>\t<priority>\t<status>\t<view>\t<tasks>\t<created>\t<title>
             let lines =

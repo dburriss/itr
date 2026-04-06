@@ -234,6 +234,20 @@ created_at: {createdAt}
 """
     File.WriteAllText(Path.Combine(itemDir, "item.yaml"), yaml)
 
+let private writeItemYamlWithPriority (coordRoot: string) (id: string) (itemType: string) (priority: string) (createdAt: string) =
+    let itemDir = Path.Combine(coordRoot, "BACKLOG", id)
+    Directory.CreateDirectory(itemDir) |> ignore
+    let yaml =
+        $"""id: {id}
+title: {id} title
+repos:
+  - main-repo
+type: {itemType}
+priority: {priority}
+created_at: {createdAt}
+"""
+    File.WriteAllText(Path.Combine(itemDir, "item.yaml"), yaml)
+
 let private writeTaskYamlForList (coordRoot: string) (backlogId: string) (taskId: string) (state: string) =
     let taskDir = Path.Combine(coordRoot, "BACKLOG", backlogId, "tasks", taskId)
     Directory.CreateDirectory(taskDir) |> ignore
@@ -273,7 +287,7 @@ let ``8.1 list returns all active items sorted by creation date`` () =
     match loadSnapshotForTest fixture.CoordRoot with
     | Error e -> failwithf "expected Ok, got %A" e
     | Ok snapshot ->
-        let filter: Backlog.BacklogListFilter = { ViewId = None; Status = None; ItemType = None }
+        let filter: Backlog.BacklogListFilter = { ViewId = None; Status = None; ItemType = None; ExcludeStatuses = []; OrderBy = None }
         let items = Backlog.listBacklogItems filter snapshot
         Assert.Equal(3, items.Length)
         Assert.Equal("item-a", BacklogId.value items.[0].Item.Id)
@@ -291,7 +305,7 @@ let ``8.2 list filtered by view returns only matching items`` () =
     match loadSnapshotForTest fixture.CoordRoot with
     | Error e -> failwithf "expected Ok, got %A" e
     | Ok snapshot ->
-        let filter: Backlog.BacklogListFilter = { ViewId = Some "test-view"; Status = None; ItemType = None }
+        let filter: Backlog.BacklogListFilter = { ViewId = Some "test-view"; Status = None; ItemType = None; ExcludeStatuses = []; OrderBy = None }
         let items = Backlog.listBacklogItems filter snapshot
         Assert.Equal(2, items.Length)
         let ids = items |> List.map (fun s -> BacklogId.value s.Item.Id) |> Set.ofList
@@ -308,7 +322,7 @@ let ``8.3 list filtered by type returns only matching items`` () =
     match loadSnapshotForTest fixture.CoordRoot with
     | Error e -> failwithf "expected Ok, got %A" e
     | Ok snapshot ->
-        let filter: Backlog.BacklogListFilter = { ViewId = None; Status = None; ItemType = Some Bug }
+        let filter: Backlog.BacklogListFilter = { ViewId = None; Status = None; ItemType = Some Bug; ExcludeStatuses = []; OrderBy = None }
         let items = Backlog.listBacklogItems filter snapshot
         Assert.Equal(2, items.Length)
         Assert.True(items |> List.forall (fun s -> s.Item.Type = Bug))
@@ -320,7 +334,7 @@ let ``8.4 list with no items returns empty`` () =
     match loadSnapshotForTest fixture.CoordRoot with
     | Error e -> failwithf "expected Ok, got %A" e
     | Ok snapshot ->
-        let filter: Backlog.BacklogListFilter = { ViewId = None; Status = None; ItemType = None }
+        let filter: Backlog.BacklogListFilter = { ViewId = None; Status = None; ItemType = None; ExcludeStatuses = []; OrderBy = None }
         let items = Backlog.listBacklogItems filter snapshot
         Assert.Empty(items)
 
@@ -334,7 +348,7 @@ let ``8.5 task count is correct`` () =
     match loadSnapshotForTest fixture.CoordRoot with
     | Error e -> failwithf "expected Ok, got %A" e
     | Ok snapshot ->
-        let filter: Backlog.BacklogListFilter = { ViewId = None; Status = None; ItemType = None }
+        let filter: Backlog.BacklogListFilter = { ViewId = None; Status = None; ItemType = None; ExcludeStatuses = []; OrderBy = None }
         let items = Backlog.listBacklogItems filter snapshot
         Assert.Equal(1, items.Length)
         Assert.Equal(2, items.[0].TaskCount)
@@ -350,7 +364,7 @@ let ``8.6 multi-view membership warns and first-match wins`` () =
     match loadSnapshotForTest fixture.CoordRoot with
     | Error e -> failwithf "expected Ok, got %A" e
     | Ok snapshot ->
-        let filter: Backlog.BacklogListFilter = { ViewId = None; Status = None; ItemType = None }
+        let filter: Backlog.BacklogListFilter = { ViewId = None; Status = None; ItemType = None; ExcludeStatuses = []; OrderBy = None }
         let items = Backlog.listBacklogItems filter snapshot
         Assert.Equal(1, items.Length)
         // First-match alphabetically should be a-view
@@ -394,14 +408,14 @@ let ``8.7 status archived returns only archived items`` () =
     match loadSnapshotForTest fixture.CoordRoot with
     | Error e -> failwithf "expected Ok, got %A" e
     | Ok snapshot ->
-        let filter: Backlog.BacklogListFilter = { ViewId = None; Status = Some BacklogItemStatus.Archived; ItemType = None }
+        let filter: Backlog.BacklogListFilter = { ViewId = None; Status = Some BacklogItemStatus.Archived; ItemType = None; ExcludeStatuses = []; OrderBy = None }
         let items = Backlog.listBacklogItems filter snapshot
         Assert.Equal(1, items.Length)
         Assert.Equal("archived-item", BacklogId.value items.[0].Item.Id)
         Assert.Equal(BacklogItemStatus.Archived, items.[0].Status)
 
 [<Fact>]
-let ``8.8 default list includes both active and archived items in snapshot`` () =
+let ``8.8 default list includes archived items`` () =
     use fixture = new SingleRepoBacklogFixture()
     writeItemYaml fixture.CoordRoot "active-item" "feature" "2026-02-01"
     writeArchivedItemYaml fixture.CoordRoot "archived-item" "2026-01-15-archived-item"
@@ -409,9 +423,162 @@ let ``8.8 default list includes both active and archived items in snapshot`` () 
     match loadSnapshotForTest fixture.CoordRoot with
     | Error e -> failwithf "expected Ok, got %A" e
     | Ok snapshot ->
-        let filter: Backlog.BacklogListFilter = { ViewId = None; Status = None; ItemType = None }
+        let filter: Backlog.BacklogListFilter = { ViewId = None; Status = None; ItemType = None; ExcludeStatuses = []; OrderBy = None }
         let items = Backlog.listBacklogItems filter snapshot
         Assert.Equal(2, items.Length)
         let ids = items |> List.map (fun s -> BacklogId.value s.Item.Id) |> Set.ofList
         Assert.Contains("active-item", ids)
         Assert.Contains("archived-item", ids)
+
+// ---------------------------------------------------------------------------
+// New tests: default multi-key sort (5.2)
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``5.2 default list sorts by type then priority then created date`` () =
+    use fixture = new SingleRepoBacklogFixture()
+    // Bug high created last, Feature medium created first, Chore low created middle
+    writeItemYamlWithPriority fixture.CoordRoot "chore-low" "chore" "low" "2026-02-01"
+    writeItemYamlWithPriority fixture.CoordRoot "feature-medium" "feature" "medium" "2026-01-01"
+    writeItemYamlWithPriority fixture.CoordRoot "bug-high" "bug" "high" "2026-03-01"
+    writeItemYamlWithPriority fixture.CoordRoot "bug-medium" "bug" "medium" "2026-01-15"
+
+    match loadSnapshotForTest fixture.CoordRoot with
+    | Error e -> failwithf "expected Ok, got %A" e
+    | Ok snapshot ->
+        let filter: Backlog.BacklogListFilter = { ViewId = None; Status = None; ItemType = None; ExcludeStatuses = []; OrderBy = None }
+        let items = Backlog.listBacklogItems filter snapshot
+        // Expected order: bug-high, bug-medium, feature-medium, chore-low
+        Assert.Equal(4, items.Length)
+        Assert.Equal("bug-high", BacklogId.value items.[0].Item.Id)
+        Assert.Equal("bug-medium", BacklogId.value items.[1].Item.Id)
+        Assert.Equal("feature-medium", BacklogId.value items.[2].Item.Id)
+        Assert.Equal("chore-low", BacklogId.value items.[3].Item.Id)
+
+// ---------------------------------------------------------------------------
+// New tests: --exclude single and multiple (5.3, 5.4)
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``5.3 exclude single status hides matching items`` () =
+    use fixture = new SingleRepoBacklogFixture()
+    writeItemYaml fixture.CoordRoot "active-a" "feature" "2026-01-01"
+    writeItemYaml fixture.CoordRoot "active-b" "feature" "2026-01-02"
+    // Give active-b some completed tasks so status = Completed
+    writeTaskYamlForList fixture.CoordRoot "active-b" "task-1" "implemented"
+    writeTaskYamlForList fixture.CoordRoot "active-b" "task-2" "validated"
+
+    match loadSnapshotForTest fixture.CoordRoot with
+    | Error e -> failwithf "expected Ok, got %A" e
+    | Ok snapshot ->
+        let filter: Backlog.BacklogListFilter =
+            { ViewId = None; Status = None; ItemType = None
+              ExcludeStatuses = [BacklogItemStatus.Completed]; OrderBy = None }
+        let items = Backlog.listBacklogItems filter snapshot
+        Assert.Equal(1, items.Length)
+        Assert.Equal("active-a", BacklogId.value items.[0].Item.Id)
+
+[<Fact>]
+let ``5.4 exclude multiple statuses hides all matching items`` () =
+    use fixture = new SingleRepoBacklogFixture()
+    writeItemYaml fixture.CoordRoot "active-a" "feature" "2026-01-01"
+    writeItemYaml fixture.CoordRoot "active-b" "feature" "2026-01-02"
+    writeItemYaml fixture.CoordRoot "active-c" "feature" "2026-01-03"
+    // active-b: completed tasks
+    writeTaskYamlForList fixture.CoordRoot "active-b" "task-1" "implemented"
+    // active-c: in-progress tasks
+    writeTaskYamlForList fixture.CoordRoot "active-c" "task-2" "in_progress"
+
+    match loadSnapshotForTest fixture.CoordRoot with
+    | Error e -> failwithf "expected Ok, got %A" e
+    | Ok snapshot ->
+        let filter: Backlog.BacklogListFilter =
+            { ViewId = None; Status = None; ItemType = None
+              ExcludeStatuses = [BacklogItemStatus.Completed; BacklogItemStatus.InProgress]; OrderBy = None }
+        let items = Backlog.listBacklogItems filter snapshot
+        Assert.Equal(1, items.Length)
+        Assert.Equal("active-a", BacklogId.value items.[0].Item.Id)
+
+// ---------------------------------------------------------------------------
+// New tests: --view ordering (5.5)
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``5.5 view ordering respects view item sequence`` () =
+    use fixture = new SingleRepoBacklogFixture()
+    writeItemYaml fixture.CoordRoot "feat-1" "feature" "2026-01-01"
+    writeItemYaml fixture.CoordRoot "feat-2" "feature" "2026-01-02"
+    writeItemYaml fixture.CoordRoot "feat-3" "feature" "2026-01-03"
+    // View defines order: feat-3, feat-1, feat-2
+    writeViewYaml fixture.CoordRoot "ordered-view" [ "feat-3"; "feat-1"; "feat-2" ]
+
+    match loadSnapshotForTest fixture.CoordRoot with
+    | Error e -> failwithf "expected Ok, got %A" e
+    | Ok snapshot ->
+        let filter: Backlog.BacklogListFilter =
+            { ViewId = Some "ordered-view"; Status = None; ItemType = None; ExcludeStatuses = []; OrderBy = None }
+        let items = Backlog.listBacklogItems filter snapshot
+        Assert.Equal(3, items.Length)
+        Assert.Equal("feat-3", BacklogId.value items.[0].Item.Id)
+        Assert.Equal("feat-1", BacklogId.value items.[1].Item.Id)
+        Assert.Equal("feat-2", BacklogId.value items.[2].Item.Id)
+
+// ---------------------------------------------------------------------------
+// New tests: --order-by overrides (5.6, 5.7, 5.8)
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``5.6 order-by created sorts by creation date only`` () =
+    use fixture = new SingleRepoBacklogFixture()
+    writeItemYamlWithPriority fixture.CoordRoot "bug-late" "bug" "high" "2026-03-01"
+    writeItemYamlWithPriority fixture.CoordRoot "feature-early" "feature" "low" "2026-01-01"
+    writeItemYamlWithPriority fixture.CoordRoot "chore-mid" "chore" "medium" "2026-02-01"
+
+    match loadSnapshotForTest fixture.CoordRoot with
+    | Error e -> failwithf "expected Ok, got %A" e
+    | Ok snapshot ->
+        let filter: Backlog.BacklogListFilter =
+            { ViewId = None; Status = None; ItemType = None; ExcludeStatuses = []; OrderBy = Some "created" }
+        let items = Backlog.listBacklogItems filter snapshot
+        Assert.Equal(3, items.Length)
+        Assert.Equal("feature-early", BacklogId.value items.[0].Item.Id)
+        Assert.Equal("chore-mid", BacklogId.value items.[1].Item.Id)
+        Assert.Equal("bug-late", BacklogId.value items.[2].Item.Id)
+
+[<Fact>]
+let ``5.7 order-by priority sorts by priority only`` () =
+    use fixture = new SingleRepoBacklogFixture()
+    writeItemYamlWithPriority fixture.CoordRoot "chore-high" "chore" "high" "2026-03-01"
+    writeItemYamlWithPriority fixture.CoordRoot "bug-low" "bug" "low" "2026-01-01"
+    writeItemYamlWithPriority fixture.CoordRoot "feature-medium" "feature" "medium" "2026-02-01"
+
+    match loadSnapshotForTest fixture.CoordRoot with
+    | Error e -> failwithf "expected Ok, got %A" e
+    | Ok snapshot ->
+        let filter: Backlog.BacklogListFilter =
+            { ViewId = None; Status = None; ItemType = None; ExcludeStatuses = []; OrderBy = Some "priority" }
+        let items = Backlog.listBacklogItems filter snapshot
+        Assert.Equal(3, items.Length)
+        Assert.Equal("chore-high", BacklogId.value items.[0].Item.Id)
+        Assert.Equal("feature-medium", BacklogId.value items.[1].Item.Id)
+        Assert.Equal("bug-low", BacklogId.value items.[2].Item.Id)
+
+[<Fact>]
+let ``5.8 order-by type sorts by type only`` () =
+    use fixture = new SingleRepoBacklogFixture()
+    writeItemYamlWithPriority fixture.CoordRoot "spike-item" "spike" "high" "2026-01-01"
+    writeItemYamlWithPriority fixture.CoordRoot "feature-item" "feature" "low" "2026-02-01"
+    writeItemYamlWithPriority fixture.CoordRoot "bug-item" "bug" "medium" "2026-03-01"
+    writeItemYamlWithPriority fixture.CoordRoot "chore-item" "chore" "high" "2026-01-15"
+
+    match loadSnapshotForTest fixture.CoordRoot with
+    | Error e -> failwithf "expected Ok, got %A" e
+    | Ok snapshot ->
+        let filter: Backlog.BacklogListFilter =
+            { ViewId = None; Status = None; ItemType = None; ExcludeStatuses = []; OrderBy = Some "type" }
+        let items = Backlog.listBacklogItems filter snapshot
+        Assert.Equal(4, items.Length)
+        Assert.Equal("bug-item", BacklogId.value items.[0].Item.Id)
+        Assert.Equal("feature-item", BacklogId.value items.[1].Item.Id)
+        Assert.Equal("chore-item", BacklogId.value items.[2].Item.Id)
+        Assert.Equal("spike-item", BacklogId.value items.[3].Item.Id)

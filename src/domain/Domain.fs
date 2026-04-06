@@ -260,9 +260,16 @@ type BacklogItemDetail =
       Tasks: ItrTask list
       Path: string }
 
+/// A named view that groups backlog items
+type BacklogView =
+    { Id: string
+      Description: string option
+      Items: string list }
+
 /// Snapshot of all backlog items loaded for a given coordination root
 type BacklogSnapshot =
-    { Items: BacklogItemSummary list }
+    { Items: BacklogItemSummary list
+      Views: BacklogView list }
 
 [<RequireQualifiedAccess>]
 module BacklogItemType =

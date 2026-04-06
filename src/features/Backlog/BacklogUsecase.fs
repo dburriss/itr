@@ -97,7 +97,9 @@ let createBacklogItem
 type BacklogListFilter =
     { ViewId: string option
       Status: BacklogItemStatus option
-      ItemType: BacklogItemType option }
+      ItemType: BacklogItemType option
+      ExcludeStatuses: BacklogItemStatus list
+      OrderBy: string option }
 
 // ---------------------------------------------------------------------------
 // loadSnapshot
@@ -192,34 +194,98 @@ let loadSnapshot
             |> List.choose (function
                 | Ok s -> Some s
                 | Error _ -> None)
-            |> List.sortBy (fun s -> s.Item.CreatedAt)
 
-        Ok { Items = summaries }
+        Ok { Items = summaries; Views = views }
 
 // ---------------------------------------------------------------------------
-// listBacklogItems (pure filter over snapshot)
+// listBacklogItems (pure filter + ordering over snapshot)
 // ---------------------------------------------------------------------------
 
-/// Pure filter: returns items from the snapshot matching the given filter.
+/// Priority order: high=0, medium=1, low=2, other/None=3 (case-insensitive)
+let private priorityOrder (priority: string option) : int =
+    match priority with
+    | None -> 3
+    | Some p ->
+        match p.ToLowerInvariant() with
+        | "high" -> 0
+        | "medium" -> 1
+        | "low" -> 2
+        | _ -> 3
+
+/// Type order: Bug=0, Feature=1, Chore=2, Spike=3
+let private typeOrder (t: BacklogItemType) : int =
+    match t with
+    | Bug -> 0
+    | Feature -> 1
+    | Chore -> 2
+    | Spike -> 3
+
+/// Default multi-key sort: type → priority → CreatedAt ascending
+let private defaultSort (items: BacklogItemSummary list) : BacklogItemSummary list =
+    items
+    |> List.sortWith (fun a b ->
+        let tc = compare (typeOrder a.Item.Type) (typeOrder b.Item.Type)
+        if tc <> 0 then tc
+        else
+            let pc = compare (priorityOrder a.Item.Priority) (priorityOrder b.Item.Priority)
+            if pc <> 0 then pc
+            else compare a.Item.CreatedAt b.Item.CreatedAt)
+
+/// Pure filter + ordering: returns items from the snapshot matching the given filter.
 let listBacklogItems (filter: BacklogListFilter) (snapshot: BacklogSnapshot) : BacklogItemSummary list =
-    snapshot.Items
-    |> List.filter (fun s ->
-        let viewMatch =
-            match filter.ViewId with
-            | None -> true
-            | Some viewId -> s.ViewId = Some viewId
+    // Filter items
+    let filtered =
+        snapshot.Items
+        |> List.filter (fun s ->
+            let viewMatch =
+                match filter.ViewId with
+                | None -> true
+                | Some viewId -> s.ViewId = Some viewId
 
-        let statusMatch =
-            match filter.Status with
-            | None -> true
-            | Some status -> s.Status = status
+            let statusMatch =
+                match filter.Status with
+                | None -> true
+                | Some status -> s.Status = status
 
-        let typeMatch =
-            match filter.ItemType with
-            | None -> true
-            | Some itemType -> s.Item.Type = itemType
+            let typeMatch =
+                match filter.ItemType with
+                | None -> true
+                | Some itemType -> s.Item.Type = itemType
 
-        viewMatch && statusMatch && typeMatch)
+            let excludeMatch = not (List.contains s.Status filter.ExcludeStatuses)
+
+            viewMatch && statusMatch && typeMatch && excludeMatch)
+
+    // Apply ordering
+    match filter.OrderBy with
+    | Some "created" ->
+        filtered |> List.sortBy (fun s -> s.Item.CreatedAt)
+    | Some "priority" ->
+        filtered |> List.sortBy (fun s -> priorityOrder s.Item.Priority)
+    | Some "type" ->
+        filtered |> List.sortBy (fun s -> typeOrder s.Item.Type)
+    | _ ->
+        // View-based ordering when ViewId is set
+        match filter.ViewId with
+        | Some viewId ->
+            match snapshot.Views |> List.tryFind (fun v -> v.Id = viewId) with
+            | None -> defaultSort filtered
+            | Some view ->
+                // Items in the view are sorted by their index in view.Items
+                // Items not in the view list are appended at end in default sort order
+                let viewItemIndex =
+                    view.Items
+                    |> List.mapi (fun i id -> id, i)
+                    |> Map.ofList
+                let inView, notInView =
+                    filtered
+                    |> List.partition (fun s ->
+                        Map.containsKey (BacklogId.value s.Item.Id) viewItemIndex)
+                let sortedInView =
+                    inView |> List.sortBy (fun s -> viewItemIndex.[BacklogId.value s.Item.Id])
+                let sortedNotInView = defaultSort notInView
+                sortedInView @ sortedNotInView
+        | None -> defaultSort filtered
 
 // ---------------------------------------------------------------------------
 // getBacklogItemDetail

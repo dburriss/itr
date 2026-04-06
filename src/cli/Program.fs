@@ -65,6 +65,8 @@ type ListArgs =
     | Status of status: string
     | Type of type_: string
     | Output of output: string
+    | [<CustomCommandLine("--exclude")>] Exclude of status: string
+    | Order_By of order_by: string
 
     interface IArgParserTemplate with
         member this.Usage =
@@ -73,6 +75,8 @@ type ListArgs =
             | Status _ -> "filter by status: created | planning | planned | approved | in-progress | completed | archived"
             | Type _ -> "filter by item type: feature | bug | chore | spike"
              | Output _ -> "output mode: table (default) | json | text"
+            | Exclude _ -> "exclude items with this status (can be repeated)"
+            | Order_By _ -> "override sort order: created | priority | type"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
 type InfoArgs =
@@ -1266,10 +1270,18 @@ let private handleBacklogList
             | Ok bt -> Some bt
             | Error _ -> None)
 
+    let excludeStatuses =
+        listArgs.GetResults ListArgs.Exclude
+        |> List.choose tryParseBacklogItemStatus
+
+    let orderBy = listArgs.TryGetResult ListArgs.Order_By
+
     let filter: Backlog.BacklogListFilter =
         { ViewId = viewFilter
           Status = statusFilter
-          ItemType = typeFilter }
+          ItemType = typeFilter
+          ExcludeStatuses = excludeStatuses
+          OrderBy = orderBy }
 
     match Backlog.loadSnapshot backlogStore taskStore viewStore coordRoot with
     | Error e -> Error(formatBacklogError e)
