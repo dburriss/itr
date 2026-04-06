@@ -17,6 +17,7 @@
     <Compile Include="BacklogAddInteractiveTests.fs" />
     <Compile Include="YamlAdapterTests.fs" />
     <Compile Include="OutputFormatTests.fs" />
+    <Compile Include="ViewListAcceptanceTests.fs" />
     <Compile Include="Tests.fs" />
   </ItemGroup>
 

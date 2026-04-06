@@ -280,6 +280,26 @@ type TaskArgs =
             | Plan _ -> "generate a plan for a task"
             | Approve _ -> "approve a task plan"
 
+[<CliPrefix(CliPrefix.DoubleDash)>]
+type ViewListArgs =
+    | [<AltCommandLine("-o")>] Output of output: string
+    | Product of product: string
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Output _ -> "output mode: table (default) | json | text"
+            | Product _ -> "product id (defaults to product resolved from working directory)"
+
+[<CliPrefix(CliPrefix.DoubleDash)>]
+type ViewArgs =
+    | [<CliPrefix(CliPrefix.None)>] List of ParseResults<ViewListArgs>
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | List _ -> "list all named backlog views for a product"
+
 type CliArgs =
     | [<AltCommandLine("-p")>] Profile of string
     | Output of string
@@ -287,6 +307,7 @@ type CliArgs =
     | [<CustomCommandLine("profile")>] ProfileCmd of ParseResults<ProfileArgs>
     | [<CliPrefix(CliPrefix.None)>] Product of ParseResults<ProductArgs>
     | [<CliPrefix(CliPrefix.None)>] Task of ParseResults<TaskArgs>
+    | [<CliPrefix(CliPrefix.None)>] View of ParseResults<ViewArgs>
 
     interface IArgParserTemplate with
         member this.Usage =
@@ -297,6 +318,7 @@ type CliArgs =
             | ProfileCmd _ -> "profile management commands"
             | Product _ -> "product management commands"
             | Task _ -> "task commands"
+            | View _ -> "view commands"
 
 // ---------------------------------------------------------------------------
 // Composition root
@@ -1148,6 +1170,77 @@ let private handleProfileList
         AnsiConsole.Write(table)
 
     Ok()
+
+// ---------------------------------------------------------------------------
+// view list handler
+// ---------------------------------------------------------------------------
+
+let private handleViewList
+    (deps: AppDeps)
+    (resolved: ResolvedProduct)
+    (listArgs: ParseResults<ViewListArgs>)
+    : Result<unit, string> =
+    let coordRoot = resolved.CoordRoot.AbsolutePath
+    let viewStore = deps :> IViewStore
+    let backlogStore = deps :> IBacklogStore
+    let format = listArgs.TryGetResult ViewListArgs.Output |> parseOutputFormat
+
+    match viewStore.ListViews coordRoot with
+    | Error e -> Error(formatBacklogError e)
+    | Ok views ->
+        match backlogStore.ListArchivedBacklogItems coordRoot with
+        | Error e -> Error(formatBacklogError e)
+        | Ok archivedItems ->
+            let archivedIds =
+                archivedItems |> List.map (fun (item, _) -> BacklogId.value item.Id) |> Set.ofList
+
+            if views.IsEmpty then
+                match format with
+                | JsonOutput -> printfn "[]"
+                | TextOutput -> () // no output for empty in text mode
+                | TableOutput -> printfn "No views defined."
+            else
+                let rows =
+                    views
+                    |> List.map (fun view ->
+                        let description = view.Description |> Option.defaultValue ""
+                        let total = view.Items.Length
+                        let archived =
+                            view.Items
+                            |> List.filter (fun id -> archivedIds.Contains(id))
+                            |> List.length
+                        (view.Id, description, total, archived))
+
+                match format with
+                | JsonOutput ->
+                    let items =
+                        rows
+                        |> List.map (fun (id, description, total, archived) ->
+                            let descJson = description.Replace("\"", "\\\"")
+                            sprintf "  { \"id\": \"%s\", \"description\": \"%s\", \"items\": %d, \"archived\": %d }"
+                                id descJson total archived)
+                        |> String.concat ",\n"
+                    printfn "["
+                    printfn "%s" items
+                    printfn "]"
+                | TextOutput ->
+                    rows
+                    |> List.iter (fun (id, description, total, archived) ->
+                        printfn "%s\t%s\t%d\t%d" id description total archived)
+                | TableOutput ->
+                    let table = Table()
+                    table.AddColumn("Id") |> ignore
+                    table.AddColumn("Description") |> ignore
+                    table.AddColumn("Items") |> ignore
+                    table.AddColumn("Archived") |> ignore
+
+                    rows
+                    |> List.iter (fun (id, description, total, archived) ->
+                        table.AddRow(id, description, string total, string archived) |> ignore)
+
+                    AnsiConsole.Write(table)
+
+            Ok()
 
 let private handleBacklogList
     (deps: AppDeps)
@@ -2133,13 +2226,59 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                      | None -> Error "Specify a task subcommand (e.g. task list or task info <id> or task plan <id> or task approve <id>)"
 
                     | None ->
-                    // Legacy behaviour: just load portfolio
-                    let loadResult = Portfolio.loadPortfolio (Some configPath) |> Effect.run deps
+                        match results.TryGetResult View with
+                        | Some viewResults ->
+                            match viewResults.TryGetResult ViewArgs.List with
+                            | Some listArgs ->
+                                let portfolioResult =
+                                    Portfolio.loadPortfolio (Some configPath)
+                                    |> Effect.run deps
+                                    |> Result.mapError (fun e -> $"%A{e}")
+                                    |> Result.bind (fun portfolio ->
+                                        Portfolio.resolveActiveProfile portfolio profile
+                                        |> Effect.run deps
+                                        |> Result.mapError (fun e -> $"%A{e}"))
 
-                    loadResult
-                    |> Result.bind (fun portfolio -> Portfolio.resolveActiveProfile portfolio profile |> Effect.run deps)
-                    |> Result.map (fun _ -> printfn "itr cli")
-                    |> Result.mapError (fun e -> $"%A{e}")
+                                match portfolioResult with
+                                | Error msg -> Error msg
+                                | Ok activeProfile ->
+                                    // Resolve product from --product flag or from first product in profile
+                                    let productIdOpt = listArgs.TryGetResult ViewListArgs.Product
+
+                                    let resolvedResult =
+                                        match productIdOpt with
+                                        | Some rawId ->
+                                            Portfolio.resolveProduct activeProfile rawId
+                                            |> Effect.run deps
+                                            |> Result.mapError (fun e -> $"%A{e}")
+                                        | None ->
+                                            match activeProfile.Products with
+                                            | [] -> Error "No products in active profile"
+                                            | productRef :: _ ->
+                                                let (ProductRoot root) = productRef.Root
+                                                let productConfig = deps :> IProductConfig
+
+                                                match productConfig.LoadProductConfig root with
+                                                | Error e -> Error(formatPortfolioError e)
+                                                | Ok definition ->
+                                                    Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                                    |> Effect.run deps
+                                                    |> Result.mapError (fun e -> $"%A{e}")
+
+                                    match resolvedResult with
+                                    | Error msg -> Error msg
+                                    | Ok resolved -> handleViewList deps resolved listArgs
+
+                            | None -> Error "Specify a view subcommand (e.g. view list)"
+
+                        | None ->
+                        // Legacy behaviour: just load portfolio
+                        let loadResult = Portfolio.loadPortfolio (Some configPath) |> Effect.run deps
+
+                        loadResult
+                        |> Result.bind (fun portfolio -> Portfolio.resolveActiveProfile portfolio profile |> Effect.run deps)
+                        |> Result.map (fun _ -> printfn "itr cli")
+                        |> Result.mapError (fun e -> $"%A{e}")
 
 [<EntryPoint>]
 let main argv =

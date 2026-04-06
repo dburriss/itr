@@ -50,6 +50,10 @@ description = "Run the product command using dotnet run."
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog"
 description = "Run the backlog command using dotnet run."
 
+[tasks.view]
+run = "dotnet run --project src/cli/Itr.Cli.fsproj -- view"
+description = "Run the view command using dotnet run."
+
 [tasks.task]
 run = "dotnet run --project src/cli/Itr.Cli.fsproj -- task"
 description = "Run the task command using dotnet run."
