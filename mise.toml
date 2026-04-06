@@ -31,29 +31,29 @@ description = "Full pre-push verification: build, format check, test."
 
 # Define tasks for running specific CLI commands using dotnet run.
 [tasks.itr]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj --"
+run = "dotnet run --no-build --project src/cli/Itr.Cli.fsproj --"
 description = "Run the Itr CLI using dotnet run."
 
 [tasks.itr-help]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- --help"
+run = "dotnet run --no-build --project src/cli/Itr.Cli.fsproj -- --help"
 description = "Show help for the Itr CLI."
 
 [tasks.profile]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- profile"
+run = "dotnet run --no-build --project src/cli/Itr.Cli.fsproj -- profile"
 description = "Run the profile command using dotnet run."
 
 [tasks.product]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- product"
+run = "dotnet run --no-build --project src/cli/Itr.Cli.fsproj -- product"
 description = "Run the product command using dotnet run."
 
 [tasks.backlog]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- backlog"
+run = "dotnet run --no-build --project src/cli/Itr.Cli.fsproj -- backlog"
 description = "Run the backlog command using dotnet run."
 
 [tasks.view]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- view"
+run = "dotnet run --no-build --project src/cli/Itr.Cli.fsproj -- view"
 description = "Run the view command using dotnet run."
 
 [tasks.task]
-run = "dotnet run --project src/cli/Itr.Cli.fsproj -- task"
+run = "dotnet run --no-build --project src/cli/Itr.Cli.fsproj -- task"
 description = "Run the task command using dotnet run."
