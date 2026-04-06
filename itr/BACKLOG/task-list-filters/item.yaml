@@ -6,9 +6,9 @@ type: bug
 priority: medium
 summary: "The task-list command currently filters out archived tasks by default (Program.fs line 483). Users expect archived tasks to appear alongside active ones. An --exclude-archived flag will be added to opt out of showing them. The fix requires: (1) adding Exclude_Archived to TaskListArgs in Program.fs, (2) replacing the implicit archived filter with an explicit opt-out check."
 acceptance_criteria:
-- Running `task-list` shows archived tasks alongside active tasks
-- Running `task-list --exclude-xyz` shows all tasks (including archived unless xyz is archived), excluding ones in state xyz where xyz is any valid state
-- Running `task-list --state xyz` shows only tasks in state xyz, including archived ones if they are in that state
+- Running `task-list` shows all tasks, including archived ones
+- Running `task-list --exclude <status>` shows all tasks, excluding ones in state xyz where xyz is any valid state
+- Running `task-list --state <status>` shows only tasks in state xyz, including archived ones if they are in that state
 dependencies:
 - task-list
 - backlog-add
