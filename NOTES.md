@@ -8,3 +8,4 @@
 - I am not sure about the backlog item fetching and whether it needs to have seperate methods for fetching active vs. archived backlog items. I would expect the same method to be able to fetch both, and the caller can filter as needed. Probably want to look at filtering and async...
 - `task-list` needs backlog-id added back.
 - `backlog list` and `task list` should have a `--paths` that indicates whether the paths should be included in the output.
+- would be good if both `sort-by`, `order-by`, and `state` and `execlude` were additive instead of overriding.
