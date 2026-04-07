@@ -64,12 +64,13 @@ let listTasks (tasks: (ItrTask * string) list) : TaskSummary list =
 // filterTasks: apply optional AND filters to a TaskSummary list
 // ---------------------------------------------------------------------------
 
-/// Filter task summaries by optional backlog id, repo id, and state.
-/// All provided filters are applied as AND.
+/// Filter task summaries by optional backlog id, repo id, state, and an exclude list.
+/// All provided filters are applied as AND. Tasks whose state is in the exclude list are removed.
 let filterTasks
     (backlogId: BacklogId option)
     (repo: RepoId option)
     (state: TaskState option)
+    (exclude: TaskState list)
     (summaries: TaskSummary list)
     : TaskSummary list =
     summaries
@@ -86,7 +87,8 @@ let filterTasks
             match state with
             | None -> true
             | Some st -> s.Task.State = st
-        matchesBacklog && matchesRepo && matchesState)
+        let notExcluded = not (List.contains s.Task.State exclude)
+        matchesBacklog && matchesRepo && matchesState && notExcluded)
 
 // ---------------------------------------------------------------------------
 // Input type for the use case

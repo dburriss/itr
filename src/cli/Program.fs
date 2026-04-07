@@ -227,6 +227,8 @@ type TaskListArgs =
     | [<AltCommandLine("--repo")>] Repo_Id of repo_id: string
     | State of state: string
     | [<AltCommandLine("-o")>] Output of output: string
+    | Exclude of state: string
+    | Order_By of field: string
 
     interface IArgParserTemplate with
         member this.Usage =
@@ -235,6 +237,8 @@ type TaskListArgs =
             | Repo_Id _ -> "filter by repo id"
              | State _ -> "filter by task state (planning | planned | approved | in_progress | implemented | validated | archived)"
              | Output _ -> "output mode: table (default) | json | text"
+            | Exclude _ -> "exclude tasks with this state (planning | planned | approved | in_progress | implemented | validated | archived)"
+            | Order_By _ -> "sort order: created | state"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
 type TaskInfoArgs =
@@ -552,23 +556,52 @@ let private handleTaskList
             | Error msg -> Error msg)
         |> Option.defaultValue (Ok None)
 
-    match backlogIdResult, stateResult with
-    | Error msg, _ -> Error msg
-    | _, Error msg -> Error msg
-    | Ok backlogIdFilter, Ok stateFilter ->
+    let excludeResult =
+        listArgs.TryGetResult TaskListArgs.Exclude
+        |> Option.map (fun s ->
+            match tryParseTaskState s with
+            | Ok st -> Ok [ st ]
+            | Error msg -> Error msg)
+        |> Option.defaultValue (Ok [])
+
+    let orderByResult =
+        listArgs.TryGetResult TaskListArgs.Order_By
+        |> Option.map (fun s ->
+            match s with
+            | "created" -> Ok "created"
+            | "state" -> Ok "state"
+            | other -> Error $"Unknown order-by value '{other}': must be created | state")
+        |> Option.defaultValue (Ok "created")
+
+    match backlogIdResult, stateResult, excludeResult, orderByResult with
+    | Error msg, _, _, _ -> Error msg
+    | _, Error msg, _, _ -> Error msg
+    | _, _, Error msg, _ -> Error msg
+    | _, _, _, Error msg -> Error msg
+    | Ok backlogIdFilter, Ok stateFilter, Ok excludeList, Ok orderBy ->
         match taskStore.ListAllTasks coordRoot with
         | Error e -> Error(formatBacklogError e)
         | Ok allTasks ->
-            // Apply implicit exclusion of archived tasks when no --state filter provided
-            let tasksToProcess =
-                match stateFilter with
-                | None -> allTasks |> List.filter (fun (t, _) -> t.State <> TaskState.Archived)
-                | Some _ -> allTasks
+            let summaries = Task.listTasks allTasks
+            let filtered = Task.filterTasks backlogIdFilter repoId stateFilter excludeList summaries
 
-            let summaries = Task.listTasks tasksToProcess
-            let filtered = Task.filterTasks backlogIdFilter repoId stateFilter summaries
+            // Apply ordering: default is created ascending
+            let taskStatePriority state =
+                match state with
+                | TaskState.Planning -> 7
+                | TaskState.Planned -> 6
+                | TaskState.Approved -> 5
+                | TaskState.InProgress -> 4
+                | TaskState.Implemented -> 3
+                | TaskState.Validated -> 2
+                | TaskState.Archived -> 1
 
-            if filtered.IsEmpty then
+            let ordered =
+                match orderBy with
+                | "state" -> filtered |> List.sortByDescending (fun s -> taskStatePriority s.Task.State)
+                | _ -> filtered |> List.sortBy (fun s -> s.Task.CreatedAt)
+
+            if ordered.IsEmpty then
                 match format with
                 | TextOutput -> () // no output in text mode for empty results
                 | _ -> printfn "No tasks found."
@@ -576,7 +609,7 @@ let private handleTaskList
                 match format with
                 | JsonOutput ->
                     let items =
-                        filtered
+                        ordered
                         |> List.map (fun s ->
                             let id = TaskId.value s.Task.Id
                             let repo = RepoId.value s.Task.Repo
@@ -593,7 +626,7 @@ let private handleTaskList
                     printfn "%s" items
                     printfn "] }"
                 | TextOutput ->
-                    filtered
+                    ordered
                     |> List.iter (fun s ->
                         let id = TaskId.value s.Task.Id
                         let repo = RepoId.value s.Task.Repo
@@ -609,7 +642,7 @@ let private handleTaskList
                     table.AddColumn("Task YAML") |> ignore
                     table.AddColumn("Plan MD") |> ignore
 
-                    filtered
+                    ordered
                     |> List.iter (fun s ->
                         let id = TaskId.value s.Task.Id
                         let repo = RepoId.value s.Task.Repo

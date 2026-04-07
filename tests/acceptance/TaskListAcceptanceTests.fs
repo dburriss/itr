@@ -113,7 +113,7 @@ let ``filterTasks by backlog id returns only matching tasks`` () =
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let summaries = Task.listTasks allTasks
-            let filtered = Task.filterTasks (Some(mkBacklogId "feat-a")) None None summaries
+            let filtered = Task.filterTasks (Some(mkBacklogId "feat-a")) None None [] summaries
             Assert.Equal(1, filtered.Length)
             Assert.Equal("feat-a", BacklogId.value filtered.[0].Task.SourceBacklog)
     finally
@@ -136,7 +136,7 @@ let ``filterTasks by repo returns only matching tasks`` () =
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let summaries = Task.listTasks allTasks
-            let filtered = Task.filterTasks None (Some(RepoId "repo-1")) None summaries
+            let filtered = Task.filterTasks None (Some(RepoId "repo-1")) None [] summaries
             Assert.Equal(1, filtered.Length)
             Assert.Equal(RepoId "repo-1", filtered.[0].Task.Repo)
     finally
@@ -160,7 +160,7 @@ let ``filterTasks by state returns only tasks in that state`` () =
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let summaries = Task.listTasks allTasks
-            let filtered = Task.filterTasks None None (Some TaskState.Planning) summaries
+            let filtered = Task.filterTasks None None (Some TaskState.Planning) [] summaries
             Assert.Equal(1, filtered.Length)
             Assert.Equal(TaskState.Planning, filtered.[0].Task.State)
     finally
@@ -202,7 +202,7 @@ created_at: 2026-01-01
             let summaries = Task.listTasks allTasks
 
             // Archived tasks appear when filtered by archived state
-            let archivedFiltered = Task.filterTasks None None (Some TaskState.Archived) summaries
+            let archivedFiltered = Task.filterTasks None None (Some TaskState.Archived) [] summaries
             Assert.Equal(1, archivedFiltered.Length)
             Assert.Equal("archived-task", TaskId.value archivedFiltered.[0].Task.Id)
 
