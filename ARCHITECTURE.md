@@ -29,7 +29,7 @@ Reader-style computation expression threads a dependency environment through use
 
 ## 3. Layers
 
-1. **Core** (`Itr.Core`)
+1. **Core** (`Itr.Domain`)
    - Domain model (Product, Backlog, Task, Feature)
    - State machine and validation rules
    - `Effect<'deps, 'a>` type and computation expression
@@ -67,7 +67,7 @@ Entry Points → Adapters → Core
 
 ```
 src/
-  Itr.Core/
+  Itr.Domain/
     Domain/
       Product.fs
       Backlog.fs
