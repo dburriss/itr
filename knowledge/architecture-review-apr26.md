@@ -8,12 +8,12 @@ Date reviewed: 2026-04-13
 
 | ARCHITECTURE.md | Actual Code |
 |---|---|
-| `Itr.Core` | `Itr.Domain` (`src/domain/`) |
+| `Itr.Domain` | `Itr.Domain` (`src/domain/`) ✓ |
 | `Itr.Features` | `Itr.Features` (`src/features/`) ✓ |
 | `Itr.Adapters` | `Itr.Adapters` (`src/adapters/`) ✓ |
 | `Itr.Cli`, `Itr.Tui`, `Itr.Mcp`, `Itr.Server` | All present ✓ |
 
-The spec names the core layer `Itr.Core`; it has been implemented as `Itr.Domain`.
+The spec now correctly names the core layer `Itr.Domain`, matching the implementation.
 
 ---
 
@@ -144,7 +144,7 @@ State machine transitions are enforced in-place (e.g. `planTask`, `approveTask` 
 
 | Area | Gap | Severity |
 |---|---|---|
-| Project name | `Itr.Domain` vs spec's `Itr.Core` | Low — cosmetic |
+| Project name | `Itr.Domain` — matches codebase ✓ | Resolved |
 | Domain file structure | Single `Domain.fs` vs per-concept files | Medium — maintainability |
 | State machine isolation | Inline in usecase functions vs dedicated `StateMachine.fs` | Medium |
 | Usecase style | Three different patterns; spec's CE style not used consistently | Medium |
