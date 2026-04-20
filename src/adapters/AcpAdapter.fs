@@ -99,6 +99,17 @@ module AcpMessages =
         with _ ->
             None
 
+    /// Trim any preamble (thinking, explanation) that a model may have emitted before the plan document.
+    /// Finds the first occurrence of a markdown `#` heading at the start of a line and returns the
+    /// content from that point onward. If no such heading is found the original string is returned unchanged.
+    let trimPreamble (content: string) : string =
+        if content.StartsWith("#") then
+            content
+        else
+            match content.IndexOf("\n#") with
+            | -1 -> content
+            | idx -> content.[idx + 1 ..]
+
     /// Check whether a JSON line is the final `session/prompt` response (has a result, not just a notification).
     let isFinalResponse (json: string) : bool =
         try

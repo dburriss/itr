@@ -886,7 +886,8 @@ let private handleTaskPlan
 
                     match planContentResult with
                     | Error msg -> Error msg
-                    | Ok planContent ->
+                    | Ok rawPlanContent ->
+                        let planContent = Itr.Adapters.AcpMessages.trimPreamble rawPlanContent
                         // Write plan.md
                         let planPath = ItrTask.planFile coordRoot backlogId (TaskId.create rawTaskId)
 

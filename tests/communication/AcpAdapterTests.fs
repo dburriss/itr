@@ -119,7 +119,37 @@ let ``extractSessionId returns Error on JSON-RPC error response`` () =
     | Error msg -> Assert.Contains("Invalid Request", msg)
 
 // ---------------------------------------------------------------------------
-// 6.6 LoadLocalConfig
+// 6.6 trimPreamble
+// ---------------------------------------------------------------------------
+
+[<Fact>]
+let ``trimPreamble returns content unchanged when it starts with a heading`` () =
+    let content = "# My Task\n## Description\nSome content."
+    Assert.Equal(content, AcpMessages.trimPreamble content)
+
+[<Fact>]
+let ``trimPreamble strips preamble before first heading`` () =
+    let content = "Sure! Here's your plan:\n# My Task\n## Description\nSome content."
+    let result = AcpMessages.trimPreamble content
+    Assert.Equal("# My Task\n## Description\nSome content.", result)
+
+[<Fact>]
+let ``trimPreamble strips multi-line preamble before first heading`` () =
+    let content = "Let me think about this.\nOkay, here it is:\n# My Task\n## Steps\n1. Do thing."
+    let result = AcpMessages.trimPreamble content
+    Assert.Equal("# My Task\n## Steps\n1. Do thing.", result)
+
+[<Fact>]
+let ``trimPreamble returns content unchanged when no heading is found`` () =
+    let content = "This has no markdown heading at all."
+    Assert.Equal(content, AcpMessages.trimPreamble content)
+
+[<Fact>]
+let ``trimPreamble handles empty string`` () =
+    Assert.Equal("", AcpMessages.trimPreamble "")
+
+// ---------------------------------------------------------------------------
+// 6.7 LoadLocalConfig
 // ---------------------------------------------------------------------------
 
 [<Fact>]
