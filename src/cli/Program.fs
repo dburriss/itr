@@ -53,7 +53,7 @@ type AddArgs =
             | Backlog_Id _ -> "backlog item id (slug: [a-z0-9][a-z0-9-]*)"
             | Title _ -> "short title for the backlog item"
             | Repo _ -> "repo id to assign item to (required if product has multiple repos)"
-            | Item_Type _ -> "item type: feature | bug | chore | spike (default: feature)"
+            | Item_Type _ -> "item type: feature | bug | chore | refactor | spike (default: feature)"
             | Summary _ -> "longer description of the item"
             | Priority _ -> "priority label (e.g. high, medium, low)"
             | Depends_On _ -> "backlog item id this item depends on (can be repeated)"
@@ -73,7 +73,7 @@ type ListArgs =
             match this with
             | View _ -> "filter by view id"
             | Status _ -> "filter by status: created | planning | planned | approved | in-progress | completed | archived"
-            | Type _ -> "filter by item type: feature | bug | chore | spike"
+            | Type _ -> "filter by item type: feature | bug | chore | refactor | spike"
              | Output _ -> "output mode: table (default) | json | text"
             | Exclude _ -> "exclude items with this status (can be repeated)"
             | Order_By _ -> "override sort order: created | priority | type"
@@ -440,7 +440,7 @@ let private formatBacklogError (err: BacklogError) : string =
     | TaskIdConflict id -> $"Task id '{TaskId.value id}' already exists"
     | TaskIdOverrideRequiresSingleRepo -> "--task-id can only be used with single-repo backlog items"
     | DuplicateBacklogId id -> $"Backlog item '{BacklogId.value id}' already exists"
-    | InvalidItemType value -> $"Invalid item type '{value}': must be feature | bug | chore | spike"
+    | InvalidItemType value -> $"Invalid item type '{value}': must be feature | bug | chore | refactor | spike"
     | MissingTitle -> "--title is required"
     | TaskNotFound id -> $"Task not found: {TaskId.value id}"
     | InvalidTaskState(id, current) ->

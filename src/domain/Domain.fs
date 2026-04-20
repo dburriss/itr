@@ -163,6 +163,7 @@ type BacklogItemType =
     | Feature
     | Bug
     | Chore
+    | Refactor
     | Spike
 
 type BacklogItem =
@@ -278,6 +279,7 @@ module BacklogItemType =
         | null | "" | "feature" -> Ok Feature
         | "bug" -> Ok Bug
         | "chore" -> Ok Chore
+        | "refactor" -> Ok Refactor
         | "spike" -> Ok Spike
         | other -> Error(InvalidItemType other)
 
@@ -286,6 +288,7 @@ module BacklogItemType =
         | Feature -> "feature"
         | Bug -> "bug"
         | Chore -> "chore"
+        | Refactor -> "refactor"
         | Spike -> "spike"
 
 [<RequireQualifiedAccess>]

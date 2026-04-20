@@ -129,7 +129,7 @@ let promptBacklogAddWith
         match prefilled.ItemType with
         | Some t -> t
         | None ->
-            fns.AskSelect "Type:" ["feature"; "bug"; "chore"; "spike"]
+            fns.AskSelect "Type:" ["feature"; "bug"; "chore"; "refactor"; "spike"]
 
     // 3.7 priority prompt
     let priority =
