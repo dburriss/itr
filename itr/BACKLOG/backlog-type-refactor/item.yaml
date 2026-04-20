@@ -1,0 +1,20 @@
+id: backlog-type-refactor
+title: 'Backlog item type: refactor'
+repos:
+- itr
+type: feature
+priority: medium
+summary: ""
+acceptance_criteria:
+  - BacklogItemType DU in Domain.fs gains a Refactor case alongside Feature | Bug | Chore | Spike
+  - BacklogItemType.tryParse maps "refactor" to Ok Refactor
+  - BacklogItemType.toString maps Refactor to "refactor"
+  - The error message in Program.fs lists refactor as a valid type
+  - The CLI --item-type and --type filter accept "refactor"
+  - The interactive TUI prompt in InteractivePrompts.fs includes "refactor" in the selection list
+  - Sort ordering in BacklogUsecase.fs assigns Refactor a position after Chore and before Spike
+  - All three YAML read paths in YamlAdapter.fs handle "refactor" without silently falling back to Feature
+  - Unit tests cover "refactor" to Refactor parse, Refactor to "refactor" stringify, and updated error message
+  - Build is clean and all existing tests pass
+dependencies: 
+created_at: 2026-04-20
