@@ -1,15 +1,17 @@
 # Domain File Split Plan
 
-Agreed plan for breaking `src/domain/Domain.fs` into per-concept files aligned with `docs/terminology.md`.
+Agreed plan for breaking `src/domain/Domain.fs` and `src/domain/Interfaces.fs` into per-concept files aligned with `docs/terminology.md`.
 
 ---
 
 ## Motivation
 
 - `Domain.fs` is a single 343-line flat file covering all domain concepts
+- `Interfaces.fs` defines capability interfaces for all domain concerns in one place
 - `docs/terminology.md` defines four clear categories: Profile+Portfolio, Product, Backlog, Task
 - Splitting by category improves navigability and maintainability
 - State machine and validation logic currently inline; splitting creates natural homes for them
+- Co-locating interfaces with their domain files improves cohesion
 
 ---
 
@@ -18,9 +20,10 @@ Agreed plan for breaking `src/domain/Domain.fs` into per-concept files aligned w
 ### `Effect.fs` — unchanged
 Pure monadic machinery. No domain type dependencies. Moves to top of compile order.
 
-### `Types.fs` — new, shared primitives
-No dependencies on other domain files. Contains types shared across multiple concepts.
+### `Types.fs` — new, shared primitives + infrastructure interfaces
+No dependencies on other domain files. Contains types shared across multiple concepts, plus capability interfaces with no domain type dependencies.
 
+Types:
 - `ProfileName`
 - `ProductId`
 - `RepoId`
@@ -29,6 +32,14 @@ No dependencies on other domain files. Contains types shared across multiple con
 - `CoordinationRoot`
 - `ProductRoot`
 - `RepoConfig` (used by both `ProductDefinition` in Portfolio and `ProductConfig` in Product)
+
+Infrastructure interfaces (from `Interfaces.fs`):
+- `IoError`
+- `IFileSystem`
+- `IEnvironment`
+- `IYamlService`
+- `IGitService`
+- `IAgentHarness`
 
 ### `Validation.fs` — new, pure utility module
 No domain types. General-purpose validation predicates. Domain modules call in and wrap results in their own error types.
@@ -53,6 +64,7 @@ match Validation.Slug.validate value with
 ```
 
 ### `Portfolio.fs` — new, Profile + Portfolio concept
+Types:
 - `GitIdentity`
 - `AgentConfig`
 - `CoordinationConfig`
@@ -64,10 +76,15 @@ match Validation.Slug.validate value with
 - `PortfolioError`
 - Modules: `ProductId`, `ProfileName`, `Portfolio`
 
+Interfaces (from `Interfaces.fs`):
+- `IPortfolioConfig`
+- `IProductConfig`
+
 ### `Product.fs` — new, product config for backlog/task usecases
 - `ProductConfig` (`Id: ProductId`, `Repos: Map<RepoId, RepoConfig>`)
 
 ### `Task.fs` — new, Task execution concept
+Types:
 - `TaskId`
 - `TaskState`
 - `ItrTask`
@@ -79,7 +96,11 @@ match Validation.Slug.validate value with
   - `TaskIdOverrideRequiresSingleRepo`
 - Modules: `TaskId`, `RepoId`, `ItrTask`
 
+Interfaces (from `Interfaces.fs`):
+- `ITaskStore` (updated: error type changed from `BacklogError` to `TaskError`)
+
 ### `Backlog.fs` — new, Backlog planning concept
+Types:
 - `BacklogId`
 - `BacklogItemType`
 - `BacklogItem`
@@ -98,8 +119,12 @@ match Validation.Slug.validate value with
   - `MissingTitle`
 - Modules: `BacklogId`, `BacklogItemType`, `BacklogItemStatus`, `BacklogItem`
 
-### `Interfaces.fs` — updated
-References types from all domain files. Task-related interface methods (`ListTasks`, `WriteTask`, `ArchiveTask`, etc.) currently typed with `BacklogError` — update to `TaskError` after split.
+Interfaces (from `Interfaces.fs`):
+- `IBacklogStore`
+- `IViewStore`
+
+### `Interfaces.fs` — deleted
+Content distributed across domain files. No replacement file.
 
 ---
 
@@ -113,15 +138,15 @@ Portfolio.fs
 Product.fs
 Task.fs
 Backlog.fs
-Interfaces.fs
 ```
 
-`Domain.fs` is deleted once all content is distributed.
+Both `Domain.fs` and `Interfaces.fs` are deleted once all content is distributed.
 
 ---
 
 ## Downstream Impact
 
 - `src/features/` usecases that return `BacklogError` for task-related failures need return types updated to `TaskError`
-- `Interfaces.fs` task store methods need error type updated from `BacklogError` to `TaskError`
+- `ITaskStore` methods need error type updated from `BacklogError` to `TaskError`
+- `src/adapters/` implement interfaces now defined in their respective domain files — all still in `Itr.Domain` namespace, no open/reference changes needed
 - Changes are mechanical and predictable — no logic changes, only type reorganisation
