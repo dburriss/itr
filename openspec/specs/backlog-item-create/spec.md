@@ -19,6 +19,10 @@ The system SHALL create a new backlog item YAML file at `<coordRoot>/BACKLOG/<id
 - **WHEN** `--type invalid-type` is specified
 - **THEN** the command fails with `InvalidItemType invalid-type`
 
+#### Scenario: Refactor type is accepted
+- **WHEN** `--type refactor` is specified
+- **THEN** the item is created with `type: refactor` in `item.yaml`
+
 #### Scenario: Type defaults to feature when omitted
 - **WHEN** `--type` is not provided
 - **THEN** the created `item.yaml` contains `type: feature`
