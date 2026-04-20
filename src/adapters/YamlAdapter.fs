@@ -322,13 +322,15 @@ type BacklogStoreAdapter() =
                             else
                                 dto.Repos |> Array.toList |> List.map RepoId
 
-                        let itemType =
+                        let itemTypeResult =
                             if isNull dto.Type || dto.Type = "" then
-                                Feature
+                                Ok Feature
                             else
-                                match BacklogItemType.tryParse dto.Type with
-                                | Ok t -> t
-                                | Error _ -> Feature
+                                BacklogItemType.tryParse dto.Type
+
+                        match itemTypeResult with
+                        | Error e -> Error e
+                        | Ok itemType ->
 
                         let deps =
                             if isNull dto.Dependencies then
@@ -390,16 +392,16 @@ type BacklogStoreAdapter() =
                                         if dto.Id <> idStr then
                                             tryDirs rest
                                         else
-                                            let repos =
+                                             let repos =
                                                 if isNull dto.Repos then []
                                                 else dto.Repos |> Array.toList |> List.map RepoId
-                                            let itemType =
-                                                if isNull dto.Type || dto.Type = "" then Feature
-                                                else
-                                                    match BacklogItemType.tryParse dto.Type with
-                                                    | Ok t -> t
-                                                    | Error _ -> Feature
-                                            let deps =
+                                             let itemTypeResult =
+                                                if isNull dto.Type || dto.Type = "" then Ok Feature
+                                                else BacklogItemType.tryParse dto.Type
+                                             match itemTypeResult with
+                                             | Error e -> Error e
+                                             | Ok itemType ->
+                                             let deps =
                                                 if isNull dto.Dependencies then []
                                                 else
                                                     dto.Dependencies
@@ -408,14 +410,14 @@ type BacklogStoreAdapter() =
                                                         match BacklogId.tryCreate d with
                                                         | Ok bid -> Some bid
                                                         | Error _ -> None)
-                                            let ac =
+                                             let ac =
                                                 if isNull dto.AcceptanceCriteria then []
                                                 else dto.AcceptanceCriteria |> Array.toList
-                                            let createdAt =
+                                             let createdAt =
                                                 match DateOnly.TryParse(dto.CreatedAt) with
                                                 | true, d -> d
                                                 | _ -> DateOnly.MinValue
-                                            let item : BacklogItem =
+                                             let item : BacklogItem =
                                                 { Id = backlogId
                                                   Title = if isNull dto.Title then idStr else dto.Title
                                                   Repos = repos
@@ -425,7 +427,7 @@ type BacklogStoreAdapter() =
                                                   AcceptanceCriteria = ac
                                                   Dependencies = deps
                                                   CreatedAt = createdAt }
-                                            Ok(Some(item, path))
+                                             Ok(Some(item, path))
                                 with ex ->
                                     Error(ProductConfigParseError(path, ex.Message))
 
@@ -564,12 +566,13 @@ type BacklogStoreAdapter() =
                                                 if isNull dto.Repos then []
                                                 else dto.Repos |> Array.toList |> List.map RepoId
 
-                                            let itemType =
-                                                if isNull dto.Type || dto.Type = "" then Feature
-                                                else
-                                                    match BacklogItemType.tryParse dto.Type with
-                                                    | Ok t -> t
-                                                    | Error _ -> Feature
+                                            let itemTypeResult =
+                                                if isNull dto.Type || dto.Type = "" then Ok Feature
+                                                else BacklogItemType.tryParse dto.Type
+
+                                            match itemTypeResult with
+                                            | Error e -> Error e
+                                            | Ok itemType ->
 
                                             let deps =
                                                 if isNull dto.Dependencies then []

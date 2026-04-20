@@ -212,13 +212,14 @@ let private priorityOrder (priority: string option) : int =
         | "low" -> 2
         | _ -> 3
 
-/// Type order: Bug=0, Feature=1, Chore=2, Spike=3
+/// Type order: Bug=0, Feature=1, Chore=2, Refactor=3, Spike=4
 let private typeOrder (t: BacklogItemType) : int =
     match t with
     | Bug -> 0
     | Feature -> 1
     | Chore -> 2
-    | Spike -> 3
+    | Refactor -> 3
+    | Spike -> 4
 
 /// Default multi-key sort: type → priority → CreatedAt ascending
 let private defaultSort (items: BacklogItemSummary list) : BacklogItemSummary list =
