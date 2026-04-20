@@ -25,6 +25,28 @@ Manage backlog items.
 
 ---
 
+#### `backlog add`
+
+Create a new backlog item.
+
+```
+itr backlog add <backlog-id> --title <title> [options]
+```
+
+| Argument | Required | Description |
+|---|---|---|
+| `<backlog-id>` | Yes | Slug ID for the new item |
+| `--title <title>` | Yes | Short title for the backlog item |
+| `--repo <repo-id>` | No | Repo ID to assign item to. Required if the product has more than one repo |
+| `--item-type <type>` | No | Item type: `feature` \| `bug` \| `chore` \| `spike` (default: `feature`) |
+| `--summary <text>` | No | Longer description of the item |
+| `--priority <label>` | No | Priority label, e.g. `high`, `medium`, `low` |
+| `--depends-on <id>` | No | Backlog item ID this item depends on. Repeatable |
+
+Writes the item to `<coord-root>/BACKLOG/<backlog-id>/item.yaml`. Fails if the ID already exists.
+
+---
+
 #### `backlog take`
 
 Take a backlog item and create task files for it.
@@ -47,25 +69,128 @@ Task ID auto-derivation:
 
 ---
 
-#### `backlog add`
+#### `backlog list`
 
-Create a new backlog item.
+List backlog items.
 
 ```
-itr backlog add <backlog-id> --title <title> [options]
+itr backlog list [options]
+```
+
+| Option | Description |
+|---|---|
+| `--view <view>` | Filter by view ID |
+| `--status <status>` | Filter by status: `created` \| `planning` \| `planned` \| `approved` \| `in-progress` \| `completed` \| `archived` |
+| `--type <type>` | Filter by item type: `feature` \| `bug` \| `chore` \| `spike` |
+| `--exclude <status>` | Exclude items with this status. Repeatable |
+| `--order-by <field>` | Override sort order: `created` \| `priority` \| `type` |
+| `--output <format>` | Output mode: `table` (default) \| `json` \| `text` |
+
+---
+
+#### `backlog info`
+
+Show detailed information about a backlog item.
+
+```
+itr backlog info <backlog-id> [--output <format>]
 ```
 
 | Argument | Required | Description |
 |---|---|---|
-| `<backlog-id>` | Yes | Slug ID for the new item |
-| `--title <title>` | Yes | Short title for the backlog item |
-| `--repo <repo-id>` | No | Repo ID to assign item to. Required if the product has more than one repo |
-| `--item-type <type>` | No | Item type: `feature` \| `bug` \| `chore` \| `spike` (default: `feature`) |
-| `--summary <text>` | No | Longer description of the item |
-| `--priority <label>` | No | Priority label, e.g. `high`, `medium`, `low` |
-| `--depends-on <id>` | No | Backlog item ID this item depends on. Repeatable |
+| `<backlog-id>` | Yes | Backlog item ID to inspect |
+| `--output <format>` | No | Output mode: `table` (default) \| `json` \| `text` |
 
-Writes the item to `<coord-root>/BACKLOG/<backlog-id>/item.yaml`. Fails if the ID already exists.
+---
+
+### `task`
+
+Manage tasks.
+
+---
+
+#### `task list`
+
+List all tasks across a product.
+
+```
+itr task list [options]
+```
+
+| Option | Description |
+|---|---|
+| `--backlog-id <id>`, `--backlog <id>` | Filter by backlog item ID |
+| `--repo-id <id>`, `--repo <id>` | Filter by repo ID |
+| `--state <state>` | Filter by task state: `planning` \| `planned` \| `approved` \| `in_progress` \| `implemented` \| `validated` \| `archived` |
+| `--exclude <state>` | Exclude tasks with this state. Repeatable |
+| `--order-by <field>` | Sort order: `created` \| `state` |
+| `--output, -o <format>` | Output mode: `table` (default) \| `json` \| `text` |
+
+---
+
+#### `task info`
+
+Show detailed information about a task.
+
+```
+itr task info <task-id> [--output <format>]
+```
+
+| Argument | Required | Description |
+|---|---|---|
+| `<task-id>` | Yes | Task ID to inspect |
+| `--output, -o <format>` | No | Output mode: `table` (default) \| `json` \| `text` |
+
+---
+
+#### `task plan`
+
+Generate a plan for a task.
+
+```
+itr task plan <task-id> [--ai] [--debug]
+```
+
+| Argument | Required | Description |
+|---|---|---|
+| `<task-id>` | Yes | Task ID to plan |
+| `--ai` | No | Use OpenCode AI to generate plan content |
+| `--debug` | No | Print raw HTTP responses to stderr during AI interaction |
+
+---
+
+#### `task approve`
+
+Approve a task plan.
+
+```
+itr task approve <task-id>
+```
+
+| Argument | Required | Description |
+|---|---|---|
+| `<task-id>` | Yes | Task ID to approve |
+
+---
+
+### `view`
+
+Manage backlog views.
+
+---
+
+#### `view list`
+
+List all named backlog views for a product.
+
+```
+itr view list [--product <product>] [--output <format>]
+```
+
+| Option | Description |
+|---|---|
+| `--product <id>` | Product ID (defaults to product resolved from working directory) |
+| `--output, -o <format>` | Output mode: `table` (default) \| `json` \| `text` |
 
 ---
 
@@ -147,13 +272,31 @@ Reads the product ID from `product.yaml`, resolves the active profile, and appen
 ```
 itr [--profile|-p <profile>] [--output <format>]
 ├── backlog
+│   ├── add  <backlog-id> --title <title>
+│   │                     [--repo <repo-id>]
+│   │                     [--item-type feature|bug|chore|spike]
+│   │                     [--summary <text>]
+│   │                     [--priority <label>]
+│   │                     [--depends-on <id>]  (repeatable)
 │   ├── take <backlog-id> [--task-id <id>]
-│   └── add  <backlog-id> --title <title>
-│                         [--repo <repo-id>]
-│                         [--item-type feature|bug|chore|spike]
-│                         [--summary <text>]
-│                         [--priority <label>]
-│                         [--depends-on <id>]  (repeatable)
+│   ├── list [--view <view>]
+│   │        [--status created|planning|planned|approved|in-progress|completed|archived]
+│   │        [--type feature|bug|chore|spike]
+│   │        [--exclude <status>]  (repeatable)
+│   │        [--order-by created|priority|type]
+│   │        [--output table|json|text]
+│   └── info <backlog-id> [--output table|json|text]
+├── task
+│   ├── list    [--backlog-id <id>] [--repo-id <id>]
+│   │           [--state planning|planned|approved|in_progress|implemented|validated|archived]
+│   │           [--exclude <state>]  (repeatable)
+│   │           [--order-by created|state]
+│   │           [--output table|json|text]
+│   ├── info    <task-id> [--output table|json|text]
+│   ├── plan    <task-id> [--ai] [--debug]
+│   └── approve <task-id>
+├── view
+│   └── list [--product <id>] [--output table|json|text]
 ├── profile
 │   └── add <name> [--git-name <name>]
 │                  [--git-email <email>]
