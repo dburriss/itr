@@ -49,7 +49,7 @@ type BacklogItemDto =
       [<YamlMember(Alias = "title")>]
       Title: string
       [<YamlMember(Alias = "repos")>]
-      Repos: string array
+      Repos: ResizeArray<string>
       [<YamlMember(Alias = "type")>]
       Type: string
       [<YamlMember(Alias = "priority")>]
@@ -57,9 +57,9 @@ type BacklogItemDto =
       [<YamlMember(Alias = "summary", ScalarStyle = ScalarStyle.Literal)>]
       Summary: string
       [<YamlMember(Alias = "acceptance_criteria")>]
-      AcceptanceCriteria: string array
+      AcceptanceCriteria: ResizeArray<string>
       [<YamlMember(Alias = "dependencies")>]
-      Dependencies: string array
+      Dependencies: ResizeArray<string>
       [<YamlMember(Alias = "created_at")>]
       CreatedAt: string }
 
@@ -320,7 +320,7 @@ type BacklogStoreAdapter() =
                             if isNull dto.Repos then
                                 []
                             else
-                                dto.Repos |> Array.toList |> List.map RepoId
+                                dto.Repos |> Seq.toList |> List.map RepoId
 
                         let itemTypeResult =
                             if isNull dto.Type || dto.Type = "" then
@@ -337,7 +337,7 @@ type BacklogStoreAdapter() =
                                 []
                             else
                                 dto.Dependencies
-                                |> Array.toList
+                                |> Seq.toList
                                 |> List.choose (fun d ->
                                     match BacklogId.tryCreate d with
                                     | Ok bid -> Some bid
@@ -345,7 +345,7 @@ type BacklogStoreAdapter() =
 
                         let ac =
                             if isNull dto.AcceptanceCriteria then []
-                            else dto.AcceptanceCriteria |> Array.toList
+                            else dto.AcceptanceCriteria |> Seq.toList
 
                         let createdAt =
                             match DateOnly.TryParse(dto.CreatedAt) with
@@ -394,7 +394,7 @@ type BacklogStoreAdapter() =
                                         else
                                              let repos =
                                                 if isNull dto.Repos then []
-                                                else dto.Repos |> Array.toList |> List.map RepoId
+                                                 else dto.Repos |> Seq.toList |> List.map RepoId
                                              let itemTypeResult =
                                                 if isNull dto.Type || dto.Type = "" then Ok Feature
                                                 else BacklogItemType.tryParse dto.Type
@@ -405,14 +405,14 @@ type BacklogStoreAdapter() =
                                                 if isNull dto.Dependencies then []
                                                 else
                                                     dto.Dependencies
-                                                    |> Array.toList
+                                                    |> Seq.toList
                                                     |> List.choose (fun d ->
                                                         match BacklogId.tryCreate d with
                                                         | Ok bid -> Some bid
                                                         | Error _ -> None)
                                              let ac =
                                                 if isNull dto.AcceptanceCriteria then []
-                                                else dto.AcceptanceCriteria |> Array.toList
+                                                else dto.AcceptanceCriteria |> Seq.toList
                                              let createdAt =
                                                 match DateOnly.TryParse(dto.CreatedAt) with
                                                 | true, d -> d
@@ -475,16 +475,16 @@ type BacklogStoreAdapter() =
 
                 let ac =
                     if item.AcceptanceCriteria.IsEmpty then null
-                    else item.AcceptanceCriteria |> List.toArray
+                    else item.AcceptanceCriteria |> ResizeArray
 
                 let deps =
                     if item.Dependencies.IsEmpty then null
-                    else item.Dependencies |> List.map BacklogId.value |> List.toArray
+                    else item.Dependencies |> List.map BacklogId.value |> ResizeArray
 
                 let dto: BacklogItemDto =
                     { Id = id
                       Title = item.Title
-                      Repos = item.Repos |> List.map RepoId.value |> List.toArray
+                      Repos = item.Repos |> List.map RepoId.value |> ResizeArray
                       Type = BacklogItemType.toString item.Type
                       Priority = item.Priority |> Option.defaultValue null
                       Summary = item.Summary |> Option.defaultValue null
@@ -564,7 +564,7 @@ type BacklogStoreAdapter() =
                                         | Ok backlogId ->
                                             let repos =
                                                 if isNull dto.Repos then []
-                                                else dto.Repos |> Array.toList |> List.map RepoId
+                                                else dto.Repos |> Seq.toList |> List.map RepoId
 
                                             let itemTypeResult =
                                                 if isNull dto.Type || dto.Type = "" then Ok Feature
@@ -578,7 +578,7 @@ type BacklogStoreAdapter() =
                                                 if isNull dto.Dependencies then []
                                                 else
                                                     dto.Dependencies
-                                                    |> Array.toList
+                                                    |> Seq.toList
                                                     |> List.choose (fun d ->
                                                         match BacklogId.tryCreate d with
                                                         | Ok bid -> Some bid
@@ -586,7 +586,7 @@ type BacklogStoreAdapter() =
 
                                             let ac =
                                                 if isNull dto.AcceptanceCriteria then []
-                                                else dto.AcceptanceCriteria |> Array.toList
+                                                else dto.AcceptanceCriteria |> Seq.toList
 
                                             let createdAt =
                                                 match DateOnly.TryParse(dto.CreatedAt) with

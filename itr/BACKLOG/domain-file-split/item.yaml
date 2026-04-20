@@ -14,7 +14,7 @@ summary: >
   validation, and capability boundary definitions.
 acceptance_criteria:
   - Domain.fs is deleted and its content distributed across Effect.fs, Types.fs, Validation.fs, Portfolio.fs, Product.fs, Task.fs, and Backlog.fs
-  - Interfaces.fs is deleted and its interfaces co-located with their domain files: IFileSystem/IEnvironment/IYamlService/IGitService/IAgentHarness/IoError in Types.fs; IPortfolioConfig/IProductConfig in Portfolio.fs; ITaskStore in Task.fs; IBacklogStore/IViewStore in Backlog.fs
+  - "Interfaces.fs is deleted and its interfaces co-located with their domain files: IFileSystem/IEnvironment/IYamlService/IGitService/IAgentHarness/IoError in Types.fs; IPortfolioConfig/IProductConfig in Portfolio.fs; ITaskStore in Task.fs; IBacklogStore/IViewStore in Backlog.fs"
   - Compile order in Itr.Domain.fsproj reflects the new file dependency graph with no Domain.fs or Interfaces.fs entries
   - TaskError is extracted from BacklogError and contains TaskNotFound, InvalidTaskState, MissingPlanArtifact, TaskIdConflict, TaskIdOverrideRequiresSingleRepo
   - ITaskStore methods use TaskError instead of BacklogError
