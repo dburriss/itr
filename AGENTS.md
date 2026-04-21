@@ -8,6 +8,7 @@
 - Break solutions into small incremental steps
 - Do one step at a time
 - Do not move to implementation unless I say the word "implement"
+- Use only English
 
 ## Tech stack
 
