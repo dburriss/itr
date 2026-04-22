@@ -9,11 +9,13 @@ Date reviewed: 2026-04-13
 | ARCHITECTURE.md | Actual Code |
 |---|---|
 | `Itr.Domain` | `Itr.Domain` (`src/domain/`) ✓ |
-| `Itr.Features` | `Itr.Features` (`src/features/`) ✓ |
+| `Itr.Features` | `Itr.Features` (`src/features/`) — **planned for deletion** |
 | `Itr.Adapters` | `Itr.Adapters` (`src/adapters/`) ✓ |
 | `Itr.Cli`, `Itr.Tui`, `Itr.Mcp`, `Itr.Server` | All present ✓ |
 
 The spec now correctly names the core layer `Itr.Domain`, matching the implementation.
+
+**Decided (2026-04-22):** `Itr.Features` will be merged into `Itr.Domain`. Feature usecases are business logic and belong in domain. The separate project layer adds no meaningful seam. See Usecase Structure section below.
 
 ---
 
@@ -21,11 +23,11 @@ The spec now correctly names the core layer `Itr.Domain`, matching the implement
 
 | ARCHITECTURE.md | Actual Code |
 |---|---|
-| `Domain/Product.fs`, `Backlog.fs`, `Task.fs`, `Feature.fs`, `StateMachine.fs`, `Validation.fs` | Single flat `Domain.fs` |
+| `Domain/Product.fs`, `Backlog.fs`, `Task.fs`, `Feature.fs`, `StateMachine.fs`, `Validation.fs` | `Types.fs`, `Product.fs`, `Task.fs`, `Backlog.fs`, `Portfolio.fs`, `Validation.fs` ✓ |
 | `Effect.fs` | `Effect.fs` ✓ |
-| `Interfaces.fs` | `Interfaces.fs` ✓ |
+| `Interfaces.fs` | Deleted — interfaces co-located with domain files ✓ |
 
-All domain types (`Portfolio`, `Profile`, `BacklogItem`, `ItrTask`, `TaskState`, etc.) are consolidated in one `Domain.fs`. The spec envisions per-concept files with a dedicated `StateMachine.fs` and `Validation.fs`. State machine logic (valid transitions) and validation rules (slug regex, ID validation) currently live inline inside `Domain.fs` modules.
+**Resolved (2026-04-21):** `Domain.fs` and `Interfaces.fs` have been split into per-concept files. Domain types are now distributed across `Types.fs`, `Portfolio.fs`, `Product.fs`, `Task.fs`, `Backlog.fs`, and `Validation.fs`. Interfaces are co-located with their domain files. `TaskError` was extracted from `BacklogError` and lives in `Task.fs`. Remaining gap: no dedicated `StateMachine.fs` — state machine logic still lives inline in usecases.
 
 ---
 
@@ -44,46 +46,41 @@ These are sensible additions.
 
 ---
 
-## Usecase Style: Inconsistent
+## Usecase Style: Decided
 
-The spec specifies a uniform `effectResult { }` CE style with `EffectResult.asks` threading deps. Three distinct patterns exist in practice:
+The spec specifies a uniform `effectResult { }` CE style. Three distinct patterns currently exist (raw `Effect` lambda, plain interface args, fully pure functions). These inconsistencies will be resolved as part of the usecase restructure.
 
-### 1. Raw Effect lambda (Portfolio)
-```fsharp
-// PortfolioUsecase.fs
-let loadPortfolio configPath : EffectResult<'deps, Portfolio, PortfolioError> =
-    Effect(fun (deps: 'deps) ->
-        let config = deps :> IPortfolioConfig
-        ...)
+**Decided (2026-04-22):** Feature usecases move into `Itr.Domain` using a vertical slice structure:
+
+- Each operation becomes its own module with a single `let execute` function
+- Plural concept namespaces (`Portfolios`, `Tasks`, `Backlogs`) avoid clashes with domain types
+- Query modules per concept (`Query.fs`) expose named functions (`list`, `filter`, `getDetail` etc.) — no `execute`
+- Usecases may call queries; usecases may not call other usecases
+- Private helpers stay in the file that uses them (no separate helper modules)
+
+**Target structure:**
+
 ```
-Uses raw `Effect(fun deps -> ...)` lambda. Deps extracted via `:> Interface` upcasts inside the lambda body. No CE used.
-
-### 2. Pure functions with explicit interface args (Backlog)
-```fsharp
-// BacklogUsecase.fs
-let loadSnapshot
-    (backlogStore: IBacklogStore)
-    (taskStore: ITaskStore)
-    (viewStore: IViewStore)
-    (coordRoot: string)
-    : Result<BacklogSnapshot, BacklogError> =
+src/domain/
+  ... existing type files ...
+  Portfolios/
+    Query.fs          (load, resolveActiveProfile, loadAllDefinitions, resolveProduct)
+    BootstrapIfMissing.fs
+    SetDefaultProfile.fs
+    AddProfile.fs
+    RegisterProduct.fs
+    InitProduct.fs
+  Tasks/
+    Query.fs          (list, filter, getDetail)
+    Take.fs
+    Plan.fs
+    Approve.fs
+  Backlogs/
+    Query.fs          (loadSnapshot, list, getDetail)
+    Create.fs
 ```
-No `Effect` wrapper. Interfaces passed as plain function arguments. Caller (entry point) passes adapters directly.
 
-### 3. Fully pure functions, no DI at all (Task)
-```fsharp
-// TaskUsecase.fs
-let takeBacklogItem
-    (productConfig: ProductConfig)
-    (backlogItem: BacklogItem)
-    (existingTasks: ItrTask list)
-    (input: TakeInput)
-    (today: DateOnly)
-    : Result<ItrTask list, BacklogError> =
-```
-Pure data-in / result-out. No interfaces, no IO, no `Effect`.
-
-The spec's intended uniform `effectResult { }` CE style is not consistently used.
+**Call site convention:** callers always qualify fully, e.g. `Tasks.Take.execute`, `Backlogs.Query.list`.
 
 ---
 
@@ -103,6 +100,8 @@ The spec states: *"No entry point contains business logic."*
 - AI harness selection logic in `handleTaskPlan` (protocol dispatch: `acp` vs `opencode-http`)
 - Filesystem traversal in `handleProductInfo` (walking up dirs to find `product.yaml`)
 - Output formatting (table/JSON/text) entirely inline in every handler
+
+See: https://devonburriss.me/fp-architecture/
 
 ---
 
@@ -134,7 +133,7 @@ The spec names `Product`, `Backlog`, `Task`, `Feature` as the domain concepts. T
 - `BacklogItem`, `BacklogItemType`, `BacklogItemStatus`
 - `ItrTask`, `TaskState` (Planning → Planned → Approved → InProgress → Implemented → Validated → Archived)
 - `BacklogView`, `BacklogSnapshot`, `BacklogItemDetail`, `BacklogItemSummary`
-- `TaskSummary`, `TaskDetail`, `SiblingTask` (in Features layer)
+- `TaskSummary`, `TaskDetail`, `SiblingTask` (currently in Features layer — will move to `Itr.Domain` with usecase restructure)
 
 State machine transitions are enforced in-place (e.g. `planTask`, `approveTask` in `TaskUsecase.fs`) rather than in a dedicated `StateMachine.fs`.
 
@@ -145,9 +144,10 @@ State machine transitions are enforced in-place (e.g. `planTask`, `approveTask` 
 | Area | Gap | Severity |
 |---|---|---|
 | Project name | `Itr.Domain` — matches codebase ✓ | Resolved |
-| Domain file structure | Single `Domain.fs` vs per-concept files | Medium — maintainability |
+| Domain file structure | Single `Domain.fs` vs per-concept files | Resolved (2026-04-21) |
 | State machine isolation | Inline in usecase functions vs dedicated `StateMachine.fs` | Medium |
-| Usecase style | Three different patterns; spec's CE style not used consistently | Medium |
+| Usecase style | Three different patterns; spec's CE style not used consistently | Superseded — see Usecase Structure decision |
+| `Itr.Features` project | Separate project for feature usecases | Decided: merge into `Itr.Domain` (2026-04-22) |
 | Entry point purity | Business/formatting logic in `Program.fs` | Medium |
 | `IGitService` | Defined, not used | Low |
 | `IYamlService` | Defined but unused; YAML logic bypasses it | Low |
