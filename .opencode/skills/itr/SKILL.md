@@ -104,6 +104,17 @@ $ITR_BIN backlog add <backlog-id> --title <title> [options]
 
 Writes to `<coord-root>/BACKLOG/<backlog-id>/item.yaml`. Fails if ID already exists.
 
+The CLI only sets basic fields. To set `acceptance_criteria` or `dependencies`, edit `item.yaml` directly after creation. Both fields are **YAML lists**:
+
+```yaml
+acceptance_criteria:
+- First criterion
+- Second criterion
+
+dependencies:
+- other-backlog-id
+```
+
 ### `backlog take` — create tasks from a backlog item
 
 ```
