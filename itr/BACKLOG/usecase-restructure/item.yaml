@@ -1,0 +1,20 @@
+id: usecase-restructure
+title: Merge Itr.Features into Itr.Domain with vertical slice structure
+repos:
+- itr
+type: refactor
+priority: high
+summary: |-
+  Move all feature usecases from Itr.Features into Itr.Domain using a vertical slice structure (Portfolios/, Tasks/, Backlogs/ subfolders). Each operation becomes its own module with a single execute function. Standardise all usecases to effectResult CE style. Delete the Itr.Features project once migration is complete.
+acceptance_criteria:
+  - All usecases from Itr.Features are moved into Itr.Domain under Portfolios/, Tasks/, and Backlogs/ subdirectories matching the target structure in the architecture review
+  - Each operation is a separate module with a single `let execute` function using `effectResult { }` CE style
+  - Query modules (Query.fs) per concept expose named functions; no execute entry point
+  - Usecases do not call other usecases (queries are allowed)
+  - Private helpers are co-located in the file that uses them — no standalone helper modules
+  - Callers reference usecases with full qualification (e.g. Tasks.Take.execute, Backlogs.Query.list)
+  - Itr.Features project is deleted and removed from the solution
+  - Build passes with no errors or warnings
+  - All existing tests pass
+dependencies: 
+created_at: 2026-04-22
