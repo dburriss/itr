@@ -10,18 +10,7 @@ open Itr.Domain.Portfolios
 open Itr.Domain.Tasks
 open Itr.Domain.Backlogs
 open Itr.Adapters
-
-// ---------------------------------------------------------------------------
-// Output format
-// ---------------------------------------------------------------------------
-
-type OutputFormat = TableOutput | JsonOutput | TextOutput
-
-let private parseOutputFormat (value: string option) : OutputFormat =
-    match value with
-    | Some "json" -> JsonOutput
-    | Some "text" -> TextOutput
-    | _ -> TableOutput
+open Itr.Cli.CliParsers
 
 // ---------------------------------------------------------------------------
 // Argu argument DUs
@@ -449,15 +438,7 @@ let private formatTaskError (err: TaskError) : string =
     | TaskIdConflict id -> $"Task id '{TaskId.value id}' already exists"
     | TaskIdOverrideRequiresSingleRepo -> "--task-id can only be used with single-repo backlog items"
     | InvalidTaskState(id, current) ->
-        let stateStr =
-            match current with
-            | TaskState.Planning -> "planning"
-            | TaskState.Planned -> "planned"
-            | TaskState.Approved -> "approved"
-            | TaskState.InProgress -> "in_progress"
-            | TaskState.Implemented -> "implemented"
-            | TaskState.Validated -> "validated"
-            | TaskState.Archived -> "archived"
+        let stateStr = taskStateToDisplayString current
         $"Invalid state transition for task '{TaskId.value id}': current state is '{stateStr}'"
     | MissingPlanArtifact id -> $"Cannot approve task '{TaskId.value id}': plan artifact does not exist"
     | TaskStoreError(_, msg) -> msg
@@ -485,47 +466,95 @@ let private toProductConfig (def: ProductDefinition) : ProductConfig =
 
     { Id = def.Id; Repos = repos }
 
-let private backlogItemStatusToString (status: BacklogItemStatus) : string =
-    match status with
-    | BacklogItemStatus.Created -> "created"
-    | BacklogItemStatus.Planning -> "planning"
-    | BacklogItemStatus.Planned -> "planned"
-    | BacklogItemStatus.Approved -> "approved"
-    | BacklogItemStatus.InProgress -> "in-progress"
-    | BacklogItemStatus.Completed -> "completed"
-    | BacklogItemStatus.Archived -> "archived"
+// ---------------------------------------------------------------------------
+// resolvePortfolio helper — shared load→resolveActiveProfile boilerplate
+// ---------------------------------------------------------------------------
 
-let private tryParseBacklogItemStatus (s: string) : BacklogItemStatus option =
-    match s with
-    | "created" -> Some BacklogItemStatus.Created
-    | "planning" -> Some BacklogItemStatus.Planning
-    | "planned" -> Some BacklogItemStatus.Planned
-    | "approved" -> Some BacklogItemStatus.Approved
-    | "in-progress" | "inprogress" -> Some BacklogItemStatus.InProgress
-    | "completed" -> Some BacklogItemStatus.Completed
-    | "archived" -> Some BacklogItemStatus.Archived
-    | _ -> None
+let private resolvePortfolio
+    (deps: AppDeps)
+    (configPath: string)
+    (profile: string option)
+    : Result<Profile, string> =
+    Portfolios.Query.load (Some configPath)
+    |> Effect.run deps
+    |> Result.mapError (fun e -> $"%A{e}")
+    |> Result.bind (fun portfolio ->
+        Portfolios.Query.resolveActiveProfile portfolio profile
+        |> Effect.run deps
+        |> Result.mapError (fun e -> $"%A{e}"))
 
-let private tryParseTaskState (s: string) : Result<TaskState, string> =
-    match s with
-    | "planning" -> Ok TaskState.Planning
-    | "planned" -> Ok TaskState.Planned
-    | "approved" -> Ok TaskState.Approved
-    | "in_progress" | "in-progress" -> Ok TaskState.InProgress
-    | "implemented" -> Ok TaskState.Implemented
-    | "validated" -> Ok TaskState.Validated
-    | "archived" -> Ok TaskState.Archived
-    | other -> Error $"Unknown task state '{other}': must be planning | planned | approved | in_progress | implemented | validated | archived"
+// ---------------------------------------------------------------------------
+// Active patterns for dispatch simplification
+// ---------------------------------------------------------------------------
 
-let private taskStateToDisplayString (state: TaskState) : string =
-    match state with
-    | TaskState.Planning -> "planning"
-    | TaskState.Planned -> "planned"
-    | TaskState.Approved -> "approved"
-    | TaskState.InProgress -> "in_progress"
-    | TaskState.Implemented -> "implemented"
-    | TaskState.Validated -> "validated"
-    | TaskState.Archived -> "archived"
+let private (|BacklogTake|_|) (r: ParseResults<BacklogArgs>) =
+    r.TryGetResult BacklogArgs.Take
+
+let private (|BacklogAdd|_|) (r: ParseResults<BacklogArgs>) =
+    r.TryGetResult BacklogArgs.Add
+
+let private (|BacklogList|_|) (r: ParseResults<BacklogArgs>) =
+    r.TryGetResult BacklogArgs.List
+
+let private (|BacklogInfo|_|) (r: ParseResults<BacklogArgs>) =
+    r.TryGetResult BacklogArgs.Info
+
+let private (|ProfileAdd|_|) (r: ParseResults<ProfileArgs>) =
+    r.TryGetResult ProfileArgs.Add
+
+let private (|ProfileList|_|) (r: ParseResults<ProfileArgs>) =
+    r.TryGetResult ProfileArgs.List
+
+let private (|ProfileSetDefault|_|) (r: ParseResults<ProfileArgs>) =
+    r.TryGetResult ProfileArgs.Set_Default
+
+let private (|ProductInit|_|) (r: ParseResults<ProductArgs>) =
+    r.TryGetResult ProductArgs.Init
+
+let private (|ProductRegister|_|) (r: ParseResults<ProductArgs>) =
+    r.TryGetResult ProductArgs.Register
+
+let private (|ProductList|_|) (r: ParseResults<ProductArgs>) =
+    r.TryGetResult ProductArgs.List
+
+let private (|ProductInfo|_|) (r: ParseResults<ProductArgs>) =
+    r.TryGetResult ProductArgs.Info
+
+let private (|TaskList|_|) (r: ParseResults<TaskArgs>) =
+    r.TryGetResult TaskArgs.List
+
+let private (|TaskInfo|_|) (r: ParseResults<TaskArgs>) =
+    r.TryGetResult TaskArgs.Info
+
+let private (|TaskPlan|_|) (r: ParseResults<TaskArgs>) =
+    r.TryGetResult TaskArgs.Plan
+
+let private (|TaskApprove|_|) (r: ParseResults<TaskArgs>) =
+    r.TryGetResult TaskArgs.Approve
+
+let private (|ViewList|_|) (r: ParseResults<ViewArgs>) =
+    r.TryGetResult ViewArgs.List
+
+// ---------------------------------------------------------------------------
+// resolveProduct helper — resolve first product from profile
+// ---------------------------------------------------------------------------
+
+let private resolveProduct
+    (deps: AppDeps)
+    (activeProfile: Profile)
+    : Result<ResolvedProduct, string> =
+    match activeProfile.Products with
+    | [] -> Error "No products in active profile"
+    | productRef :: _ ->
+        let (ProductRoot root) = productRef.Root
+        let productConfig = deps :> IProductConfig
+
+        match productConfig.LoadProductConfig root with
+        | Error e -> Error(formatPortfolioError e)
+        | Ok definition ->
+            Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
+            |> Effect.run deps
+            |> Result.mapError (fun e -> $"%A{e}")
 
 // ---------------------------------------------------------------------------
 // task list handler
@@ -539,9 +568,8 @@ let private handleTaskList
     let coordRoot = resolved.CoordRoot.AbsolutePath
     let taskStore = deps :> ITaskStore
 
-    let format = listArgs.TryGetResult TaskListArgs.Output |> parseOutputFormat
+    let format = listArgs.TryGetResult TaskListArgs.Output |> OutputFormat.tryParse
 
-    // Parse optional filters
     let backlogIdResult =
         listArgs.TryGetResult TaskListArgs.Backlog_Id
         |> Option.map (fun s ->
@@ -592,7 +620,6 @@ let private handleTaskList
             let filterInput: Tasks.Query.FilterInput = { BacklogId = backlogIdFilter; Repo = repoId; State = stateFilter; Exclude = excludeList }
             let filtered = Tasks.Query.filter filterInput summaries
 
-            // Apply ordering: default is created ascending
             let taskStatePriority state =
                 match state with
                 | TaskState.Planning -> 7
@@ -608,58 +635,14 @@ let private handleTaskList
                 | "state" -> filtered |> List.sortByDescending (fun s -> taskStatePriority s.Task.State)
                 | _ -> filtered |> List.sortBy (fun s -> s.Task.CreatedAt)
 
-            if ordered.IsEmpty then
-                match format with
-                | TextOutput -> () // no output in text mode for empty results
-                | _ -> printfn "No tasks found."
-            else
-                match format with
-                | JsonOutput ->
-                    let items =
-                        ordered
-                        |> List.map (fun s ->
-                            let id = TaskId.value s.Task.Id
-                            let repo = RepoId.value s.Task.Repo
-                            let state = taskStateToDisplayString s.Task.State
-                            let taskYamlPath = s.TaskYamlPath.Replace("\\", "\\\\")
-                            let planMdPathJson =
-                                match s.PlanMdPath with
-                                | Some p -> sprintf "\"%s\"" (p.Replace("\\", "\\\\"))
-                                | None -> "null"
-                            sprintf "    { \"id\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\", \"taskYamlPath\": \"%s\", \"planMdPath\": %s }"
-                                id repo state taskYamlPath planMdPathJson)
-                        |> String.concat ",\n"
-                    printfn "{ \"tasks\": ["
-                    printfn "%s" items
-                    printfn "] }"
-                | TextOutput ->
-                    ordered
-                    |> List.iter (fun s ->
-                        let id = TaskId.value s.Task.Id
-                        let repo = RepoId.value s.Task.Repo
-                        let state = taskStateToDisplayString s.Task.State
-                        let taskYamlPath = s.TaskYamlPath
-                        let planMdPath = s.PlanMdPath |> Option.defaultValue ""
-                        printfn "%s\t%s\t%s\t%s\t%s" id repo state taskYamlPath planMdPath)
-                | TableOutput ->
-                    let table = Table()
-                    table.AddColumn("Id") |> ignore
-                    table.AddColumn("Repo") |> ignore
-                    table.AddColumn("State") |> ignore
-                    table.AddColumn("Task YAML") |> ignore
-                    table.AddColumn("Plan MD") |> ignore
+            let summaryRows : TaskListSummary list =
+                ordered
+                |> List.map (fun s ->
+                    { Task = s.Task
+                      TaskYamlPath = s.TaskYamlPath
+                      PlanMdPath = s.PlanMdPath })
 
-                    ordered
-                    |> List.iter (fun s ->
-                        let id = TaskId.value s.Task.Id
-                        let repo = RepoId.value s.Task.Repo
-                        let state = taskStateToDisplayString s.Task.State
-                        let taskYamlPath = s.TaskYamlPath
-                        let planMdPath = s.PlanMdPath |> Option.defaultValue ""
-                        table.AddRow(id, repo, state, taskYamlPath, planMdPath) |> ignore)
-
-                    AnsiConsole.Write(table)
-
+            TaskFormatter.formatList format summaryRows
             Ok()
 
 // ---------------------------------------------------------------------------
@@ -673,7 +656,7 @@ let private handleTaskInfo
     : Result<unit, string> =
     let coordRoot = resolved.CoordRoot.AbsolutePath
     let rawTaskId = infoArgs.GetResult TaskInfoArgs.Task_Id
-    let format = infoArgs.TryGetResult TaskInfoArgs.Output |> parseOutputFormat
+    let format = infoArgs.TryGetResult TaskInfoArgs.Output |> OutputFormat.tryParse
 
     let taskId = TaskId.create rawTaskId
     let taskStore = deps :> ITaskStore
@@ -682,7 +665,6 @@ let private handleTaskInfo
     | Error e -> Error(formatTaskError e)
     | Ok allTaskTuples ->
         let allTasks = allTaskTuples |> List.map fst
-        // Resolve plan path: need the taskYamlPath of the target task
         match allTaskTuples |> List.tryFind (fun (t, _) -> t.Id = taskId) with
         | None -> Error(formatTaskError (TaskNotFound taskId))
         | Some (_, taskYamlPath) ->
@@ -691,88 +673,14 @@ let private handleTaskInfo
             match Tasks.Query.getDetail detailInput with
             | Error e -> Error(formatTaskError e)
             | Ok detail ->
-                let task = detail.Task
-                let id = TaskId.value task.Id
-                let backlog = BacklogId.value task.SourceBacklog
-                let repo = RepoId.value task.Repo
-                let state = taskStateToDisplayString task.State
-                let createdAt = task.CreatedAt.ToString("yyyy-MM-dd")
-                let planExistsStr = if detail.PlanExists then "yes" else "no"
-                let planApprovedStr = if detail.PlanApproved then "yes" else "no"
-                let planMdPathStr = detail.PlanMdPath |> Option.defaultValue ""
-
-                match format with
-                | JsonOutput ->
-                    let siblingsJson =
-                        detail.Siblings
-                        |> List.map (fun s ->
-                            sprintf "    { \"id\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\" }"
-                                (TaskId.value s.Id)
-                                (RepoId.value s.Repo)
-                                (taskStateToDisplayString s.State))
-                        |> String.concat ",\n"
-                    let planMdPathJson =
-                        match detail.PlanMdPath with
-                        | Some p -> sprintf "\"%s\"" (p.Replace("\\", "\\\\"))
-                        | None -> "null"
-                    printfn "{"
-                    printfn "  \"id\": \"%s\"," id
-                    printfn "  \"backlog\": \"%s\"," backlog
-                    printfn "  \"repo\": \"%s\"," repo
-                    printfn "  \"state\": \"%s\"," state
-                    printfn "  \"planExists\": %b," detail.PlanExists
-                    printfn "  \"planApproved\": %b," detail.PlanApproved
-                    printfn "  \"createdAt\": \"%s\"," createdAt
-                    printfn "  \"taskYamlPath\": \"%s\"," (detail.TaskYamlPath.Replace("\\", "\\\\"))
-                    printfn "  \"planMdPath\": %s," planMdPathJson
-                    printfn "  \"siblings\": ["
-                    if not (List.isEmpty detail.Siblings) then printfn "%s" siblingsJson
-                    printfn "  ]"
-                    printfn "}"
-                | TextOutput ->
-                    let siblingsStr =
-                        if detail.Siblings.IsEmpty then "-"
-                        else detail.Siblings |> List.map (fun s -> TaskId.value s.Id) |> String.concat ","
-                    printfn "id\t%s" id
-                    printfn "backlog\t%s" backlog
-                    printfn "repo\t%s" repo
-                    printfn "state\t%s" state
-                    printfn "plan exists\t%s" planExistsStr
-                    printfn "plan approved\t%s" planApprovedStr
-                    printfn "created\t%s" createdAt
-                    printfn "siblings\t%s" siblingsStr
-                    printfn "taskYamlPath\t%s" detail.TaskYamlPath
-                    printfn "planMdPath\t%s" planMdPathStr
-                | TableOutput ->
-                    let infoTable = Table()
-                    infoTable.AddColumn("Field") |> ignore
-                    infoTable.AddColumn("Value") |> ignore
-                    infoTable.AddRow("id", id) |> ignore
-                    infoTable.AddRow("backlog", backlog) |> ignore
-                    infoTable.AddRow("repo", repo) |> ignore
-                    infoTable.AddRow("state", state) |> ignore
-                    infoTable.AddRow("plan exists", planExistsStr) |> ignore
-                    infoTable.AddRow("plan approved", planApprovedStr) |> ignore
-                    infoTable.AddRow("created", createdAt) |> ignore
-                    infoTable.AddRow("Task YAML", detail.TaskYamlPath) |> ignore
-                    infoTable.AddRow("Plan MD", planMdPathStr) |> ignore
-                    AnsiConsole.Write(infoTable)
-
-                    if detail.Siblings.IsEmpty then
-                        printfn "siblings: (none)"
-                    else
-                        let sibTable = Table()
-                        sibTable.AddColumn("Id") |> ignore
-                        sibTable.AddColumn("Repo") |> ignore
-                        sibTable.AddColumn("State") |> ignore
-                        detail.Siblings
-                        |> List.iter (fun s ->
-                            sibTable.AddRow(
-                                TaskId.value s.Id,
-                                RepoId.value s.Repo,
-                                taskStateToDisplayString s.State) |> ignore)
-                        AnsiConsole.Write(sibTable)
-
+                let taskDetailView : TaskDetailView =
+                    { Task = detail.Task
+                      Siblings = detail.Siblings
+                      PlanExists = detail.PlanExists
+                      PlanApproved = detail.PlanApproved
+                      TaskYamlPath = detail.TaskYamlPath
+                      PlanMdPath = detail.PlanMdPath }
+                TaskFormatter.formatDetail format taskDetailView
                 Ok()
 
 // ---------------------------------------------------------------------------
@@ -794,7 +702,6 @@ let private handleTaskPlan
     let backlogStore = deps :> IBacklogStore
     let fileSystem = deps :> IFileSystem
 
-    // Load all tasks to find the target
     match taskStore.ListAllTasks coordRoot with
     | Error e -> Error(formatTaskError e)
     | Ok allTaskTuples ->
@@ -802,7 +709,6 @@ let private handleTaskPlan
         match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
         | None -> Error(formatTaskError (TaskNotFound taskId))
         | Some task ->
-            // Validate state and get updated task
             match Tasks.Plan.execute task with
             | Error e -> Error(formatTaskError e)
             | Ok (updatedTask, wasAlreadyPlanned) ->
@@ -811,7 +717,6 @@ let private handleTaskPlan
 
                 let backlogId = updatedTask.SourceBacklog
 
-                // Load backlog item for template data
                 match backlogStore.LoadBacklogItem coordRoot backlogId with
                 | Error e -> Error(formatBacklogError e)
                 | Ok (backlogItem, _) ->
@@ -830,12 +735,10 @@ let private handleTaskPlan
                         if ac.IsEmpty then "- none"
                         else ac |> List.map (fun c -> $"- {c}") |> String.concat "\n"
 
-                    // Resolve asset directory relative to the executable
                     let exeDir = AppDomain.CurrentDomain.BaseDirectory
                     let templatePath = IO.Path.Combine(exeDir, "assets", "plan-template.md")
                     let promptPath = IO.Path.Combine(exeDir, "assets", "plan-prompt.md")
 
-                    // Always render the template skeleton first (metadata filled, open sections intact)
                     let skeletonResult =
                         match fileSystem.ReadFile templatePath with
                         | Error _ -> Error $"Could not read plan-template.md from {templatePath}"
@@ -852,32 +755,26 @@ let private handleTaskPlan
                                 |> fromNoneHtmlText template
                             Ok rendered
 
-                    // Generate plan content
                     let planContentResult =
                         match skeletonResult with
                         | Error e -> Error e
                         | Ok skeleton ->
                             if useAi then
-                                // Load global agent config from the active profile
                                 let globalAgentConfig = resolved.Profile.AgentConfig
 
-                                // Load local config from the product root and merge
                                 let (ProductRoot productRoot) = resolved.Product.Root
                                 let agentConfig =
                                     match PortfolioAdapter.LoadLocalConfig productRoot with
                                     | Some localConfig -> localConfig
                                     | None -> globalAgentConfig
 
-                                // Select adapter based on protocol
-                                let harness : IAgentHarness =
-                                    match agentConfig.Protocol with
-                                    | "acp" ->
-                                        AcpHarnessAdapter(agentConfig.Command, agentConfig.Args, coordRoot)
-                                        :> IAgentHarness
-                                    | _ ->
-                                        OpenCodeHarnessAdapter() :> IAgentHarness
+                                let harness =
+                                    AgentHarnessSelector.selectHarness
+                                        agentConfig.Protocol
+                                        agentConfig.Command
+                                        agentConfig.Args
+                                        coordRoot
 
-                                // Send the rendered skeleton to the AI to fill the open sections
                                 match fileSystem.ReadFile promptPath with
                                 | Error _ ->
                                     Error $"Could not read plan-prompt.md from {promptPath}"
@@ -896,13 +793,11 @@ let private handleTaskPlan
                     | Error msg -> Error msg
                     | Ok rawPlanContent ->
                         let planContent = Itr.Adapters.AcpMessages.trimPreamble rawPlanContent
-                        // Write plan.md
                         let planPath = ItrTask.planFile coordRoot backlogId (TaskId.create rawTaskId)
 
                         match fileSystem.WriteFile planPath planContent with
                         | Error e -> Error $"Failed to write plan.md: %A{e}"
                         | Ok () ->
-                            // Write updated task
                             match taskStore.WriteTask coordRoot updatedTask with
                             | Error e -> Error(formatTaskError e)
                             | Ok () ->
@@ -957,14 +852,13 @@ let private handleProductInfo
     (deps: AppDeps)
     (infoArgs: ParseResults<ProductInfoArgs>)
     : Result<unit, string> =
-    let format = infoArgs.TryGetResult ProductInfoArgs.Output |> parseOutputFormat
+    let format = infoArgs.TryGetResult ProductInfoArgs.Output |> OutputFormat.tryParse
     let productConfig = deps :> IProductConfig
+    let fileSystem = deps :> IFileSystem
 
-    // Resolve the ProductDefinition and its root path
     let definitionResult : Result<string * ProductDefinition, string> =
         match infoArgs.TryGetResult ProductInfoArgs.Product_Id with
         | Some rawId ->
-            // Lookup by ID in active profile
             let portfolioResult =
                 Portfolios.Query.load (Some configPath)
                 |> Effect.run deps
@@ -985,19 +879,8 @@ let private handleProductInfo
                             let (ProductRoot root) = productRef.Root
                             Ok(root, definition)
         | None ->
-            // Auto-detect: traverse up from cwd looking for product.yaml
-            let rec tryFind (dir: string) =
-                let candidate = IO.Path.Combine(dir, "product.yaml")
-                if IO.File.Exists candidate then
-                    Some dir
-                else
-                    let parent = IO.Path.GetDirectoryName(dir)
-                    if isNull parent || parent = dir then
-                        None
-                    else
-                        tryFind parent
-
-            match tryFind (IO.Directory.GetCurrentDirectory()) with
+            let cwd = IO.Directory.GetCurrentDirectory()
+            match ProductLocator.locateProductRoot fileSystem cwd with
             | None ->
                 Error "No product ID provided and no product.yaml found in current directory or any parent directory."
             | Some productRoot ->
@@ -1011,7 +894,6 @@ let private handleProductInfo
         let id = ProductId.value definition.Id
         let description = definition.Description |> Option.defaultValue ""
 
-        // Resolve docs to absolute paths
         let docs =
             definition.Docs
             |> Map.toList
@@ -1019,7 +901,6 @@ let private handleProductInfo
                 let absPath = IO.Path.GetFullPath(IO.Path.Combine(productRoot, relPath))
                 key, absPath)
 
-        // Resolve repos to absolute paths (path is relative to productRoot)
         let repos =
             definition.Repos
             |> Map.toList
@@ -1031,59 +912,16 @@ let private handleProductInfo
         let coordRepo = definition.Coordination.Repo |> Option.defaultValue ""
         let coordPath = definition.Coordination.Path |> Option.defaultValue ""
 
-        match format with
-        | JsonOutput ->
-            let docsJson =
-                docs
-                |> List.map (fun (key, absPath) ->
-                    sprintf "    \"%s\": \"%s\"" key (absPath.Replace("\\", "\\\\")))
-                |> String.concat ",\n"
-            let reposJson =
-                repos
-                |> List.map (fun (key, absPath, url) ->
-                    match url with
-                    | Some u ->
-                        sprintf "    \"%s\": { \"path\": \"%s\", \"url\": \"%s\" }" key (absPath.Replace("\\", "\\\\")) u
-                    | None ->
-                        sprintf "    \"%s\": { \"path\": \"%s\" }" key (absPath.Replace("\\", "\\\\")))
-                |> String.concat ",\n"
-            let descriptionJson =
-                description.Replace("\"", "\\\"")
-            printfn "{"
-            printfn "  \"id\": \"%s\"," id
-            printfn "  \"description\": \"%s\"," descriptionJson
-            printfn "  \"docs\": {"
-            if not docs.IsEmpty then printfn "%s" docsJson
-            printfn "  },"
-            printfn "  \"repos\": {"
-            if not repos.IsEmpty then printfn "%s" reposJson
-            printfn "  },"
-            printfn "  \"coordMode\": \"%s\"," coordMode
-            printfn "  \"coordRepo\": \"%s\"," coordRepo
-            printfn "  \"coordPath\": \"%s\"" coordPath
-            printfn "}"
-        | TextOutput ->
-            printfn "id\t%s" id
-            printfn "description\t%s" description
-            docs |> List.iter (fun (key, absPath) -> printfn "docs\t%s\t%s" key absPath)
-            repos |> List.iter (fun (key, absPath, _) -> printfn "repos\t%s\t%s" key absPath)
-            printfn "coordMode\t%s" coordMode
-            printfn "coordRepo\t%s" coordRepo
-            printfn "coordPath\t%s" coordPath
-        | TableOutput ->
-            let table = Table()
-            table.AddColumn("Field") |> ignore
-            table.AddColumn("Key") |> ignore
-            table.AddColumn("Value") |> ignore
-            table.AddRow("id", "", id) |> ignore
-            table.AddRow("description", "", description) |> ignore
-            docs |> List.iter (fun (key, absPath) -> table.AddRow("docs", key, absPath) |> ignore)
-            repos |> List.iter (fun (key, absPath, _) -> table.AddRow("repos", key, absPath) |> ignore)
-            table.AddRow("coordMode", "", coordMode) |> ignore
-            table.AddRow("coordRepo", "", coordRepo) |> ignore
-            table.AddRow("coordPath", "", coordPath) |> ignore
-            AnsiConsole.Write(table)
+        let data : ProductInfoData =
+            { Id = id
+              Description = description
+              Docs = docs
+              Repos = repos
+              CoordMode = coordMode
+              CoordRepo = coordRepo
+              CoordPath = coordPath }
 
+        PortfolioFormatter.formatProductInfo format data
         Ok()
 
 // ---------------------------------------------------------------------------
@@ -1103,12 +941,11 @@ let private handleProductList
     match portfolioResult with
     | Error msg -> Error msg
     | Ok portfolio ->
-        // Return error when portfolio has no profiles
         if portfolio.Profiles.IsEmpty then
             Error "No profiles found. Run 'itr profile add <name>' to create one."
         else
             let flagProfile = listArgs.TryGetResult ProductListArgs.Profile
-            let format = listArgs.TryGetResult ProductListArgs.Output |> parseOutputFormat
+            let format = listArgs.TryGetResult ProductListArgs.Output |> OutputFormat.tryParse
 
             match Portfolios.Query.resolveActiveProfile portfolio flagProfile |> Effect.run deps with
             | Error e -> Error(formatPortfolioError e)
@@ -1116,42 +953,14 @@ let private handleProductList
                 match Portfolios.Query.loadAllDefinitions profile deps with
                 | Error e -> Error(formatPortfolioError e)
                 | Ok pairs ->
-                    let rows =
+                    let rows : ProductRow list =
                         pairs
                         |> List.map (fun (_, definition) ->
-                            let id = ProductId.value definition.Id
-                            let repoCount = definition.Repos.Count
-                            let coordRoot = definition.CoordRoot.AbsolutePath
-                            (id, repoCount, coordRoot))
+                            { Id = ProductId.value definition.Id
+                              RepoCount = definition.Repos.Count
+                              CoordRoot = definition.CoordRoot.AbsolutePath })
 
-                    match format with
-                    | JsonOutput ->
-                        let items =
-                            rows
-                            |> List.map (fun (id, repoCount, coordRoot) ->
-                                sprintf "  { \"id\": \"%s\", \"repoCount\": %d, \"coordRoot\": \"%s\" }"
-                                    id repoCount coordRoot)
-                            |> String.concat ",\n"
-                        printfn "["
-                        if not rows.IsEmpty then
-                            printfn "%s" items
-                        printfn "]"
-                    | TextOutput ->
-                        rows
-                        |> List.iter (fun (id, repoCount, coordRoot) ->
-                            printfn "%s\t%d\t%s" id repoCount coordRoot)
-                    | TableOutput ->
-                        let table = Table()
-                        table.AddColumn("Id") |> ignore
-                        table.AddColumn("Repo Count") |> ignore
-                        table.AddColumn("Coord Root") |> ignore
-
-                        rows
-                        |> List.iter (fun (id, repoCount, coordRoot) ->
-                            table.AddRow(id, string repoCount, coordRoot) |> ignore)
-
-                        AnsiConsole.Write(table)
-
+                    PortfolioFormatter.formatProductList format rows
                     Ok()
 
 // ---------------------------------------------------------------------------
@@ -1163,7 +972,7 @@ let private handleProfileList
     (portfolio: Portfolio)
     (listArgs: ParseResults<ProfileListArgs>)
     : Result<unit, string> =
-    let format = listArgs.TryGetResult ProfileListArgs.Output |> parseOutputFormat
+    let format = listArgs.TryGetResult ProfileListArgs.Output |> OutputFormat.tryParse
 
     let profiles =
         portfolio.Profiles
@@ -1181,41 +990,13 @@ let private handleProfileList
                 |> Option.bind (fun g -> g.Email)
                 |> Option.defaultValue ""
             let productCount = profile.Products.Length
-            (nameStr, isDefault, gitName, gitEmail, productCount))
+            ({ Name = nameStr
+               IsDefault = isDefault
+               GitName = gitName
+               GitEmail = gitEmail
+               ProductCount = productCount } : ProfileRow))
 
-    match format with
-    | JsonOutput ->
-        let items =
-            profiles
-            |> List.map (fun (name, isDefault, gitName, gitEmail, productCount) ->
-                let isDefaultStr = if isDefault then "true" else "false"
-                sprintf "  { \"name\": \"%s\", \"isDefault\": %s, \"gitName\": \"%s\", \"gitEmail\": \"%s\", \"productCount\": %d }"
-                    name isDefaultStr gitName gitEmail productCount)
-            |> String.concat ",\n"
-        printfn "["
-        if not profiles.IsEmpty then
-            printfn "%s" items
-        printfn "]"
-    | TextOutput ->
-        profiles
-        |> List.iter (fun (name, isDefault, gitName, gitEmail, productCount) ->
-            let marker = if isDefault then "*" else " "
-            printfn "%s\t%s\t%s\t%s\t%d" marker name gitName gitEmail productCount)
-    | TableOutput ->
-        let table = Table()
-        table.AddColumn("Default") |> ignore
-        table.AddColumn("Name") |> ignore
-        table.AddColumn("Git Name") |> ignore
-        table.AddColumn("Git Email") |> ignore
-        table.AddColumn("Products") |> ignore
-
-        profiles
-        |> List.iter (fun (name, isDefault, gitName, gitEmail, productCount) ->
-            let marker = if isDefault then "*" else ""
-            table.AddRow(marker, name, gitName, gitEmail, string productCount) |> ignore)
-
-        AnsiConsole.Write(table)
-
+    PortfolioFormatter.formatProfileList format profiles
     Ok()
 
 // ---------------------------------------------------------------------------
@@ -1230,7 +1011,7 @@ let private handleViewList
     let coordRoot = resolved.CoordRoot.AbsolutePath
     let viewStore = deps :> IViewStore
     let backlogStore = deps :> IBacklogStore
-    let format = listArgs.TryGetResult ViewListArgs.Output |> parseOutputFormat
+    let format = listArgs.TryGetResult ViewListArgs.Output |> OutputFormat.tryParse
 
     match viewStore.ListViews coordRoot with
     | Error e -> Error(formatBacklogError e)
@@ -1243,9 +1024,9 @@ let private handleViewList
 
             if views.IsEmpty then
                 match format with
-                | JsonOutput -> printfn "[]"
-                | TextOutput -> () // no output for empty in text mode
-                | TableOutput -> printfn "No views defined."
+                | Json -> printfn "[]"
+                | Text -> () // no output for empty in text mode
+                | Table -> printfn "No views defined."
             else
                 let rows =
                     views
@@ -1259,7 +1040,7 @@ let private handleViewList
                         (view.Id, description, total, archived))
 
                 match format with
-                | JsonOutput ->
+                | Json ->
                     let items =
                         rows
                         |> List.map (fun (id, description, total, archived) ->
@@ -1270,12 +1051,12 @@ let private handleViewList
                     printfn "["
                     printfn "%s" items
                     printfn "]"
-                | TextOutput ->
+                | Text ->
                     rows
                     |> List.iter (fun (id, description, total, archived) ->
                         printfn "%s\t%s\t%d\t%d" id description total archived)
-                | TableOutput ->
-                    let table = Table()
+                | Table ->
+                    let table = Spectre.Console.Table()
                     table.AddColumn("Id") |> ignore
                     table.AddColumn("Description") |> ignore
                     table.AddColumn("Items") |> ignore
@@ -1300,7 +1081,7 @@ let private handleBacklogList
     let viewStore = deps :> IViewStore
 
     let viewFilter = listArgs.TryGetResult ListArgs.View
-    let format = listArgs.TryGetResult ListArgs.Output |> parseOutputFormat
+    let format = listArgs.TryGetResult ListArgs.Output |> OutputFormat.tryParse
 
     let statusFilter =
         listArgs.TryGetResult ListArgs.Status
@@ -1330,59 +1111,7 @@ let private handleBacklogList
     | Error e -> Error(formatBacklogError e)
     | Ok snapshot ->
         let items = Backlogs.Query.list filter snapshot
-
-        match format with
-        | JsonOutput ->
-            let jsonItems =
-                items
-                |> List.map (fun s ->
-                    let id = BacklogId.value s.Item.Id
-                    let itemType = BacklogItemType.toString s.Item.Type
-                    let priority = s.Item.Priority |> Option.defaultValue ""
-                    let status = backlogItemStatusToString s.Status
-                    let viewId = s.ViewId |> Option.defaultValue ""
-                    let createdAt = s.Item.CreatedAt.ToString("yyyy-MM-dd")
-                    sprintf """  { "id": "%s", "type": "%s", "priority": "%s", "status": "%s", "view": "%s", "taskCount": %d, "createdAt": "%s", "path": "%s" }"""
-                        id itemType priority status viewId s.TaskCount createdAt (s.Path.Replace("\\", "\\\\")))
-                |> String.concat ",\n"
-            printfn "["
-            if not (List.isEmpty items) then
-                printfn "%s" jsonItems
-            printfn "]"
-        | TextOutput ->
-            items
-            |> List.iter (fun s ->
-                let id = BacklogId.value s.Item.Id
-                let itemType = BacklogItemType.toString s.Item.Type
-                let priority = s.Item.Priority |> Option.defaultValue "-"
-                let status = backlogItemStatusToString s.Status
-                let viewId = s.ViewId |> Option.defaultValue "-"
-                let createdAt = s.Item.CreatedAt.ToString("yyyy-MM-dd")
-                let title = s.Item.Title
-                printfn "%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\t%s" id itemType priority status viewId s.TaskCount createdAt title s.Path)
-        | TableOutput ->
-            let table = Table()
-            table.AddColumn("ID") |> ignore
-            table.AddColumn("Type") |> ignore
-            table.AddColumn("Priority") |> ignore
-            table.AddColumn("Status") |> ignore
-            table.AddColumn("View") |> ignore
-            table.AddColumn("Tasks") |> ignore
-            table.AddColumn("Created") |> ignore
-            table.AddColumn("Path") |> ignore
-
-            items
-            |> List.iter (fun s ->
-                let id = BacklogId.value s.Item.Id
-                let itemType = BacklogItemType.toString s.Item.Type
-                let priority = s.Item.Priority |> Option.defaultValue "-"
-                let status = backlogItemStatusToString s.Status
-                let viewId = s.ViewId |> Option.defaultValue "-"
-                let createdAt = s.Item.CreatedAt.ToString("yyyy-MM-dd")
-                table.AddRow(id, itemType, priority, status, viewId, string s.TaskCount, createdAt, s.Path) |> ignore)
-
-            AnsiConsole.Write(table)
-
+        BacklogFormatter.formatList format items
         Ok()
 
 // ---------------------------------------------------------------------------
@@ -1396,7 +1125,7 @@ let private handleBacklogInfo
     : Result<unit, string> =
     let coordRoot = resolved.CoordRoot.AbsolutePath
     let rawBacklogId = infoArgs.GetResult InfoArgs.Backlog_Id
-    let format = infoArgs.TryGetResult InfoArgs.Output |> parseOutputFormat
+    let format = infoArgs.TryGetResult InfoArgs.Output |> OutputFormat.tryParse
 
     match BacklogId.tryCreate rawBacklogId with
     | Error _ -> Error $"Invalid backlog id '{rawBacklogId}': must match [a-z0-9][a-z0-9-]*"
@@ -1408,153 +1137,18 @@ let private handleBacklogInfo
         match Backlogs.Query.getDetail backlogStore taskStore viewStore coordRoot backlogId with
         | Error e -> Error(formatBacklogError e)
         | Ok detail ->
-            let item = detail.Item
-            let id = BacklogId.value item.Id
-            let itemType = BacklogItemType.toString item.Type
-            let priority = item.Priority |> Option.defaultValue ""
-            let status = backlogItemStatusToString detail.Status
-            let viewId = detail.ViewId |> Option.defaultValue ""
-            let createdAt = item.CreatedAt.ToString("yyyy-MM-dd")
-            let summary = item.Summary |> Option.defaultValue ""
-            let ac = item.AcceptanceCriteria
-            let deps_ = item.Dependencies |> List.map BacklogId.value
-            let repos = item.Repos |> List.map RepoId.value
-
-            match format with
-            | JsonOutput ->
-                let acJson =
-                    ac
-                    |> List.map (fun s -> sprintf "    \"%s\"" (s.Replace("\"", "\\\"")))
-                    |> String.concat ",\n"
-                let depsJson =
-                    deps_
-                    |> List.map (fun s -> sprintf "    \"%s\"" s)
-                    |> String.concat ",\n"
-                let reposJson =
-                    repos
-                    |> List.map (fun s -> sprintf "    \"%s\"" s)
-                    |> String.concat ",\n"
-                let tasksJson =
-                    detail.Tasks
-                    |> List.map (fun t ->
-                        let tid = TaskId.value t.Id
-                        let repo = RepoId.value t.Repo
-                        let state =
-                            match t.State with
-                            | TaskState.Planning -> "planning"
-                            | TaskState.Planned -> "planned"
-                            | TaskState.Approved -> "approved"
-                            | TaskState.InProgress -> "in-progress"
-                            | TaskState.Implemented -> "implemented"
-                            | TaskState.Validated -> "validated"
-                            | TaskState.Archived -> "archived"
-                        sprintf "    { \"id\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\" }" tid repo state)
-                    |> String.concat ",\n"
-
-                printfn "{"
-                printfn "  \"id\": \"%s\"," id
-                printfn "  \"title\": \"%s\"," (item.Title.Replace("\"", "\\\""))
-                printfn "  \"type\": \"%s\"," itemType
-                printfn "  \"priority\": \"%s\"," priority
-                printfn "  \"status\": \"%s\"," status
-                printfn "  \"summary\": \"%s\"," (summary.Replace("\"", "\\\""))
-                printfn "  \"acceptanceCriteria\": ["
-                if not (List.isEmpty ac) then printfn "%s" acJson
-                printfn "  ],"
-                printfn "  \"dependencies\": ["
-                if not (List.isEmpty deps_) then printfn "%s" depsJson
-                printfn "  ],"
-                printfn "  \"repos\": ["
-                if not (List.isEmpty repos) then printfn "%s" reposJson
-                printfn "  ],"
-                printfn "  \"createdAt\": \"%s\"," createdAt
-                printfn "  \"tasks\": ["
-                if not (List.isEmpty detail.Tasks) then printfn "%s" tasksJson
-                printfn "  ],"
-                printfn "  \"path\": \"%s\"" (detail.Path.Replace("\\", "\\\\"))
-                printfn "}"
-            | TextOutput ->
-                let priorityStr = item.Priority |> Option.defaultValue "-"
-                let viewStr = detail.ViewId |> Option.defaultValue "-"
-                let reposStr = if repos.IsEmpty then "-" else String.concat "," repos
-                let depsStr = if deps_.IsEmpty then "-" else String.concat "," deps_
-                let summaryStr = summary.Replace('\n', ' ').Replace('\r', ' ')
-                let acStr =
-                    if ac.IsEmpty then "-"
-                    else ac |> List.map (fun s -> s.Replace('\n', ' ').Replace('\r', ' ')) |> String.concat ","
-                let tasksStr =
-                    if detail.Tasks.IsEmpty then "-"
-                    else detail.Tasks |> List.map (fun t -> TaskId.value t.Id) |> String.concat ","
-                printfn "id\t%s" id
-                printfn "title\t%s" item.Title
-                printfn "type\t%s" itemType
-                printfn "priority\t%s" priorityStr
-                printfn "status\t%s" status
-                printfn "view\t%s" viewStr
-                printfn "summary\t%s" summaryStr
-                printfn "acceptance criteria\t%s" acStr
-                printfn "dependencies\t%s" depsStr
-                printfn "repos\t%s" reposStr
-                printfn "created\t%s" createdAt
-                printfn "taskCount\t%d" detail.Tasks.Length
-                printfn "tasks\t%s" tasksStr
-                printfn "path\t%s" detail.Path
-            | TableOutput ->
-                // Detail table
-                let infoTable = Table()
-                infoTable.AddColumn("Field") |> ignore
-                infoTable.AddColumn("Value") |> ignore
-                infoTable.AddRow("id", id) |> ignore
-                infoTable.AddRow("title", item.Title) |> ignore
-                infoTable.AddRow("type", itemType) |> ignore
-                infoTable.AddRow("priority", priority) |> ignore
-                infoTable.AddRow("status", status) |> ignore
-                infoTable.AddRow("view", viewId) |> ignore
-                infoTable.AddRow("summary", summary) |> ignore
-                infoTable.AddRow("acceptance criteria", String.concat "\n" ac) |> ignore
-                infoTable.AddRow("dependencies", String.concat ", " deps_) |> ignore
-                infoTable.AddRow("repos", String.concat ", " repos) |> ignore
-                infoTable.AddRow("created", createdAt) |> ignore
-                infoTable.AddRow("path", detail.Path) |> ignore
-                AnsiConsole.Write(infoTable)
-
-                // Tasks table
-                let tasksTable = Table()
-                tasksTable.AddColumn("Task ID") |> ignore
-                tasksTable.AddColumn("Repo") |> ignore
-                tasksTable.AddColumn("State") |> ignore
-
-                detail.Tasks
-                |> List.iter (fun t ->
-                    let tid = TaskId.value t.Id
-                    let repo = RepoId.value t.Repo
-                    let state =
-                        match t.State with
-                        | TaskState.Planning -> "planning"
-                        | TaskState.Planned -> "planned"
-                        | TaskState.Approved -> "approved"
-                        | TaskState.InProgress -> "in-progress"
-                        | TaskState.Implemented -> "implemented"
-                        | TaskState.Validated -> "validated"
-                        | TaskState.Archived -> "archived"
-                    tasksTable.AddRow(tid, repo, state) |> ignore)
-
-                AnsiConsole.Write(tasksTable)
-
+            BacklogFormatter.formatDetail format detail
             Ok()
 
 // ---------------------------------------------------------------------------
 // backlog take handler
 // ---------------------------------------------------------------------------
-// Note: write-command handlers (handleBacklogTake, handleBacklogAdd, handleProductRegister)
-// intentionally retain `outputJson: bool` — they are not scripting targets and are excluded
-// from the OutputFormat refactor at MVP.
 
 let private handleBacklogTake
     (deps: AppDeps)
     (resolved: ResolvedProduct)
     (takeArgs: ParseResults<TakeArgs>)
-    (outputJson: bool)
+    (format: OutputFormat)
     : Result<unit, string> =
     let coordRoot = resolved.CoordRoot.AbsolutePath
     let rawBacklogId = takeArgs.GetResult TakeArgs.Backlog_Id
@@ -1617,7 +1211,8 @@ let private handleBacklogTake
         match result with
         | Error msg -> Error msg
         | Ok written ->
-            if outputJson then
+            match format with
+            | Json ->
                 let items =
                     written
                     |> List.map (fun (id, path) -> $"""  {{ "id": "{id}", "path": "{path}" }}""")
@@ -1626,7 +1221,7 @@ let private handleBacklogTake
                 printfn """{ "ok": true, "tasks": ["""
                 printfn "%s" items
                 printfn "] }"
-            else
+            | _ ->
                 written |> List.iter (fun (id, path) -> printfn "Created task: %s → %s" id path)
 
             Ok()
@@ -1639,7 +1234,7 @@ let private handleBacklogAdd
     (deps: AppDeps)
     (resolved: ResolvedProduct)
     (addArgs: ParseResults<AddArgs>)
-    (outputJson: bool)
+    (format: OutputFormat)
     : Result<unit, string> =
     let coordRoot = resolved.CoordRoot.AbsolutePath
     let isInteractive = addArgs.Contains AddArgs.Interactive
@@ -1651,7 +1246,6 @@ let private handleBacklogAdd
     let priority = addArgs.TryGetResult AddArgs.Priority
     let dependsOn = addArgs.GetResults AddArgs.Depends_On
 
-    // Runtime validation for non-interactive mode
     if not isInteractive then
         match rawBacklogIdOpt with
         | None -> Error "--backlog-id is required when not using --interactive"
@@ -1665,7 +1259,6 @@ let private handleBacklogAdd
         let productConfig = toProductConfig resolved.Definition
         let backlogStore = deps :> IBacklogStore
 
-        // Check for duplicate
         match BacklogId.tryCreate rawBacklogId with
         | Error _ -> Error $"Invalid backlog id '{rawBacklogId}': must match [a-z0-9][a-z0-9-]*"
         | Ok backlogId ->
@@ -1693,14 +1286,12 @@ let private handleBacklogAdd
                         let id = BacklogId.value item.Id
                         let path = BacklogItem.itemFile coordRoot item.Id
 
-                        if outputJson then
-                            printfn """{ "ok": true, "id": "%s" }""" id
-                        else
-                            printfn "Created backlog item '%s' → %s" id path
+                        match format with
+                        | Json -> printfn """{ "ok": true, "id": "%s" }""" id
+                        | _ -> printfn "Created backlog item '%s' → %s" id path
 
                         Ok()
     else
-        // Interactive mode
         let backlogStore = deps :> IBacklogStore
         let productConfig = toProductConfig resolved.Definition
 
@@ -1718,7 +1309,6 @@ let private handleBacklogAdd
             eprintfn "Error: %s" msg
             Error msg
         | Ok input ->
-            // Check for duplicate before creating
             match BacklogId.tryCreate input.BacklogId with
             | Error _ -> Error $"Invalid backlog id '{input.BacklogId}': must match [a-z0-9][a-z0-9-]*"
             | Ok backlogId ->
@@ -1736,10 +1326,9 @@ let private handleBacklogAdd
                             let id = BacklogId.value item.Id
                             let path = BacklogItem.itemFile coordRoot item.Id
 
-                            if outputJson then
-                                printfn """{ "ok": true, "id": "%s" }""" id
-                            else
-                                printfn "Created backlog item '%s' → %s" id path
+                            match format with
+                            | Json -> printfn """{ "ok": true, "id": "%s" }""" id
+                            | _ -> printfn "Created backlog item '%s' → %s" id path
 
                             Ok()
 
@@ -1752,7 +1341,7 @@ let private handleProductRegister
     (configPath: string)
     (profile: string option)
     (registerArgs: ParseResults<ProductRegisterArgs>)
-    (outputJson: bool)
+    (format: OutputFormat)
     : Result<unit, string> =
     let path = registerArgs.GetResult ProductRegisterArgs.Path
 
@@ -1773,23 +1362,19 @@ let private handleProductRegister
         portfolioConfig.SaveConfig configPath updatedPortfolio
         |> Result.mapError formatPortfolioError
         |> Result.map (fun () ->
-            // Load product.yaml to get the canonical id for the success message
             let productConfig = deps :> IProductConfig
 
             match productConfig.LoadProductConfig path with
             | Ok definition ->
                 let id = ProductId.value definition.Id
 
-                if outputJson then
-                    printfn """{ "ok": true, "id": "%s", "path": "%s" }""" id path
-                else
-                    printfn "Registered product '%s' from '%s'." id path
+                match format with
+                | Json -> printfn """{ "ok": true, "id": "%s", "path": "%s" }""" id path
+                | _ -> printfn "Registered product '%s' from '%s'." id path
             | Error _ ->
-                // Fallback if product.yaml read fails after registration
-                if outputJson then
-                    printfn """{ "ok": true, "path": "%s" }""" path
-                else
-                    printfn "Registered product from '%s'." path)
+                match format with
+                | Json -> printfn """{ "ok": true, "path": "%s" }""" path
+                | _ -> printfn "Registered product from '%s'." path)
 
 // ---------------------------------------------------------------------------
 // Dispatch
@@ -1797,9 +1382,8 @@ let private handleProductRegister
 
 let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<unit, string> =
     let profile = results.TryGetResult Profile
-    let outputJson = results.TryGetResult Output |> Option.exists (fun v -> v = "json")
+    let format = results.TryGetResult Output |> OutputFormat.tryParse
 
-    // Resolve config path once and run bootstrap before any portfolio operation
     let configPath = (deps :> IPortfolioConfig).ConfigPath()
 
     let bootstrapResult =
@@ -1813,527 +1397,256 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
         if wasCreated then
             printfn "Created default config at %s. Run 'itr init' to configure profiles and products." configPath
 
-        match results.TryGetResult Backlog with
-        | Some backlogResults ->
-            match backlogResults.TryGetResult Take with
-            | Some takeArgs ->
-                // Resolve the product to get the coordination root
+        match results.TryGetResult Backlog,
+              results.TryGetResult CliArgs.ProfileCmd,
+              results.TryGetResult Product,
+              results.TryGetResult Task,
+              results.TryGetResult View with
+
+        | Some backlogResults, _, _, _, _ ->
+            match backlogResults with
+            | BacklogTake takeArgs ->
+                resolvePortfolio deps configPath profile
+                |> Result.bind (resolveProduct deps)
+                |> Result.bind (fun resolved -> handleBacklogTake deps resolved takeArgs format)
+
+            | BacklogAdd addArgs ->
+                resolvePortfolio deps configPath profile
+                |> Result.bind (resolveProduct deps)
+                |> Result.bind (fun resolved -> handleBacklogAdd deps resolved addArgs format)
+
+            | BacklogList listArgs ->
+                resolvePortfolio deps configPath profile
+                |> Result.bind (resolveProduct deps)
+                |> Result.bind (fun resolved -> handleBacklogList deps resolved listArgs)
+
+            | BacklogInfo infoArgs ->
+                resolvePortfolio deps configPath profile
+                |> Result.bind (resolveProduct deps)
+                |> Result.bind (fun resolved -> handleBacklogInfo deps resolved infoArgs)
+
+            | _ -> Error "Specify a backlog subcommand (e.g. backlog take <id> or backlog add <id> or backlog list or backlog info <id>)"
+
+        | _, Some profilesResults, _, _, _ ->
+            match profilesResults with
+            | ProfileAdd addArgs ->
+                let name = addArgs.GetResult ProfileAddArgs.Name
+                let gitName = addArgs.TryGetResult ProfileAddArgs.Git_Name
+                let gitEmail = addArgs.TryGetResult ProfileAddArgs.Git_Email
+                let setDefault = addArgs.Contains ProfileAddArgs.Set_Default
+
+                match gitEmail, gitName with
+                | Some _, None ->
+                    Error "--git-email requires --git-name to also be specified"
+                | _ ->
+                    let gitIdentity =
+                        gitName
+                        |> Option.map (fun gn -> { Name = gn; Email = gitEmail })
+
+                    let input: Portfolios.AddProfile.Input =
+                        { Name = name
+                          GitIdentity = gitIdentity
+                          SetAsDefault = setDefault }
+
+                    let result =
+                        Portfolios.AddProfile.execute configPath input
+                        |> Effect.run deps
+                        |> Result.mapError formatPortfolioError
+
+                    match result with
+                    | Error msg -> Error msg
+                    | Ok updatedPortfolio ->
+                        let portfolioConfig = deps :> IPortfolioConfig
+
+                        portfolioConfig.SaveConfig configPath updatedPortfolio
+                        |> Result.mapError formatPortfolioError
+                        |> Result.map (fun () -> printfn "Added profile '%s'." name)
+
+            | ProfileList listArgs ->
                 let portfolioResult =
                     Portfolios.Query.load (Some configPath)
                     |> Effect.run deps
-                    |> Result.mapError (fun e -> $"%A{e}")
-                    |> Result.bind (fun portfolio ->
-                        Portfolios.Query.resolveActiveProfile portfolio profile
-                        |> Effect.run deps
-                        |> Result.mapError (fun e -> $"%A{e}"))
+                    |> Result.mapError formatPortfolioError
 
                 match portfolioResult with
                 | Error msg -> Error msg
-                | Ok activeProfile ->
-                    // For now take the first product from the profile
-                    match activeProfile.Products with
-                    | [] -> Error "No products in active profile"
-                    | productRef :: _ ->
-                        let (ProductRoot root) = productRef.Root
+                | Ok portfolio -> handleProfileList configPath portfolio listArgs
 
-                        // Load the product definition to get the canonical id
-                        let productConfig = deps :> IProductConfig
+            | ProfileSetDefault setDefaultArgs ->
+                let name = setDefaultArgs.GetResult ProfileSetDefaultArgs.Name
+                let useLocal = setDefaultArgs.Contains ProfileSetDefaultArgs.Local
+                let useGlobal = setDefaultArgs.Contains ProfileSetDefaultArgs.Global
+                let portfolioConfig = deps :> IPortfolioConfig
+                let fs = deps :> IFileSystem
 
-                        match productConfig.LoadProductConfig root with
-                        | Error e -> Error(formatPortfolioError e)
-                        | Ok definition ->
-                            let portfolioProductResult =
-                                Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
-                                |> Effect.run deps
-                                |> Result.mapError (fun e -> $"%A{e}")
+                let targetPathResult : Result<string * string, string> =
+                    if useGlobal then
+                        Ok(configPath, configPath)
+                    elif useLocal then
+                        let cwd = System.IO.Directory.GetCurrentDirectory()
+                        let productYamlPath = System.IO.Path.Combine(cwd, "product.yaml")
 
-                            match portfolioProductResult with
-                            | Error msg -> Error msg
-                            | Ok resolved -> handleBacklogTake deps resolved takeArgs outputJson
+                        if fs.FileExists productYamlPath then
+                            let localConfigPath = System.IO.Path.Combine(cwd, "itr.json")
+                            Ok(localConfigPath, localConfigPath)
+                        else
+                            Error "--local flag requires a product context. Run this command from within a product directory or specify --global instead."
+                    else
+                        let cwd = System.IO.Directory.GetCurrentDirectory()
+                        let productYamlPath = System.IO.Path.Combine(cwd, "product.yaml")
+                        let localConfigPath = System.IO.Path.Combine(cwd, "itr.json")
 
-            | None ->
-                match backlogResults.TryGetResult BacklogArgs.Add with
-                | Some addArgs ->
-                    let portfolioResult =
-                        Portfolios.Query.load (Some configPath)
-                        |> Effect.run deps
-                        |> Result.mapError (fun e -> $"%A{e}")
-                        |> Result.bind (fun portfolio ->
-                            Portfolios.Query.resolveActiveProfile portfolio profile
+                        if fs.FileExists productYamlPath && fs.FileExists localConfigPath then
+                            Ok(localConfigPath, localConfigPath)
+                        else
+                            Ok(configPath, configPath)
+
+                match targetPathResult with
+                | Error msg -> Error msg
+                | Ok(targetPath, displayPath) ->
+                    let bootstrapResult2 =
+                        if not (fs.FileExists targetPath) then
+                            Portfolios.BootstrapIfMissing.execute targetPath
                             |> Effect.run deps
-                            |> Result.mapError (fun e -> $"%A{e}"))
+                            |> Result.mapError formatPortfolioError
+                            |> Result.map (fun _ -> ())
+                        else
+                            Ok()
 
-                    match portfolioResult with
+                    match bootstrapResult2 with
                     | Error msg -> Error msg
-                    | Ok activeProfile ->
-                        match activeProfile.Products with
-                        | [] -> Error "No products in active profile"
-                        | productRef :: _ ->
-                            let (ProductRoot root) = productRef.Root
-                            let productConfig = deps :> IProductConfig
-
-                            match productConfig.LoadProductConfig root with
-                            | Error e -> Error(formatPortfolioError e)
-                            | Ok definition ->
-                                let portfolioProductResult =
-                                    Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
-                                    |> Effect.run deps
-                                    |> Result.mapError (fun e -> $"%A{e}")
-
-                                match portfolioProductResult with
-                                | Error msg -> Error msg
-                                | Ok resolved -> handleBacklogAdd deps resolved addArgs outputJson
-
-                | None ->
-                    match backlogResults.TryGetResult BacklogArgs.List with
-                    | Some listArgs ->
-                        let portfolioResult =
-                            Portfolios.Query.load (Some configPath)
-                            |> Effect.run deps
-                            |> Result.mapError (fun e -> $"%A{e}")
-                            |> Result.bind (fun portfolio ->
-                                Portfolios.Query.resolveActiveProfile portfolio profile
-                                |> Effect.run deps
-                                |> Result.mapError (fun e -> $"%A{e}"))
-
-                        match portfolioResult with
-                        | Error msg -> Error msg
-                        | Ok activeProfile ->
-                            match activeProfile.Products with
-                            | [] -> Error "No products in active profile"
-                            | productRef :: _ ->
-                                let (ProductRoot root) = productRef.Root
-                                let productConfig = deps :> IProductConfig
-
-                                match productConfig.LoadProductConfig root with
-                                | Error e -> Error(formatPortfolioError e)
-                                | Ok definition ->
-                                    let portfolioProductResult =
-                                        Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
-                                        |> Effect.run deps
-                                        |> Result.mapError (fun e -> $"%A{e}")
-
-                                    match portfolioProductResult with
-                                    | Error msg -> Error msg
-                                    | Ok resolved -> handleBacklogList deps resolved listArgs
-
-                    | None ->
-                        match backlogResults.TryGetResult BacklogArgs.Info with
-                        | Some infoArgs ->
-                            let portfolioResult =
-                                Portfolios.Query.load (Some configPath)
-                                |> Effect.run deps
-                                |> Result.mapError (fun e -> $"%A{e}")
-                                |> Result.bind (fun portfolio ->
-                                    Portfolios.Query.resolveActiveProfile portfolio profile
-                                    |> Effect.run deps
-                                    |> Result.mapError (fun e -> $"%A{e}"))
-
-                            match portfolioResult with
-                            | Error msg -> Error msg
-                            | Ok activeProfile ->
-                                match activeProfile.Products with
-                                | [] -> Error "No products in active profile"
-                                | productRef :: _ ->
-                                    let (ProductRoot root) = productRef.Root
-                                    let productConfig = deps :> IProductConfig
-
-                                    match productConfig.LoadProductConfig root with
-                                    | Error e -> Error(formatPortfolioError e)
-                                    | Ok definition ->
-                                        let portfolioProductResult =
-                                            Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
-                                            |> Effect.run deps
-                                            |> Result.mapError (fun e -> $"%A{e}")
-
-                                        match portfolioProductResult with
-                                        | Error msg -> Error msg
-                                        | Ok resolved -> handleBacklogInfo deps resolved infoArgs
-
-                        | None -> Error "Specify a backlog subcommand (e.g. backlog take <id> or backlog add <id> or backlog list or backlog info <id>)"
-
-        | None ->
-            match results.TryGetResult CliArgs.ProfileCmd with
-            | Some profilesResults ->
-                match profilesResults.TryGetResult ProfileArgs.Add with
-                | Some addArgs ->
-                    let name = addArgs.GetResult ProfileAddArgs.Name
-                    let gitName = addArgs.TryGetResult ProfileAddArgs.Git_Name
-                    let gitEmail = addArgs.TryGetResult ProfileAddArgs.Git_Email
-                    let setDefault = addArgs.Contains ProfileAddArgs.Set_Default
-
-                    // Validate: --git-email requires --git-name
-                    match gitEmail, gitName with
-                    | Some _, None ->
-                        Error "--git-email requires --git-name to also be specified"
-                    | _ ->
-                        let gitIdentity =
-                            gitName
-                            |> Option.map (fun gn -> { Name = gn; Email = gitEmail })
-
-                        let input: Portfolios.AddProfile.Input =
-                            { Name = name
-                              GitIdentity = gitIdentity
-                              SetAsDefault = setDefault }
+                    | Ok() ->
+                        let input: Portfolios.SetDefaultProfile.Input = { Name = name }
 
                         let result =
-                            Portfolios.AddProfile.execute configPath input
+                            Portfolios.SetDefaultProfile.execute targetPath input
                             |> Effect.run deps
                             |> Result.mapError formatPortfolioError
 
                         match result with
                         | Error msg -> Error msg
                         | Ok updatedPortfolio ->
-                            let portfolioConfig = deps :> IPortfolioConfig
-
-                            portfolioConfig.SaveConfig configPath updatedPortfolio
+                            portfolioConfig.SaveConfig targetPath updatedPortfolio
                             |> Result.mapError formatPortfolioError
-                            |> Result.map (fun () -> printfn "Added profile '%s'." name)
+                            |> Result.map (fun () ->
+                                printfn "Profile '%s' set as default. (%s)" name displayPath)
 
-                | None ->
-                    match profilesResults.TryGetResult ProfileArgs.List with
-                    | Some listArgs ->
-                        let portfolioResult =
-                            Portfolios.Query.load (Some configPath)
-                            |> Effect.run deps
-                            |> Result.mapError formatPortfolioError
+            | _ -> Error "Specify a profile subcommand (e.g. profile add <name>, profile list, or profile set-default <name>)"
 
-                        match portfolioResult with
-                        | Error msg -> Error msg
-                        | Ok portfolio -> handleProfileList configPath portfolio listArgs
+        | _, _, Some productResults, _, _ ->
+            match productResults with
+            | ProductInit initArgs ->
+                let rawPath = initArgs.GetResult ProductInitArgs.Path
 
+                let rawId =
+                    match initArgs.TryGetResult ProductInitArgs.Id with
+                    | Some id -> id
+                    | None -> AnsiConsole.Ask<string>("Product id:")
+
+                let rawRepoId =
+                    match initArgs.TryGetResult ProductInitArgs.Repo_Id with
+                    | Some repoId -> repoId
                     | None ->
-                        match profilesResults.TryGetResult ProfileArgs.Set_Default with
-                        | Some setDefaultArgs ->
-                            let name = setDefaultArgs.GetResult ProfileSetDefaultArgs.Name
-                            let useLocal = setDefaultArgs.Contains ProfileSetDefaultArgs.Local
-                            let useGlobal = setDefaultArgs.Contains ProfileSetDefaultArgs.Global
-                            let portfolioConfig = deps :> IPortfolioConfig
-                            let fs = deps :> IFileSystem
+                        let answer = AnsiConsole.Ask<string>($"Repo id (default: same as id):")
+                        if String.IsNullOrWhiteSpace(answer) then rawId else answer
 
-                            // Determine which config path to update
-                            let targetPathResult : Result<string * string, string> =
-                                if useGlobal then
-                                    Ok(configPath, configPath)
-                                elif useLocal then
-                                    // Find product root from current directory
-                                    let cwd = System.IO.Directory.GetCurrentDirectory()
-                                    let productYamlPath = System.IO.Path.Combine(cwd, "product.yaml")
+                let coordPath = initArgs.TryGetResult ProductInitArgs.Coord_Path |> Option.defaultValue ".itr"
+                let coordMode = initArgs.TryGetResult ProductInitArgs.Coord_Mode |> Option.defaultValue "primary-repo"
 
-                                    if fs.FileExists productYamlPath then
-                                        let localConfigPath = System.IO.Path.Combine(cwd, "itr.json")
-                                        Ok(localConfigPath, localConfigPath)
-                                    else
-                                        Error "--local flag requires a product context. Run this command from within a product directory or specify --global instead."
-                                else
-                                    // Auto-detect: check if local itr.json exists at cwd
-                                    let cwd = System.IO.Directory.GetCurrentDirectory()
-                                    let productYamlPath = System.IO.Path.Combine(cwd, "product.yaml")
-                                    let localConfigPath = System.IO.Path.Combine(cwd, "itr.json")
-
-                                    if fs.FileExists productYamlPath && fs.FileExists localConfigPath then
-                                        Ok(localConfigPath, localConfigPath)
-                                    else
-                                        Ok(configPath, configPath)
-
-                            match targetPathResult with
-                            | Error msg -> Error msg
-                            | Ok(targetPath, displayPath) ->
-                                // Bootstrap local config if it doesn't exist (only for --local or auto-local)
-                                let bootstrapResult =
-                                    if not (fs.FileExists targetPath) then
-                                        Portfolios.BootstrapIfMissing.execute targetPath
-                                        |> Effect.run deps
-                                        |> Result.mapError formatPortfolioError
-                                        |> Result.map (fun _ -> ())
-                                    else
-                                        Ok()
-
-                                match bootstrapResult with
-                                | Error msg -> Error msg
-                                | Ok() ->
-                                    let input: Portfolios.SetDefaultProfile.Input = { Name = name }
-
-                                    let result =
-                                        Portfolios.SetDefaultProfile.execute targetPath input
-                                        |> Effect.run deps
-                                        |> Result.mapError formatPortfolioError
-
-                                    match result with
-                                    | Error msg -> Error msg
-                                    | Ok updatedPortfolio ->
-                                        portfolioConfig.SaveConfig targetPath updatedPortfolio
-                                        |> Result.mapError formatPortfolioError
-                                        |> Result.map (fun () ->
-                                            printfn "Profile '%s' set as default. (%s)" name displayPath)
-
-                        | None -> Error "Specify a profile subcommand (e.g. profile add <name>, profile list, or profile set-default <name>)"
-
-            | None ->
-                match results.TryGetResult Product with
-                | Some productResults ->
-                    match productResults.TryGetResult Init with
-                    | Some initArgs ->
-                        let rawPath = initArgs.GetResult ProductInitArgs.Path
-
-                        // 2.4 Interactive prompt for missing id
-                        let rawId =
-                            match initArgs.TryGetResult ProductInitArgs.Id with
-                            | Some id -> id
-                            | None -> AnsiConsole.Ask<string>("Product id:")
-
-                        // 2.5 Interactive prompt for missing repo-id
-                        let rawRepoId =
-                            match initArgs.TryGetResult ProductInitArgs.Repo_Id with
-                            | Some repoId -> repoId
-                            | None ->
-                                let answer = AnsiConsole.Ask<string>($"Repo id (default: same as id):")
-                                if String.IsNullOrWhiteSpace(answer) then rawId else answer
-
-                        let coordPath = initArgs.TryGetResult ProductInitArgs.Coord_Path |> Option.defaultValue ".itr"
-                        let coordMode = initArgs.TryGetResult ProductInitArgs.Coord_Mode |> Option.defaultValue "primary-repo"
-
-                        // 2.6 Interactive prompt for registration profile
-                        let registerProfile =
-                            if initArgs.Contains ProductInitArgs.No_Register then
-                                None
-                            else
-                                match initArgs.TryGetResult ProductInitArgs.Register_Profile with
-                                | Some p -> Some p
-                                | None ->
-                                    let answer = AnsiConsole.Ask<string>("Register in profile (leave blank to skip):")
-                                    if String.IsNullOrWhiteSpace(answer) then None else Some answer
-
-                        let input: Portfolios.InitProduct.Input =
-                            { Id = rawId
-                              Path = rawPath
-                              RepoId = rawRepoId
-                              CoordPath = coordPath
-                              CoordinationMode = coordMode
-                              RegisterProfile = registerProfile }
-
-                        let result =
-                            Portfolios.InitProduct.execute configPath input
-                            |> Effect.run deps
-                            |> Result.mapError formatPortfolioError
-
-                        match result with
-                        | Error msg -> Error msg
-                        | Ok maybePortfolio ->
-                            // 2.7 Success message
-                            printfn "Initialized product '%s' at %s." rawId rawPath
-
-                            // 2.8 Registration success message
-                            match maybePortfolio, registerProfile with
-                            | Some _, Some prof -> printfn "Registered in profile '%s'." prof
-                            | _ -> ()
-
-                            Ok()
-
-                    | None ->
-                        match productResults.TryGetResult Register with
-                        | Some registerArgs ->
-                            handleProductRegister deps configPath profile registerArgs outputJson
+                let registerProfile =
+                    if initArgs.Contains ProductInitArgs.No_Register then
+                        None
+                    else
+                        match initArgs.TryGetResult ProductInitArgs.Register_Profile with
+                        | Some p -> Some p
                         | None ->
-                             match productResults.TryGetResult ProductArgs.List with
-                             | Some listArgs ->
-                                 handleProductList configPath deps listArgs
-                             | None ->
-                                 match productResults.TryGetResult ProductArgs.Info with
-                                 | Some infoArgs ->
-                                     handleProductInfo configPath deps infoArgs
-                                 | None -> Error "Specify a product subcommand (e.g. product init <path>, product register <path>, product list, or product info)"
+                            let answer = AnsiConsole.Ask<string>("Register in profile (leave blank to skip):")
+                            if String.IsNullOrWhiteSpace(answer) then None else Some answer
 
-                | None ->
-                    match results.TryGetResult Task with
-                    | Some taskResults ->
-                        match taskResults.TryGetResult TaskArgs.List with
-                        | Some listArgs ->
-                            let portfolioResult =
-                                Portfolios.Query.load (Some configPath)
-                                |> Effect.run deps
-                                |> Result.mapError (fun e -> $"%A{e}")
-                                |> Result.bind (fun portfolio ->
-                                    Portfolios.Query.resolveActiveProfile portfolio profile
-                                    |> Effect.run deps
-                                    |> Result.mapError (fun e -> $"%A{e}"))
+                let input: Portfolios.InitProduct.Input =
+                    { Id = rawId
+                      Path = rawPath
+                      RepoId = rawRepoId
+                      CoordPath = coordPath
+                      CoordinationMode = coordMode
+                      RegisterProfile = registerProfile }
 
-                            match portfolioResult with
-                            | Error msg -> Error msg
-                            | Ok activeProfile ->
-                                match activeProfile.Products with
-                                | [] -> Error "No products in active profile"
-                                | productRef :: _ ->
-                                    let (ProductRoot root) = productRef.Root
-                                    let productConfig = deps :> IProductConfig
+                let result =
+                    Portfolios.InitProduct.execute configPath input
+                    |> Effect.run deps
+                    |> Result.mapError formatPortfolioError
 
-                                    match productConfig.LoadProductConfig root with
-                                    | Error e -> Error(formatPortfolioError e)
-                                    | Ok definition ->
-                                        let portfolioProductResult =
-                                            Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
-                                            |> Effect.run deps
-                                            |> Result.mapError (fun e -> $"%A{e}")
+                match result with
+                | Error msg -> Error msg
+                | Ok maybePortfolio ->
+                    printfn "Initialized product '%s' at %s." rawId rawPath
 
-                                        match portfolioProductResult with
-                                        | Error msg -> Error msg
-                                        | Ok resolved -> handleTaskList deps resolved listArgs
+                    match maybePortfolio, registerProfile with
+                    | Some _, Some prof -> printfn "Registered in profile '%s'." prof
+                    | _ -> ()
 
-                        | None ->
-                            match taskResults.TryGetResult TaskArgs.Info with
-                            | Some infoArgs ->
-                                let portfolioResult =
-                                    Portfolios.Query.load (Some configPath)
-                                    |> Effect.run deps
-                                    |> Result.mapError (fun e -> $"%A{e}")
-                                    |> Result.bind (fun portfolio ->
-                                        Portfolios.Query.resolveActiveProfile portfolio profile
-                                        |> Effect.run deps
-                                        |> Result.mapError (fun e -> $"%A{e}"))
+                    Ok()
 
-                                match portfolioResult with
-                                | Error msg -> Error msg
-                                | Ok activeProfile ->
-                                    match activeProfile.Products with
-                                    | [] -> Error "No products in active profile"
-                                    | productRef :: _ ->
-                                        let (ProductRoot root) = productRef.Root
-                                        let productConfig = deps :> IProductConfig
+            | ProductRegister registerArgs ->
+                handleProductRegister deps configPath profile registerArgs format
 
-                                        match productConfig.LoadProductConfig root with
-                                        | Error e -> Error(formatPortfolioError e)
-                                        | Ok definition ->
-                                            let portfolioProductResult =
-                                                Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
-                                                |> Effect.run deps
-                                                |> Result.mapError (fun e -> $"%A{e}")
+            | ProductList listArgs ->
+                handleProductList configPath deps listArgs
 
-                                            match portfolioProductResult with
-                                            | Error msg -> Error msg
-                                            | Ok resolved -> handleTaskInfo deps resolved infoArgs
+            | ProductInfo infoArgs ->
+                handleProductInfo configPath deps infoArgs
 
-                            | None ->
-                                match taskResults.TryGetResult TaskArgs.Plan with
-                                | Some planArgs ->
-                                    let portfolioResult =
-                                        Portfolios.Query.load (Some configPath)
-                                        |> Effect.run deps
-                                        |> Result.mapError (fun e -> $"%A{e}")
-                                        |> Result.bind (fun portfolio ->
-                                            Portfolios.Query.resolveActiveProfile portfolio profile
-                                            |> Effect.run deps
-                                            |> Result.mapError (fun e -> $"%A{e}"))
+            | _ -> Error "Specify a product subcommand (e.g. product init <path>, product register <path>, product list, or product info)"
 
-                                    match portfolioResult with
-                                    | Error msg -> Error msg
-                                    | Ok activeProfile ->
-                                        match activeProfile.Products with
-                                        | [] -> Error "No products in active profile"
-                                        | productRef :: _ ->
-                                            let (ProductRoot root) = productRef.Root
-                                            let productConfig = deps :> IProductConfig
+        | _, _, _, Some taskResults, _ ->
+            match taskResults with
+            | TaskList listArgs ->
+                resolvePortfolio deps configPath profile
+                |> Result.bind (resolveProduct deps)
+                |> Result.bind (fun resolved -> handleTaskList deps resolved listArgs)
 
-                                            match productConfig.LoadProductConfig root with
-                                            | Error e -> Error(formatPortfolioError e)
-                                            | Ok definition ->
-                                                 let portfolioProductResult =
-                                                     Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
-                                                     |> Effect.run deps
-                                                     |> Result.mapError (fun e -> $"%A{e}")
+            | TaskInfo infoArgs ->
+                resolvePortfolio deps configPath profile
+                |> Result.bind (resolveProduct deps)
+                |> Result.bind (fun resolved -> handleTaskInfo deps resolved infoArgs)
 
-                                                 match portfolioProductResult with
-                                                 | Error msg -> Error msg
-                                                 | Ok resolved -> handleTaskPlan deps resolved planArgs
+            | TaskPlan planArgs ->
+                resolvePortfolio deps configPath profile
+                |> Result.bind (resolveProduct deps)
+                |> Result.bind (fun resolved -> handleTaskPlan deps resolved planArgs)
 
-                                 | None ->
-                                     match taskResults.TryGetResult TaskArgs.Approve with
-                                     | Some approveArgs ->
-                                         let portfolioResult =
-                                             Portfolios.Query.load (Some configPath)
-                                             |> Effect.run deps
-                                             |> Result.mapError (fun e -> $"%A{e}")
-                                             |> Result.bind (fun portfolio ->
-                                                 Portfolios.Query.resolveActiveProfile portfolio profile
-                                                 |> Effect.run deps
-                                                 |> Result.mapError (fun e -> $"%A{e}"))
+            | TaskApprove approveArgs ->
+                resolvePortfolio deps configPath profile
+                |> Result.bind (resolveProduct deps)
+                |> Result.bind (fun resolved -> handleTaskApprove deps resolved approveArgs)
 
-                                         match portfolioResult with
-                                         | Error msg -> Error msg
-                                         | Ok activeProfile ->
-                                             match activeProfile.Products with
-                                             | [] -> Error "No products in active profile"
-                                             | productRef :: _ ->
-                                                 let (ProductRoot root) = productRef.Root
-                                                 let productConfig = deps :> IProductConfig
+            | _ -> Error "Specify a task subcommand (e.g. task list or task info <id> or task plan <id> or task approve <id>)"
 
-                                                 match productConfig.LoadProductConfig root with
-                                                 | Error e -> Error(formatPortfolioError e)
-                                                 | Ok definition ->
-                                                     let portfolioProductResult =
-                                                         Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
-                                                         |> Effect.run deps
-                                                         |> Result.mapError (fun e -> $"%A{e}")
+        | _, _, _, _, Some viewResults ->
+            match viewResults with
+            | ViewList listArgs ->
+                resolvePortfolio deps configPath profile
+                |> Result.bind (fun activeProfile ->
+                    let productIdOpt = listArgs.TryGetResult ViewListArgs.Product
 
-                                                     match portfolioProductResult with
-                                                     | Error msg -> Error msg
-                                                     | Ok resolved -> handleTaskApprove deps resolved approveArgs
-
-                                     | None -> Error "Specify a task subcommand (e.g. task list or task info <id> or task plan <id> or task approve <id>)"
-
-                    | None ->
-                        match results.TryGetResult View with
-                        | Some viewResults ->
-                            match viewResults.TryGetResult ViewArgs.List with
-                            | Some listArgs ->
-                                let portfolioResult =
-                                    Portfolios.Query.load (Some configPath)
-                                    |> Effect.run deps
-                                    |> Result.mapError (fun e -> $"%A{e}")
-                                    |> Result.bind (fun portfolio ->
-                                        Portfolios.Query.resolveActiveProfile portfolio profile
-                                        |> Effect.run deps
-                                        |> Result.mapError (fun e -> $"%A{e}"))
-
-                                match portfolioResult with
-                                | Error msg -> Error msg
-                                | Ok activeProfile ->
-                                    // Resolve product from --product flag or from first product in profile
-                                    let productIdOpt = listArgs.TryGetResult ViewListArgs.Product
-
-                                    let resolvedResult =
-                                        match productIdOpt with
-                                        | Some rawId ->
-                                            Portfolios.Query.resolveProduct activeProfile rawId
-                                            |> Effect.run deps
-                                            |> Result.mapError (fun e -> $"%A{e}")
-                                        | None ->
-                                            match activeProfile.Products with
-                                            | [] -> Error "No products in active profile"
-                                            | productRef :: _ ->
-                                                let (ProductRoot root) = productRef.Root
-                                                let productConfig = deps :> IProductConfig
-
-                                                match productConfig.LoadProductConfig root with
-                                                | Error e -> Error(formatPortfolioError e)
-                                                | Ok definition ->
-                                                    Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
-                                                    |> Effect.run deps
-                                                    |> Result.mapError (fun e -> $"%A{e}")
-
-                                    match resolvedResult with
-                                    | Error msg -> Error msg
-                                    | Ok resolved -> handleViewList deps resolved listArgs
-
-                            | None -> Error "Specify a view subcommand (e.g. view list)"
-
-                        | None ->
-                        // Legacy behaviour: just load portfolio
-                        let loadResult = Portfolios.Query.load (Some configPath) |> Effect.run deps
-
-                        loadResult
-                        |> Result.bind (fun portfolio -> Portfolios.Query.resolveActiveProfile portfolio profile |> Effect.run deps)
-                        |> Result.map (fun _ -> printfn "itr cli")
+                    match productIdOpt with
+                    | Some rawId ->
+                        Portfolios.Query.resolveProduct activeProfile rawId
+                        |> Effect.run deps
                         |> Result.mapError (fun e -> $"%A{e}")
+                    | None ->
+                        resolveProduct deps activeProfile)
+                |> Result.bind (fun resolved -> handleViewList deps resolved listArgs)
+
+            | _ -> Error "Specify a view subcommand (e.g. view list)"
+
+        | _ ->
+            let loadResult = Portfolios.Query.load (Some configPath) |> Effect.run deps
+
+            loadResult
+            |> Result.bind (fun portfolio -> Portfolios.Query.resolveActiveProfile portfolio profile |> Effect.run deps)
+            |> Result.map (fun _ -> printfn "itr cli")
+            |> Result.mapError (fun e -> $"%A{e}")
 
 [<EntryPoint>]
 let main argv =
