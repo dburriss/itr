@@ -117,6 +117,12 @@ Move all feature usecases from Itr.Features into Itr.Domain using a vertical sli
 - **Input types** are co-located with the usecase module that uses them — not centralised in domain type files
 - **Query modules** use named functions (`list`, `filter`, `getDetail`, etc.) with no `execute` entry point
 - **Itr.Tui and Itr.Mcp** are out of scope — only `Itr.Cli` callers are updated in this item
+- **Input record normalisation**: Usecases with two or more loose data parameters are normalised to a single `Input` record. Usecases with one data parameter are left as-is. Dependency parameters (stores, configs, effect deps) are never folded into `Input`.
+  - `Tasks.Approve.execute` gets `Input = { Task: ItrTask; PlanExists: bool }` (was two loose params)
+  - `Tasks.Query.getDetail` gets `Input = { TaskId: TaskId; AllTasks: ItrTask list; TaskYamlPath: string }` (was three loose params)
+  - `Tasks.Query.filter` gets `Input = { BacklogId: BacklogId option; Repo: RepoId option; State: TaskState option; Exclude: TaskState list }` (was four loose params); the `summaries` list stays as a separate parameter
+  - `Tasks.Take.Input` renamed from `TakeInput` for consistency
+  - `Tasks.Plan.execute (task: ItrTask)` — single param, no record needed
 
 ## Open Questions
 
