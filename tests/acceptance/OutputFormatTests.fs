@@ -5,7 +5,9 @@ open System.IO
 open Xunit
 open Itr.Domain
 open Itr.Adapters.YamlAdapter
-open Itr.Features
+open Itr.Domain.Portfolios
+open Itr.Domain.Tasks
+open Itr.Domain.Backlogs
 
 // ---------------------------------------------------------------------------
 // Helpers (shared with other acceptance tests)
@@ -81,7 +83,7 @@ let ``task list text output contains tab-separated fields`` () =
         match store.ListAllTasks root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
-            let summaries = Task.listTasks allTasks
+            let summaries = Tasks.Query.list allTasks
 
             // Simulate text output: <id>\t<repo>\t<state>\t<planApproved>
             let lines =
@@ -121,10 +123,10 @@ let ``backlog list text output contains tab-separated fields`` () =
         let taskStore = TaskStoreAdapter() :> ITaskStore
         let viewStore = ViewStoreAdapter() :> IViewStore
 
-        match Backlog.loadSnapshot backlogStore taskStore viewStore root with
+        match Backlogs.Query.loadSnapshot backlogStore taskStore viewStore root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok snapshot ->
-            let items = Backlog.listBacklogItems { ViewId = None; Status = None; ItemType = None; ExcludeStatuses = []; OrderBy = None } snapshot
+            let items = Backlogs.Query.list { ViewId = None; Status = None; ItemType = None; ExcludeStatuses = []; OrderBy = None } snapshot
 
             // Simulate text output: <id>\t<type>\t<priority>\t<status>\t<view>\t<tasks>\t<created>\t<title>
             let lines =
@@ -168,7 +170,7 @@ let ``task info text output contains key-value lines`` () =
             let taskId = TaskId.create "feat-a"
             let allTasksList = allTasks |> List.map fst
             let taskYamlPath = allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) |> Option.map snd |> Option.defaultValue ""
-            match Task.getTaskDetail taskId allTasksList taskYamlPath with
+            match Tasks.Query.getDetail { TaskId = taskId; AllTasks = allTasksList; TaskYamlPath = taskYamlPath } with
             | Error e -> failwithf "expected Ok, got Error: %A" e
             | Ok detail ->
                 let task = detail.Task
@@ -224,7 +226,7 @@ let ``backlog info text output contains key-value lines`` () =
         match BacklogId.tryCreate "feat-a" with
         | Error _ -> failwith "bad id"
         | Ok backlogId ->
-            match Backlog.getBacklogItemDetail backlogStore taskStore viewStore root backlogId with
+            match Backlogs.Query.getDetail backlogStore taskStore viewStore root backlogId with
             | Error e -> failwithf "expected Ok, got Error: %A" e
             | Ok detail ->
                 let item = detail.Item
@@ -297,7 +299,7 @@ let ``text output has no ANSI sequences`` () =
         match store.ListAllTasks root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
-            let summaries = Task.listTasks allTasks
+            let summaries = Tasks.Query.list allTasks
 
             // Build text output lines exactly as the CLI does (id, repo, state, planApproved)
             let lines =

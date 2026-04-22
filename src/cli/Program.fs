@@ -6,7 +6,9 @@ open Fue.Data
 open Fue.Compiler
 open Spectre.Console
 open Itr.Domain
-open Itr.Features
+open Itr.Domain.Portfolios
+open Itr.Domain.Tasks
+open Itr.Domain.Backlogs
 open Itr.Adapters
 
 // ---------------------------------------------------------------------------
@@ -586,8 +588,9 @@ let private handleTaskList
         match taskStore.ListAllTasks coordRoot with
         | Error e -> Error(formatTaskError e)
         | Ok allTasks ->
-            let summaries = Task.listTasks allTasks
-            let filtered = Task.filterTasks backlogIdFilter repoId stateFilter excludeList summaries
+            let summaries = Tasks.Query.list allTasks
+            let filterInput: Tasks.Query.FilterInput = { BacklogId = backlogIdFilter; Repo = repoId; State = stateFilter; Exclude = excludeList }
+            let filtered = Tasks.Query.filter filterInput summaries
 
             // Apply ordering: default is created ascending
             let taskStatePriority state =
@@ -684,7 +687,8 @@ let private handleTaskInfo
         | None -> Error(formatTaskError (TaskNotFound taskId))
         | Some (_, taskYamlPath) ->
 
-            match Task.getTaskDetail taskId allTasks taskYamlPath with
+            let detailInput: Tasks.Query.DetailInput = { TaskId = taskId; AllTasks = allTasks; TaskYamlPath = taskYamlPath }
+            match Tasks.Query.getDetail detailInput with
             | Error e -> Error(formatTaskError e)
             | Ok detail ->
                 let task = detail.Task
@@ -799,7 +803,7 @@ let private handleTaskPlan
         | None -> Error(formatTaskError (TaskNotFound taskId))
         | Some task ->
             // Validate state and get updated task
-            match Task.planTask task with
+            match Tasks.Plan.execute task with
             | Error e -> Error(formatTaskError e)
             | Ok (updatedTask, wasAlreadyPlanned) ->
                 if wasAlreadyPlanned then
@@ -930,7 +934,8 @@ let private handleTaskApprove
             let planPath = ItrTask.planFile coordRoot task.SourceBacklog (TaskId.create rawTaskId)
             let planExists = fileSystem.FileExists planPath
 
-            match Task.approveTask task planExists with
+            let approveInput: Tasks.Approve.Input = { Task = task; PlanExists = planExists }
+            match Tasks.Approve.execute approveInput with
             | Error e -> Error(formatTaskError e)
             | Ok (updatedTask, wasAlreadyApproved) ->
                 if wasAlreadyApproved then
@@ -961,17 +966,17 @@ let private handleProductInfo
         | Some rawId ->
             // Lookup by ID in active profile
             let portfolioResult =
-                Portfolio.loadPortfolio (Some configPath)
+                Portfolios.Query.load (Some configPath)
                 |> Effect.run deps
                 |> Result.mapError formatPortfolioError
 
             match portfolioResult with
             | Error msg -> Error msg
             | Ok portfolio ->
-                match Portfolio.resolveActiveProfile portfolio None |> Effect.run deps with
+                match Portfolios.Query.resolveActiveProfile portfolio None |> Effect.run deps with
                 | Error e -> Error(formatPortfolioError e)
                 | Ok activeProfile ->
-                    match Portfolio.loadAllDefinitions activeProfile deps with
+                    match Portfolios.Query.loadAllDefinitions activeProfile deps with
                     | Error e -> Error(formatPortfolioError e)
                     | Ok pairs ->
                         match pairs |> List.tryFind (fun (_, def) -> ProductId.value def.Id = rawId) with
@@ -1091,7 +1096,7 @@ let private handleProductList
     (listArgs: ParseResults<ProductListArgs>)
     : Result<unit, string> =
     let portfolioResult =
-        Portfolio.loadPortfolio (Some configPath)
+        Portfolios.Query.load (Some configPath)
         |> Effect.run deps
         |> Result.mapError formatPortfolioError
 
@@ -1105,10 +1110,10 @@ let private handleProductList
             let flagProfile = listArgs.TryGetResult ProductListArgs.Profile
             let format = listArgs.TryGetResult ProductListArgs.Output |> parseOutputFormat
 
-            match Portfolio.resolveActiveProfile portfolio flagProfile |> Effect.run deps with
+            match Portfolios.Query.resolveActiveProfile portfolio flagProfile |> Effect.run deps with
             | Error e -> Error(formatPortfolioError e)
             | Ok profile ->
-                match Portfolio.loadAllDefinitions profile deps with
+                match Portfolios.Query.loadAllDefinitions profile deps with
                 | Error e -> Error(formatPortfolioError e)
                 | Ok pairs ->
                     let rows =
@@ -1314,17 +1319,17 @@ let private handleBacklogList
 
     let orderBy = listArgs.TryGetResult ListArgs.Order_By
 
-    let filter: Backlog.BacklogListFilter =
+    let filter: Backlogs.Query.BacklogListFilter =
         { ViewId = viewFilter
           Status = statusFilter
           ItemType = typeFilter
           ExcludeStatuses = excludeStatuses
           OrderBy = orderBy }
 
-    match Backlog.loadSnapshot backlogStore taskStore viewStore coordRoot with
+    match Backlogs.Query.loadSnapshot backlogStore taskStore viewStore coordRoot with
     | Error e -> Error(formatBacklogError e)
     | Ok snapshot ->
-        let items = Backlog.listBacklogItems filter snapshot
+        let items = Backlogs.Query.list filter snapshot
 
         match format with
         | JsonOutput ->
@@ -1400,7 +1405,7 @@ let private handleBacklogInfo
         let taskStore = deps :> ITaskStore
         let viewStore = deps :> IViewStore
 
-        match Backlog.getBacklogItemDetail backlogStore taskStore viewStore coordRoot backlogId with
+        match Backlogs.Query.getDetail backlogStore taskStore viewStore coordRoot backlogId with
         | Error e -> Error(formatBacklogError e)
         | Ok detail ->
             let item = detail.Item
@@ -1573,13 +1578,13 @@ let private handleBacklogTake
                 |> Result.mapError formatTaskError
                 |> Result.map (List.map fst)
                 |> Result.bind (fun existingTasks ->
-                    let input =
-                        { Task.TakeInput.BacklogId = backlogId
-                          Task.TakeInput.TaskIdOverride = taskIdOverride }
+                    let input: Tasks.Take.Input =
+                        { Tasks.Take.Input.BacklogId = backlogId
+                          Tasks.Take.Input.TaskIdOverride = taskIdOverride }
 
                     let today = DateOnly.FromDateTime(DateTime.UtcNow)
 
-                    Task.takeBacklogItem productConfig backlogItem existingTasks input today
+                    Tasks.Take.execute productConfig backlogItem existingTasks input today
                     |> Result.mapError formatTaskError
                     |> Result.bind (fun newTasks ->
                         let writeResults =
@@ -1667,7 +1672,7 @@ let private handleBacklogAdd
             if backlogStore.BacklogItemExists coordRoot backlogId then
                 Error(formatBacklogError (DuplicateBacklogId backlogId))
             else
-                let input: Backlog.CreateBacklogItemInput =
+                let input: Backlogs.Create.Input =
                     { BacklogId = rawBacklogId
                       Title = title
                       Repos = repo |> Option.toList
@@ -1679,7 +1684,7 @@ let private handleBacklogAdd
 
                 let today = DateOnly.FromDateTime(DateTime.UtcNow)
 
-                match Backlog.createBacklogItem productConfig input today with
+                match Backlogs.Create.execute productConfig input today with
                 | Error e -> Error(formatBacklogError e)
                 | Ok item ->
                     match backlogStore.WriteBacklogItem coordRoot item with
@@ -1722,7 +1727,7 @@ let private handleBacklogAdd
                 else
                     let today = DateOnly.FromDateTime(DateTime.UtcNow)
 
-                    match Backlog.createBacklogItem productConfig input today with
+                    match Backlogs.Create.execute productConfig input today with
                     | Error e -> Error(formatBacklogError e)
                     | Ok item ->
                         match backlogStore.WriteBacklogItem coordRoot item with
@@ -1751,12 +1756,12 @@ let private handleProductRegister
     : Result<unit, string> =
     let path = registerArgs.GetResult ProductRegisterArgs.Path
 
-    let input: Portfolio.RegisterProductInput =
+    let input: Portfolios.RegisterProduct.Input =
         { Path = path
           Profile = profile }
 
     let result =
-        Portfolio.registerProduct configPath input
+        Portfolios.RegisterProduct.execute configPath input
         |> Effect.run deps
         |> Result.mapError formatPortfolioError
 
@@ -1798,7 +1803,7 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
     let configPath = (deps :> IPortfolioConfig).ConfigPath()
 
     let bootstrapResult =
-        Portfolio.bootstrapIfMissing configPath
+        Portfolios.BootstrapIfMissing.execute configPath
         |> Effect.run deps
         |> Result.mapError formatPortfolioError
 
@@ -1814,11 +1819,11 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
             | Some takeArgs ->
                 // Resolve the product to get the coordination root
                 let portfolioResult =
-                    Portfolio.loadPortfolio (Some configPath)
+                    Portfolios.Query.load (Some configPath)
                     |> Effect.run deps
                     |> Result.mapError (fun e -> $"%A{e}")
                     |> Result.bind (fun portfolio ->
-                        Portfolio.resolveActiveProfile portfolio profile
+                        Portfolios.Query.resolveActiveProfile portfolio profile
                         |> Effect.run deps
                         |> Result.mapError (fun e -> $"%A{e}"))
 
@@ -1838,7 +1843,7 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                         | Error e -> Error(formatPortfolioError e)
                         | Ok definition ->
                             let portfolioProductResult =
-                                Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
                                 |> Effect.run deps
                                 |> Result.mapError (fun e -> $"%A{e}")
 
@@ -1850,11 +1855,11 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                 match backlogResults.TryGetResult BacklogArgs.Add with
                 | Some addArgs ->
                     let portfolioResult =
-                        Portfolio.loadPortfolio (Some configPath)
+                        Portfolios.Query.load (Some configPath)
                         |> Effect.run deps
                         |> Result.mapError (fun e -> $"%A{e}")
                         |> Result.bind (fun portfolio ->
-                            Portfolio.resolveActiveProfile portfolio profile
+                            Portfolios.Query.resolveActiveProfile portfolio profile
                             |> Effect.run deps
                             |> Result.mapError (fun e -> $"%A{e}"))
 
@@ -1871,7 +1876,7 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                             | Error e -> Error(formatPortfolioError e)
                             | Ok definition ->
                                 let portfolioProductResult =
-                                    Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                    Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
                                     |> Effect.run deps
                                     |> Result.mapError (fun e -> $"%A{e}")
 
@@ -1883,11 +1888,11 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                     match backlogResults.TryGetResult BacklogArgs.List with
                     | Some listArgs ->
                         let portfolioResult =
-                            Portfolio.loadPortfolio (Some configPath)
+                            Portfolios.Query.load (Some configPath)
                             |> Effect.run deps
                             |> Result.mapError (fun e -> $"%A{e}")
                             |> Result.bind (fun portfolio ->
-                                Portfolio.resolveActiveProfile portfolio profile
+                                Portfolios.Query.resolveActiveProfile portfolio profile
                                 |> Effect.run deps
                                 |> Result.mapError (fun e -> $"%A{e}"))
 
@@ -1904,7 +1909,7 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                 | Error e -> Error(formatPortfolioError e)
                                 | Ok definition ->
                                     let portfolioProductResult =
-                                        Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                        Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
                                         |> Effect.run deps
                                         |> Result.mapError (fun e -> $"%A{e}")
 
@@ -1916,11 +1921,11 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                         match backlogResults.TryGetResult BacklogArgs.Info with
                         | Some infoArgs ->
                             let portfolioResult =
-                                Portfolio.loadPortfolio (Some configPath)
+                                Portfolios.Query.load (Some configPath)
                                 |> Effect.run deps
                                 |> Result.mapError (fun e -> $"%A{e}")
                                 |> Result.bind (fun portfolio ->
-                                    Portfolio.resolveActiveProfile portfolio profile
+                                    Portfolios.Query.resolveActiveProfile portfolio profile
                                     |> Effect.run deps
                                     |> Result.mapError (fun e -> $"%A{e}"))
 
@@ -1937,7 +1942,7 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                     | Error e -> Error(formatPortfolioError e)
                                     | Ok definition ->
                                         let portfolioProductResult =
-                                            Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                            Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
                                             |> Effect.run deps
                                             |> Result.mapError (fun e -> $"%A{e}")
 
@@ -1966,13 +1971,13 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                             gitName
                             |> Option.map (fun gn -> { Name = gn; Email = gitEmail })
 
-                        let input: Portfolio.AddProfileInput =
+                        let input: Portfolios.AddProfile.Input =
                             { Name = name
                               GitIdentity = gitIdentity
                               SetAsDefault = setDefault }
 
                         let result =
-                            Portfolio.addProfile configPath input
+                            Portfolios.AddProfile.execute configPath input
                             |> Effect.run deps
                             |> Result.mapError formatPortfolioError
 
@@ -1989,7 +1994,7 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                     match profilesResults.TryGetResult ProfileArgs.List with
                     | Some listArgs ->
                         let portfolioResult =
-                            Portfolio.loadPortfolio (Some configPath)
+                            Portfolios.Query.load (Some configPath)
                             |> Effect.run deps
                             |> Result.mapError formatPortfolioError
 
@@ -2037,7 +2042,7 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                 // Bootstrap local config if it doesn't exist (only for --local or auto-local)
                                 let bootstrapResult =
                                     if not (fs.FileExists targetPath) then
-                                        Portfolio.bootstrapIfMissing targetPath
+                                        Portfolios.BootstrapIfMissing.execute targetPath
                                         |> Effect.run deps
                                         |> Result.mapError formatPortfolioError
                                         |> Result.map (fun _ -> ())
@@ -2047,10 +2052,10 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                 match bootstrapResult with
                                 | Error msg -> Error msg
                                 | Ok() ->
-                                    let input: Portfolio.SetDefaultProfileInput = { Name = name }
+                                    let input: Portfolios.SetDefaultProfile.Input = { Name = name }
 
                                     let result =
-                                        Portfolio.setDefaultProfile targetPath input
+                                        Portfolios.SetDefaultProfile.execute targetPath input
                                         |> Effect.run deps
                                         |> Result.mapError formatPortfolioError
 
@@ -2099,7 +2104,7 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                     let answer = AnsiConsole.Ask<string>("Register in profile (leave blank to skip):")
                                     if String.IsNullOrWhiteSpace(answer) then None else Some answer
 
-                        let input: Portfolio.InitProductInput =
+                        let input: Portfolios.InitProduct.Input =
                             { Id = rawId
                               Path = rawPath
                               RepoId = rawRepoId
@@ -2108,7 +2113,7 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                               RegisterProfile = registerProfile }
 
                         let result =
-                            Portfolio.initProduct configPath input
+                            Portfolios.InitProduct.execute configPath input
                             |> Effect.run deps
                             |> Result.mapError formatPortfolioError
 
@@ -2145,11 +2150,11 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                         match taskResults.TryGetResult TaskArgs.List with
                         | Some listArgs ->
                             let portfolioResult =
-                                Portfolio.loadPortfolio (Some configPath)
+                                Portfolios.Query.load (Some configPath)
                                 |> Effect.run deps
                                 |> Result.mapError (fun e -> $"%A{e}")
                                 |> Result.bind (fun portfolio ->
-                                    Portfolio.resolveActiveProfile portfolio profile
+                                    Portfolios.Query.resolveActiveProfile portfolio profile
                                     |> Effect.run deps
                                     |> Result.mapError (fun e -> $"%A{e}"))
 
@@ -2166,7 +2171,7 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                     | Error e -> Error(formatPortfolioError e)
                                     | Ok definition ->
                                         let portfolioProductResult =
-                                            Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                            Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
                                             |> Effect.run deps
                                             |> Result.mapError (fun e -> $"%A{e}")
 
@@ -2178,11 +2183,11 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                             match taskResults.TryGetResult TaskArgs.Info with
                             | Some infoArgs ->
                                 let portfolioResult =
-                                    Portfolio.loadPortfolio (Some configPath)
+                                    Portfolios.Query.load (Some configPath)
                                     |> Effect.run deps
                                     |> Result.mapError (fun e -> $"%A{e}")
                                     |> Result.bind (fun portfolio ->
-                                        Portfolio.resolveActiveProfile portfolio profile
+                                        Portfolios.Query.resolveActiveProfile portfolio profile
                                         |> Effect.run deps
                                         |> Result.mapError (fun e -> $"%A{e}"))
 
@@ -2199,7 +2204,7 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                         | Error e -> Error(formatPortfolioError e)
                                         | Ok definition ->
                                             let portfolioProductResult =
-                                                Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                                Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
                                                 |> Effect.run deps
                                                 |> Result.mapError (fun e -> $"%A{e}")
 
@@ -2211,11 +2216,11 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                 match taskResults.TryGetResult TaskArgs.Plan with
                                 | Some planArgs ->
                                     let portfolioResult =
-                                        Portfolio.loadPortfolio (Some configPath)
+                                        Portfolios.Query.load (Some configPath)
                                         |> Effect.run deps
                                         |> Result.mapError (fun e -> $"%A{e}")
                                         |> Result.bind (fun portfolio ->
-                                            Portfolio.resolveActiveProfile portfolio profile
+                                            Portfolios.Query.resolveActiveProfile portfolio profile
                                             |> Effect.run deps
                                             |> Result.mapError (fun e -> $"%A{e}"))
 
@@ -2232,7 +2237,7 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                             | Error e -> Error(formatPortfolioError e)
                                             | Ok definition ->
                                                  let portfolioProductResult =
-                                                     Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                                     Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
                                                      |> Effect.run deps
                                                      |> Result.mapError (fun e -> $"%A{e}")
 
@@ -2244,11 +2249,11 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                      match taskResults.TryGetResult TaskArgs.Approve with
                                      | Some approveArgs ->
                                          let portfolioResult =
-                                             Portfolio.loadPortfolio (Some configPath)
+                                             Portfolios.Query.load (Some configPath)
                                              |> Effect.run deps
                                              |> Result.mapError (fun e -> $"%A{e}")
                                              |> Result.bind (fun portfolio ->
-                                                 Portfolio.resolveActiveProfile portfolio profile
+                                                 Portfolios.Query.resolveActiveProfile portfolio profile
                                                  |> Effect.run deps
                                                  |> Result.mapError (fun e -> $"%A{e}"))
 
@@ -2265,7 +2270,7 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                                  | Error e -> Error(formatPortfolioError e)
                                                  | Ok definition ->
                                                      let portfolioProductResult =
-                                                         Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                                         Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
                                                          |> Effect.run deps
                                                          |> Result.mapError (fun e -> $"%A{e}")
 
@@ -2281,11 +2286,11 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                             match viewResults.TryGetResult ViewArgs.List with
                             | Some listArgs ->
                                 let portfolioResult =
-                                    Portfolio.loadPortfolio (Some configPath)
+                                    Portfolios.Query.load (Some configPath)
                                     |> Effect.run deps
                                     |> Result.mapError (fun e -> $"%A{e}")
                                     |> Result.bind (fun portfolio ->
-                                        Portfolio.resolveActiveProfile portfolio profile
+                                        Portfolios.Query.resolveActiveProfile portfolio profile
                                         |> Effect.run deps
                                         |> Result.mapError (fun e -> $"%A{e}"))
 
@@ -2298,7 +2303,7 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                     let resolvedResult =
                                         match productIdOpt with
                                         | Some rawId ->
-                                            Portfolio.resolveProduct activeProfile rawId
+                                            Portfolios.Query.resolveProduct activeProfile rawId
                                             |> Effect.run deps
                                             |> Result.mapError (fun e -> $"%A{e}")
                                         | None ->
@@ -2311,7 +2316,7 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
                                                 match productConfig.LoadProductConfig root with
                                                 | Error e -> Error(formatPortfolioError e)
                                                 | Ok definition ->
-                                                    Portfolio.resolveProduct activeProfile (ProductId.value definition.Id)
+                                                    Portfolios.Query.resolveProduct activeProfile (ProductId.value definition.Id)
                                                     |> Effect.run deps
                                                     |> Result.mapError (fun e -> $"%A{e}")
 
@@ -2323,10 +2328,10 @@ let private dispatch (deps: AppDeps) (results: ParseResults<CliArgs>) : Result<u
 
                         | None ->
                         // Legacy behaviour: just load portfolio
-                        let loadResult = Portfolio.loadPortfolio (Some configPath) |> Effect.run deps
+                        let loadResult = Portfolios.Query.load (Some configPath) |> Effect.run deps
 
                         loadResult
-                        |> Result.bind (fun portfolio -> Portfolio.resolveActiveProfile portfolio profile |> Effect.run deps)
+                        |> Result.bind (fun portfolio -> Portfolios.Query.resolveActiveProfile portfolio profile |> Effect.run deps)
                         |> Result.map (fun _ -> printfn "itr cli")
                         |> Result.mapError (fun e -> $"%A{e}")
 

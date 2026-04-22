@@ -6,7 +6,9 @@ open System.Text.Json
 open Xunit
 open Itr.Domain
 open Itr.Adapters.YamlAdapter
-open Itr.Features
+open Itr.Domain.Portfolios
+open Itr.Domain.Tasks
+open Itr.Domain.Backlogs
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -112,8 +114,8 @@ let ``filterTasks by backlog id returns only matching tasks`` () =
         match store.ListAllTasks root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
-            let summaries = Task.listTasks allTasks
-            let filtered = Task.filterTasks (Some(mkBacklogId "feat-a")) None None [] summaries
+            let summaries = Tasks.Query.list allTasks
+            let filtered = Tasks.Query.filter { BacklogId = Some(mkBacklogId "feat-a"); Repo = None; State = None; Exclude = [] } summaries
             Assert.Equal(1, filtered.Length)
             Assert.Equal("feat-a", BacklogId.value filtered.[0].Task.SourceBacklog)
     finally
@@ -135,8 +137,8 @@ let ``filterTasks by repo returns only matching tasks`` () =
         match store.ListAllTasks root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
-            let summaries = Task.listTasks allTasks
-            let filtered = Task.filterTasks None (Some(RepoId "repo-1")) None [] summaries
+            let summaries = Tasks.Query.list allTasks
+            let filtered = Tasks.Query.filter { BacklogId = None; Repo = Some(RepoId "repo-1"); State = None; Exclude = [] } summaries
             Assert.Equal(1, filtered.Length)
             Assert.Equal(RepoId "repo-1", filtered.[0].Task.Repo)
     finally
@@ -159,8 +161,8 @@ let ``filterTasks by state returns only tasks in that state`` () =
         match store.ListAllTasks root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
-            let summaries = Task.listTasks allTasks
-            let filtered = Task.filterTasks None None (Some TaskState.Planning) [] summaries
+            let summaries = Tasks.Query.list allTasks
+            let filtered = Tasks.Query.filter { BacklogId = None; Repo = None; State = Some TaskState.Planning; Exclude = [] } summaries
             Assert.Equal(1, filtered.Length)
             Assert.Equal(TaskState.Planning, filtered.[0].Task.State)
     finally
@@ -199,10 +201,10 @@ created_at: 2026-01-01
         match store.ListAllTasks root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
-            let summaries = Task.listTasks allTasks
+            let summaries = Tasks.Query.list allTasks
 
             // Archived tasks appear when filtered by archived state
-            let archivedFiltered = Task.filterTasks None None (Some TaskState.Archived) [] summaries
+            let archivedFiltered = Tasks.Query.filter { BacklogId = None; Repo = None; State = Some TaskState.Archived; Exclude = [] } summaries
             Assert.Equal(1, archivedFiltered.Length)
             Assert.Equal("archived-task", TaskId.value archivedFiltered.[0].Task.Id)
 
@@ -229,7 +231,7 @@ let ``listTasks and filterTasks produce data suitable for JSON output`` () =
         match store.ListAllTasks root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
-            let summaries = Task.listTasks allTasks
+            let summaries = Tasks.Query.list allTasks
             Assert.Equal(1, summaries.Length)
             let s = summaries.[0]
             Assert.Equal("feat-a", TaskId.value s.Task.Id)

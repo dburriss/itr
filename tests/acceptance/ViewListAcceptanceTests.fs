@@ -5,7 +5,9 @@ open System.IO
 open Xunit
 open Itr.Domain
 open Itr.Adapters.YamlAdapter
-open Itr.Features
+open Itr.Domain.Portfolios
+open Itr.Domain.Tasks
+open Itr.Domain.Backlogs
 
 // ---------------------------------------------------------------------------
 // Helpers

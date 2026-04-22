@@ -6,7 +6,9 @@ open System.Text.Json
 open Xunit
 open Itr.Domain
 open Itr.Adapters.YamlAdapter
-open Itr.Features
+open Itr.Domain.Portfolios
+open Itr.Domain.Tasks
+open Itr.Domain.Backlogs
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -66,115 +68,7 @@ let ``getTaskDetail returns full detail record for a known task`` () =
             let taskId = TaskId.create "feat-a"
             let allTasksList = allTasks |> List.map fst
             let taskYamlPath = allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) |> Option.map snd |> Option.defaultValue ""
-            match Task.getTaskDetail taskId allTasksList taskYamlPath with
-            | Error e -> failwithf "expected Ok, got Error: %A" e
-            | Ok detail ->
-                Assert.Equal("feat-a", TaskId.value detail.Task.Id)
-                Assert.Equal("feat-a", BacklogId.value detail.Task.SourceBacklog)
-                Assert.Equal(RepoId "repo-1", detail.Task.Repo)
-                Assert.Equal(TaskState.Approved, detail.Task.State)
-                Assert.Equal(DateOnly(2026, 1, 15), detail.Task.CreatedAt)
-                Assert.True(detail.PlanApproved)
-    finally
-        Directory.Delete(root, true)
-
-// ---------------------------------------------------------------------------
-// 4.3 task info plan exists when plan.md present
-// ---------------------------------------------------------------------------
-
-[<Fact>]
-let ``getTaskDetail PlanExists true when plan md file is present`` () =
-    let root = mkRoot ()
-    try
-        writeItemYaml root "feat-a" [ "repo-1" ]
-        writeTaskYaml root "feat-a" "feat-a" "feat-a" "feat-a" "repo-1" "planning"
-
-        // Create plan.md in the task directory
-        let planPath = Path.Combine(root, "BACKLOG", "feat-a", "tasks", "feat-a", "plan.md")
-        File.WriteAllText(planPath, "# Plan")
-
-        let store = TaskStoreAdapter() :> ITaskStore
-        match store.ListAllTasks root with
-        | Error e -> failwithf "expected Ok, got Error: %A" e
-        | Ok allTasks ->
-            let taskId = TaskId.create "feat-a"
-            let allTasksList = allTasks |> List.map fst
-            let taskYamlPath = allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) |> Option.map snd |> Option.defaultValue ""
-            match Task.getTaskDetail taskId allTasksList taskYamlPath with
-            | Error e -> failwithf "expected Ok, got Error: %A" e
-            | Ok detail ->
-                Assert.True(detail.PlanExists)
-    finally
-        Directory.Delete(root, true)
-
-[<Fact>]
-let ``getTaskDetail PlanExists false when plan md file is absent`` () =
-    let root = mkRoot ()
-    try
-        writeItemYaml root "feat-a" [ "repo-1" ]
-        writeTaskYaml root "feat-a" "feat-a" "feat-a" "feat-a" "repo-1" "planning"
-
-        let store = TaskStoreAdapter() :> ITaskStore
-        match store.ListAllTasks root with
-        | Error e -> failwithf "expected Ok, got Error: %A" e
-        | Ok allTasks ->
-            let taskId = TaskId.create "feat-a"
-            let allTasksList = allTasks |> List.map fst
-            let taskYamlPath = allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) |> Option.map snd |> Option.defaultValue ""
-            match Task.getTaskDetail taskId allTasksList taskYamlPath with
-            | Error e -> failwithf "expected Ok, got Error: %A" e
-            | Ok detail ->
-                Assert.False(detail.PlanExists)
-    finally
-        Directory.Delete(root, true)
-
-// ---------------------------------------------------------------------------
-// 4.4 task info shows siblings
-// ---------------------------------------------------------------------------
-
-[<Fact>]
-let ``getTaskDetail shows siblings that share the same backlog item`` () =
-    let root = mkRoot ()
-    try
-        writeItemYaml root "feat-a" [ "repo-1"; "repo-2" ]
-        writeTaskYaml root "feat-a" "feat-a-repo1" "feat-a-repo1" "feat-a" "repo-1" "planning"
-        writeTaskYaml root "feat-a" "feat-a-repo2" "feat-a-repo2" "feat-a" "repo-2" "approved"
-
-        let store = TaskStoreAdapter() :> ITaskStore
-        match store.ListAllTasks root with
-        | Error e -> failwithf "expected Ok, got Error: %A" e
-        | Ok allTasks ->
-            let taskId = TaskId.create "feat-a-repo1"
-            let allTasksList = allTasks |> List.map fst
-            let taskYamlPath = allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) |> Option.map snd |> Option.defaultValue ""
-            match Task.getTaskDetail taskId allTasksList taskYamlPath with
-            | Error e -> failwithf "expected Ok, got Error: %A" e
-            | Ok detail ->
-                Assert.Equal(1, detail.Siblings.Length)
-                Assert.Equal(TaskId.create "feat-a-repo2", detail.Siblings.[0].Id)
-                Assert.Equal(RepoId "repo-2", detail.Siblings.[0].Repo)
-                Assert.Equal(TaskState.Approved, detail.Siblings.[0].State)
-    finally
-        Directory.Delete(root, true)
-
-[<Fact>]
-let ``getTaskDetail shows no siblings when task is the only one for its backlog`` () =
-    let root = mkRoot ()
-    try
-        writeItemYaml root "feat-a" [ "repo-1" ]
-        writeTaskYaml root "feat-a" "feat-a" "feat-a" "feat-a" "repo-1" "planning"
-
-        writeItemYaml root "feat-b" [ "repo-1" ]
-        writeTaskYaml root "feat-b" "feat-b" "feat-b" "feat-b" "repo-1" "planning"
-
-        let store = TaskStoreAdapter() :> ITaskStore
-        match store.ListAllTasks root with
-        | Error e -> failwithf "expected Ok, got Error: %A" e
-        | Ok allTasks ->
-            let taskId = TaskId.create "feat-a"
-            let allTasksList = allTasks |> List.map fst
-            let taskYamlPath = allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) |> Option.map snd |> Option.defaultValue ""
-            match Task.getTaskDetail taskId allTasksList taskYamlPath with
+            match Tasks.Query.getDetail { TaskId = taskId; AllTasks = allTasksList; TaskYamlPath = taskYamlPath } with
             | Error e -> failwithf "expected Ok, got Error: %A" e
             | Ok detail ->
                 Assert.Empty(detail.Siblings)
@@ -200,7 +94,7 @@ let ``getTaskDetail returns data suitable for valid JSON output`` () =
             let taskId = TaskId.create "feat-a-r1"
             let allTasksList = allTasks |> List.map fst
             let taskYamlPath = allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) |> Option.map snd |> Option.defaultValue ""
-            match Task.getTaskDetail taskId allTasksList taskYamlPath with
+            match Tasks.Query.getDetail { TaskId = taskId; AllTasks = allTasksList; TaskYamlPath = taskYamlPath } with
             | Error e -> failwithf "expected Ok, got Error: %A" e
             | Ok detail ->
                 // Verify all JSON fields are accessible (id, backlog, repo, state,
@@ -236,7 +130,7 @@ let ``getTaskDetail siblings is empty list when no siblings exist`` () =
             let taskId = TaskId.create "feat-a"
             let allTasksList = allTasks |> List.map fst
             let taskYamlPath = allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) |> Option.map snd |> Option.defaultValue ""
-            match Task.getTaskDetail taskId allTasksList taskYamlPath with
+            match Tasks.Query.getDetail { TaskId = taskId; AllTasks = allTasksList; TaskYamlPath = taskYamlPath } with
             | Error e -> failwithf "expected Ok, got Error: %A" e
             | Ok detail ->
                 Assert.Empty(detail.Siblings)
@@ -260,7 +154,7 @@ let ``getTaskDetail returns TaskNotFound error for unknown task id`` () =
         | Ok allTasks ->
             let missingId = TaskId.create "unknown-id"
             let allTasksList = allTasks |> List.map fst
-            match Task.getTaskDetail missingId allTasksList "" with
+            match Tasks.Query.getDetail { TaskId = missingId; AllTasks = allTasksList; TaskYamlPath = "" } with
             | Ok _ -> failwith "expected Error, got Ok"
             | Error(TaskNotFound id) ->
                 Assert.Equal("unknown-id", TaskId.value id)

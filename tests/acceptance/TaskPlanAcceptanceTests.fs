@@ -5,7 +5,9 @@ open System.IO
 open Xunit
 open Itr.Domain
 open Itr.Adapters.YamlAdapter
-open Itr.Features
+open Itr.Domain.Portfolios
+open Itr.Domain.Tasks
+open Itr.Domain.Backlogs
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -71,7 +73,7 @@ let ``planTask transitions planning task to planned`` () =
           State = TaskState.Planning
           CreatedAt = DateOnly(2026, 1, 15) }
 
-    match Task.planTask task with
+    match Tasks.Plan.execute task with
     | Error e -> failwithf "expected Ok, got Error: %A" e
     | Ok (updatedTask, wasAlreadyPlanned) ->
         Assert.Equal(TaskState.Planned, updatedTask.State)
@@ -90,7 +92,7 @@ let ``planTask allows re-planning from planned state`` () =
           State = TaskState.Planned
           CreatedAt = DateOnly(2026, 1, 15) }
 
-    match Task.planTask task with
+    match Tasks.Plan.execute task with
     | Error e -> failwithf "expected Ok, got Error: %A" e
     | Ok (updatedTask, wasAlreadyPlanned) ->
         Assert.Equal(TaskState.Planned, updatedTask.State)
@@ -110,7 +112,7 @@ let ``planTask returns InvalidTaskState for approved task`` () =
           State = TaskState.Approved
           CreatedAt = DateOnly(2026, 1, 15) }
 
-    match Task.planTask task with
+    match Tasks.Plan.execute task with
     | Ok _ -> failwith "expected Error, got Ok"
     | Error (InvalidTaskState (id, current)) ->
         Assert.Equal(taskId, id)
@@ -127,7 +129,7 @@ let ``planTask returns InvalidTaskState for in-progress task`` () =
           State = TaskState.InProgress
           CreatedAt = DateOnly(2026, 1, 15) }
 
-    match Task.planTask task with
+    match Tasks.Plan.execute task with
     | Ok _ -> failwith "expected Error, got Ok"
     | Error (InvalidTaskState (id, current)) ->
         Assert.Equal(taskId, id)
@@ -154,7 +156,7 @@ let ``planTask integration writes task state to planned`` () =
             match allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) with
             | None -> failwith "task not found"
             | Some (task, _) ->
-                match Task.planTask task with
+                match Tasks.Plan.execute task with
                 | Error e -> failwithf "planTask failed: %A" e
                 | Ok (updatedTask, _) ->
                     // Write the updated task back
@@ -205,7 +207,7 @@ let ``stub harness error prevents plan from being written`` () =
             match allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) with
             | None -> failwith "task not found"
             | Some (task, _) ->
-                match Task.planTask task with
+                match Tasks.Plan.execute task with
                 | Error e -> failwithf "planTask failed: %A" e
                 | Ok (_, _) ->
                     // Simulate harness call failing

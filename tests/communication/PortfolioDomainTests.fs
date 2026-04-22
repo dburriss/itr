@@ -4,10 +4,12 @@ open System
 open System.IO
 open Xunit
 open Itr.Domain
-open Itr.Features
+open Itr.Domain.Portfolios
+open Itr.Domain.Tasks
+open Itr.Domain.Backlogs
 
 module DomainPortfolio = Itr.Domain.Portfolio
-module FeaturePortfolio = Itr.Features.Portfolio
+module FeaturePortfolio = Itr.Domain.Portfolios.Query
 
 let private getResult =
     function
@@ -398,10 +400,10 @@ let ``addProfile returns updated portfolio with new profile`` () =
     let portfolio = mkPortfolio (Some "work") [ existing ]
     let deps = StubPortfolioConfig(portfolio)
 
-    let input: FeaturePortfolio.AddProfileInput =
+    let input: Portfolios.AddProfile.Input =
         { Name = "personal"; GitIdentity = None; SetAsDefault = false }
 
-    match FeaturePortfolio.addProfile "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.AddProfile.execute "/stub/itr.json" input |> Effect.run deps with
     | Ok updated ->
         Assert.True(updated.Profiles |> Map.containsKey (ProfileName.create "personal"))
         Assert.True(updated.Profiles |> Map.containsKey (ProfileName.create "work"))
@@ -413,10 +415,10 @@ let ``addProfile returns DuplicateProfileName for existing name`` () =
     let portfolio = mkPortfolio (Some "work") [ existing ]
     let deps = StubPortfolioConfig(portfolio)
 
-    let input: FeaturePortfolio.AddProfileInput =
+    let input: Portfolios.AddProfile.Input =
         { Name = "work"; GitIdentity = None; SetAsDefault = false }
 
-    match FeaturePortfolio.addProfile "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.AddProfile.execute "/stub/itr.json" input |> Effect.run deps with
     | Error(DuplicateProfileName name) -> Assert.Equal("work", name)
     | other -> failwithf "expected DuplicateProfileName, got %A" other
 
@@ -426,10 +428,10 @@ let ``addProfile with setAsDefault updates DefaultProfile`` () =
     let portfolio = mkPortfolio (Some "work") [ existing ]
     let deps = StubPortfolioConfig(portfolio)
 
-    let input: FeaturePortfolio.AddProfileInput =
+    let input: Portfolios.AddProfile.Input =
         { Name = "personal"; GitIdentity = None; SetAsDefault = true }
 
-    match FeaturePortfolio.addProfile "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.AddProfile.execute "/stub/itr.json" input |> Effect.run deps with
     | Ok updated ->
         Assert.Equal(Some "personal", updated.DefaultProfile |> Option.map ProfileName.value)
     | Error e -> failwithf "expected Ok, got %A" e
@@ -439,10 +441,10 @@ let ``addProfile returns InvalidProfileName for invalid name`` () =
     let portfolio = mkPortfolio None []
     let deps = StubPortfolioConfig(portfolio)
 
-    let input: FeaturePortfolio.AddProfileInput =
+    let input: Portfolios.AddProfile.Input =
         { Name = "My Work"; GitIdentity = None; SetAsDefault = false }
 
-    match FeaturePortfolio.addProfile "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.AddProfile.execute "/stub/itr.json" input |> Effect.run deps with
     | Error(InvalidProfileName(value, _)) -> Assert.Equal("My Work", value)
     | other -> failwithf "expected InvalidProfileName, got %A" other
 
@@ -457,9 +459,9 @@ let ``setDefaultProfile sets DefaultProfile to matched profile name`` () =
     let portfolio = mkPortfolio (Some "work") [ work; personal ]
     let deps = StubPortfolioConfig(portfolio)
 
-    let input: FeaturePortfolio.SetDefaultProfileInput = { Name = "personal" }
+    let input: Portfolios.SetDefaultProfile.Input = { Name = "personal" }
 
-    match FeaturePortfolio.setDefaultProfile "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.SetDefaultProfile.execute "/stub/itr.json" input |> Effect.run deps with
     | Ok updated ->
         Assert.Equal(Some "personal", updated.DefaultProfile |> Option.map ProfileName.value)
     | Error e -> failwithf "expected Ok, got %A" e
@@ -470,9 +472,9 @@ let ``setDefaultProfile returns ProfileNotFound for non-existent profile`` () =
     let portfolio = mkPortfolio (Some "work") [ work ]
     let deps = StubPortfolioConfig(portfolio)
 
-    let input: FeaturePortfolio.SetDefaultProfileInput = { Name = "staging" }
+    let input: Portfolios.SetDefaultProfile.Input = { Name = "staging" }
 
-    match FeaturePortfolio.setDefaultProfile "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.SetDefaultProfile.execute "/stub/itr.json" input |> Effect.run deps with
     | Error(ProfileNotFound name) -> Assert.Equal("staging", name)
     | other -> failwithf "expected ProfileNotFound, got %A" other
 
@@ -482,9 +484,9 @@ let ``setDefaultProfile lookup is case-insensitive`` () =
     let portfolio = mkPortfolio None [ work ]
     let deps = StubPortfolioConfig(portfolio)
 
-    let input: FeaturePortfolio.SetDefaultProfileInput = { Name = "WORK" }
+    let input: Portfolios.SetDefaultProfile.Input = { Name = "WORK" }
 
-    match FeaturePortfolio.setDefaultProfile "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.SetDefaultProfile.execute "/stub/itr.json" input |> Effect.run deps with
     | Ok updated ->
         Assert.Equal(Some "work", updated.DefaultProfile |> Option.map ProfileName.value)
     | Error e -> failwithf "expected Ok, got %A" e
@@ -536,10 +538,10 @@ let ``registerProduct valid path adds ProductRef to active profile and returns u
     let deps =
         TestRegisterDeps(portfolio, (fun _ -> true), Map.ofList [ root, definition ])
 
-    let input: FeaturePortfolio.RegisterProductInput =
+    let input: Portfolios.RegisterProduct.Input =
         { Path = root; Profile = None }
 
-    match FeaturePortfolio.registerProduct "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.RegisterProduct.execute "/stub/itr.json" input |> Effect.run deps with
     | Ok updated ->
         let profile = updated.Profiles |> Map.find (ProfileName.create "work")
         Assert.Equal(1, profile.Products.Length)
@@ -562,10 +564,10 @@ let ``registerProduct duplicate canonical id returns DuplicateProductId portfoli
             Map.ofList [ root, definition; root2, definition2 ]
         )
 
-    let input: FeaturePortfolio.RegisterProductInput =
+    let input: Portfolios.RegisterProduct.Input =
         { Path = root2; Profile = None }
 
-    match FeaturePortfolio.registerProduct "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.RegisterProduct.execute "/stub/itr.json" input |> Effect.run deps with
     | Error(DuplicateProductId(profileName, productId)) ->
         Assert.Equal("work", profileName)
         Assert.Equal("my-product", productId)
@@ -580,10 +582,10 @@ let ``registerProduct non-existent directory returns ProductConfigError portfoli
     let deps =
         TestRegisterDeps(portfolio, (fun _ -> false), Map.empty)
 
-    let input: FeaturePortfolio.RegisterProductInput =
+    let input: Portfolios.RegisterProduct.Input =
         { Path = root; Profile = None }
 
-    match FeaturePortfolio.registerProduct "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.RegisterProduct.execute "/stub/itr.json" input |> Effect.run deps with
     | Error(ProductConfigError _) -> Assert.True(true)
     | other -> failwithf "expected ProductConfigError, got %A" other
 
@@ -597,10 +599,10 @@ let ``registerProduct missing product yaml propagates ProductConfigError`` () =
     let deps =
         TestRegisterDeps(portfolio, (fun _ -> true), Map.empty)
 
-    let input: FeaturePortfolio.RegisterProductInput =
+    let input: Portfolios.RegisterProduct.Input =
         { Path = root; Profile = None }
 
-    match FeaturePortfolio.registerProduct "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.RegisterProduct.execute "/stub/itr.json" input |> Effect.run deps with
     | Error(ProductConfigError _) -> Assert.True(true)
     | other -> failwithf "expected ProductConfigError, got %A" other
 
@@ -614,10 +616,10 @@ let ``registerProduct named profile not found returns ProfileNotFound`` () =
     let deps =
         TestRegisterDeps(portfolio, (fun _ -> true), Map.ofList [ root, definition ])
 
-    let input: FeaturePortfolio.RegisterProductInput =
+    let input: Portfolios.RegisterProduct.Input =
         { Path = root; Profile = Some "nonexistent" }
 
-    match FeaturePortfolio.registerProduct "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.RegisterProduct.execute "/stub/itr.json" input |> Effect.run deps with
     | Error(ProfileNotFound name) -> Assert.Equal("nonexistent", name)
     | other -> failwithf "expected ProfileNotFound, got %A" other
 
@@ -685,12 +687,12 @@ let private mkInitPortfolio () =
     |> Result.defaultWith (fun e -> failwithf "failed to build test portfolio: %A" e)
 
 let private defaultInitInput idStr path =
-    { Portfolio.InitProductInput.Id = idStr
-      Portfolio.InitProductInput.Path = path
-      Portfolio.InitProductInput.RepoId = "my-repo"
-      Portfolio.InitProductInput.CoordPath = ".itr"
-      Portfolio.InitProductInput.CoordinationMode = "primary-repo"
-      Portfolio.InitProductInput.RegisterProfile = None }
+    { Portfolios.InitProduct.Input.Id = idStr
+      Portfolios.InitProduct.Input.Path = path
+      Portfolios.InitProduct.Input.RepoId = "my-repo"
+      Portfolios.InitProduct.Input.CoordPath = ".itr"
+      Portfolios.InitProduct.Input.CoordinationMode = "primary-repo"
+      Portfolios.InitProduct.Input.RegisterProfile = None }
 
 [<Fact>]
 let ``initProduct with valid inputs and RegisterProfile=None writes all files and returns None`` () =
@@ -703,7 +705,7 @@ let ``initProduct with valid inputs and RegisterProfile=None writes all files an
 
     let input = defaultInitInput "my-product" path
 
-    match FeaturePortfolio.initProduct "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.InitProduct.execute "/stub/itr.json" input |> Effect.run deps with
     | Ok None ->
         let paths = written |> Seq.map fst |> Seq.toList
         Assert.Contains(IO.Path.Combine(path, "product.yaml"), paths)
@@ -725,7 +727,7 @@ let ``initProduct with RegisterProfile=Some writes files and returns Some update
         { defaultInitInput "my-product" path with
             RegisterProfile = Some "default" }
 
-    match FeaturePortfolio.initProduct "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.InitProduct.execute "/stub/itr.json" input |> Effect.run deps with
     | Ok(Some updatedPortfolio) ->
         let paths = written |> Seq.map fst |> Seq.toList
         Assert.Contains(IO.Path.Combine(path, "product.yaml"), paths)
@@ -750,7 +752,7 @@ let ``initProduct when product.yaml already exists returns ProductConfigError an
 
     let input = defaultInitInput "my-product" path
 
-    match FeaturePortfolio.initProduct "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.InitProduct.execute "/stub/itr.json" input |> Effect.run deps with
     | Error(ProductConfigError _) -> Assert.Empty(written)
     | other -> failwithf "expected ProductConfigError, got %A" other
 
@@ -765,7 +767,7 @@ let ``initProduct when path directory does not exist returns ProductConfigError`
 
     let input = defaultInitInput "my-product" path
 
-    match FeaturePortfolio.initProduct "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.InitProduct.execute "/stub/itr.json" input |> Effect.run deps with
     | Error(ProductConfigError _) -> Assert.Empty(written)
     | other -> failwithf "expected ProductConfigError, got %A" other
 
@@ -780,7 +782,7 @@ let ``initProduct with invalid id returns InvalidProductId`` () =
 
     let input = defaultInitInput "INVALID_ID" path
 
-    match FeaturePortfolio.initProduct "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.InitProduct.execute "/stub/itr.json" input |> Effect.run deps with
     | Error(InvalidProductId(value, _)) ->
         Assert.Equal("INVALID_ID", value)
         Assert.Empty(written)
@@ -799,7 +801,7 @@ let ``initProduct with CoordinationMode=standalone writes yaml without coordinat
         { defaultInitInput "my-product" path with
             CoordinationMode = "standalone" }
 
-    match FeaturePortfolio.initProduct "/stub/itr.json" input |> Effect.run deps with
+    match Portfolios.InitProduct.execute "/stub/itr.json" input |> Effect.run deps with
     | Ok None ->
         let yamlPath = IO.Path.Combine(path, "product.yaml")
 

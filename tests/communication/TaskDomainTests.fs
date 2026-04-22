@@ -3,7 +3,9 @@ module Itr.Tests.Communication.TaskDomainTests
 open System
 open Xunit
 open Itr.Domain
-open Itr.Features
+open Itr.Domain.Portfolios
+open Itr.Domain.Tasks
+open Itr.Domain.Backlogs
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -40,8 +42,8 @@ let private mkBacklogItem id title repos =
       CreatedAt = DateOnly.MinValue }
 
 let private mkInput backlogId overrideTaskId =
-    { Task.TakeInput.BacklogId = mkBacklogId backlogId
-      Task.TakeInput.TaskIdOverride = overrideTaskId }
+    { Tasks.Take.Input.BacklogId = mkBacklogId backlogId
+      Tasks.Take.Input.TaskIdOverride = overrideTaskId }
 
 // ---------------------------------------------------------------------------
 // TaskId derivation tests (6.1)
@@ -53,7 +55,7 @@ let ``single-repo item with no existing tasks uses backlog id as task id`` () =
     let backlogItem = mkBacklogItem "my-feature" "My Feature" [ "main-repo" ]
     let input = mkInput "my-feature" None
 
-    match Task.takeBacklogItem productConfig backlogItem [] input today with
+    match Tasks.Take.execute productConfig backlogItem [] input today with
     | Ok [ task ] ->
         Assert.Equal("my-feature", TaskId.value task.Id)
         Assert.Equal(RepoId "main-repo", task.Repo)
@@ -74,7 +76,7 @@ let ``single-repo item re-taken uses repo-prefixed id`` () =
           State = TaskState.Planning
           CreatedAt = today }
 
-    match Task.takeBacklogItem productConfig backlogItem [ existingTask ] input today with
+    match Tasks.Take.execute productConfig backlogItem [ existingTask ] input today with
     | Ok [ task ] -> Assert.Equal("main-repo-my-feature", TaskId.value task.Id)
     | other -> failwithf "expected single task, got %A" other
 
@@ -84,7 +86,7 @@ let ``multi-repo item uses repo-prefixed ids for each repo`` () =
     let backlogItem = mkBacklogItem "cross-feature" "Cross Feature" [ "api"; "web" ]
     let input = mkInput "cross-feature" None
 
-    match Task.takeBacklogItem productConfig backlogItem [] input today with
+    match Tasks.Take.execute productConfig backlogItem [] input today with
     | Ok tasks ->
         Assert.Equal(2, tasks.Length)
         let ids = tasks |> List.map (fun t -> TaskId.value t.Id) |> Set.ofList
@@ -112,7 +114,7 @@ let ``re-take with collision on repo-prefixed id uses numeric suffix`` () =
           State = TaskState.Planning
           CreatedAt = today }
 
-    match Task.takeBacklogItem productConfig backlogItem [ existing1; existing2 ] input today with
+    match Tasks.Take.execute productConfig backlogItem [ existing1; existing2 ] input today with
     | Ok [ task ] -> Assert.Equal("main-repo-feat-2", TaskId.value task.Id)
     | other -> failwithf "expected single task, got %A" other
 
@@ -126,7 +128,7 @@ let ``task-id override is used when provided for single-repo item`` () =
     let backlogItem = mkBacklogItem "my-feature" "My Feature" [ "main-repo" ]
     let input = mkInput "my-feature" (Some "custom-task")
 
-    match Task.takeBacklogItem productConfig backlogItem [] input today with
+    match Tasks.Take.execute productConfig backlogItem [] input today with
     | Ok [ task ] -> Assert.Equal("custom-task", TaskId.value task.Id)
     | other -> failwithf "expected single task, got %A" other
 
@@ -143,7 +145,7 @@ let ``task-id override fails with TaskIdConflict when id already exists`` () =
           State = TaskState.Planning
           CreatedAt = today }
 
-    match Task.takeBacklogItem productConfig backlogItem [ existingTask ] input today with
+    match Tasks.Take.execute productConfig backlogItem [ existingTask ] input today with
     | Error(TaskIdConflict id) -> Assert.Equal("existing-task", TaskId.value id)
     | other -> failwithf "expected TaskIdConflict, got %A" other
 
@@ -157,7 +159,7 @@ let ``task-id override on multi-repo item returns TaskIdOverrideRequiresSingleRe
     let backlogItem = mkBacklogItem "cross-feature" "Cross Feature" [ "api"; "web" ]
     let input = mkInput "cross-feature" (Some "my-override")
 
-    match Task.takeBacklogItem productConfig backlogItem [] input today with
+    match Tasks.Take.execute productConfig backlogItem [] input today with
     | Error TaskIdOverrideRequiresSingleRepo -> Assert.True(true)
     | other -> failwithf "expected TaskIdOverrideRequiresSingleRepo, got %A" other
 
@@ -171,6 +173,6 @@ let ``repo not in product config returns TaskStoreError`` () =
     let backlogItem = mkBacklogItem "my-feature" "My Feature" [ "unknown-repo" ]
     let input = mkInput "my-feature" None
 
-    match Task.takeBacklogItem productConfig backlogItem [] input today with
+    match Tasks.Take.execute productConfig backlogItem [] input today with
     | Error(TaskStoreError(_, msg)) -> Assert.Contains("unknown-repo", msg)
     | other -> failwithf "expected TaskStoreError for unknown repo, got %A" other

@@ -5,7 +5,9 @@ open System.IO
 open Xunit
 open Itr.Domain
 open Itr.Adapters.YamlAdapter
-open Itr.Features
+open Itr.Domain.Portfolios
+open Itr.Domain.Tasks
+open Itr.Domain.Backlogs
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -70,7 +72,7 @@ let ``approveTask integration writes task state to approved`` () =
                 let planPath = Path.Combine(root, "BACKLOG", "my-feature", "tasks", "my-feature", "plan.md")
                 let planExists = File.Exists(planPath)
 
-                match Task.approveTask task planExists with
+                match Tasks.Approve.execute { Task = task; PlanExists = planExists } with
                 | Error e -> failwithf "approveTask failed: %A" e
                 | Ok (updatedTask, _) ->
                     match taskStore.WriteTask root updatedTask with
@@ -110,7 +112,7 @@ let ``approveTask returns MissingPlanArtifact when plan md does not exist`` () =
                 let planPath = Path.Combine(root, "BACKLOG", "my-feature", "tasks", "my-feature", "plan.md")
                 let planExists = File.Exists(planPath)
 
-                match Task.approveTask task planExists with
+                match Tasks.Approve.execute { Task = task; PlanExists = planExists } with
                 | Ok _ -> failwith "expected Error, got Ok"
                 | Error (MissingPlanArtifact id) ->
                     Assert.Equal(taskId, id)
@@ -142,7 +144,7 @@ let ``approveTask returns InvalidTaskState when task is in planning state`` () =
                 let planPath = Path.Combine(root, "BACKLOG", "my-feature", "tasks", "my-feature", "plan.md")
                 let planExists = File.Exists(planPath)
 
-                match Task.approveTask task planExists with
+                match Tasks.Approve.execute { Task = task; PlanExists = planExists } with
                 | Ok _ -> failwith "expected Error, got Ok"
                 | Error (InvalidTaskState (id, current)) ->
                     Assert.Equal(taskId, id)

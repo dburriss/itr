@@ -4,7 +4,9 @@ open System
 open System.IO
 open Xunit
 open Itr.Domain
-open Itr.Features
+open Itr.Domain.Portfolios
+open Itr.Domain.Tasks
+open Itr.Domain.Backlogs
 open Itr.Adapters.YamlAdapter
 
 // ---------------------------------------------------------------------------
@@ -25,7 +27,7 @@ let private mkProductConfig repos =
         |> List.map (fun (k, v) -> RepoId k, ({ Path = v; Url = None }: RepoConfig))
         |> Map.ofList }
 
-let private mkInput (backlogId: string) (title: string) (repos: string list) (itemType: string option) : Backlog.CreateBacklogItemInput =
+let private mkInput (backlogId: string) (title: string) (repos: string list) (itemType: string option) : Backlogs.Create.Input =
     { BacklogId = backlogId
       Title = title
       Repos = repos
@@ -44,7 +46,7 @@ let ``type defaults to feature when omitted`` () =
     let productConfig = mkProductConfig [ "main-repo", "." ]
     let input = mkInput "my-feature" "My Feature" ["main-repo"] None
 
-    match Backlog.createBacklogItem productConfig input today with
+    match Backlogs.Create.execute productConfig input today with
     | Ok item -> Assert.Equal(Feature, item.Type)
     | Error e -> failwithf "expected success, got: %A" e
 
@@ -53,7 +55,7 @@ let ``explicit feature type is accepted`` () =
     let productConfig = mkProductConfig [ "main-repo", "." ]
     let input = mkInput "my-feature" "My Feature" ["main-repo"] (Some "feature")
 
-    match Backlog.createBacklogItem productConfig input today with
+    match Backlogs.Create.execute productConfig input today with
     | Ok item -> Assert.Equal(Feature, item.Type)
     | Error e -> failwithf "expected success, got: %A" e
 
@@ -62,7 +64,7 @@ let ``bug type is accepted`` () =
     let productConfig = mkProductConfig [ "main-repo", "." ]
     let input = mkInput "my-bug" "My Bug" ["main-repo"] (Some "bug")
 
-    match Backlog.createBacklogItem productConfig input today with
+    match Backlogs.Create.execute productConfig input today with
     | Ok item -> Assert.Equal(Bug, item.Type)
     | Error e -> failwithf "expected success, got: %A" e
 
@@ -89,7 +91,7 @@ let ``unknown repo returns RepoNotInProduct with the repo id`` () =
     let productConfig = mkProductConfig [ "known-repo", "." ]
     let input = mkInput "my-feature" "My Feature" ["unknown-repo"] None
 
-    match Backlog.createBacklogItem productConfig input today with
+    match Backlogs.Create.execute productConfig input today with
     | Error(RepoNotInProduct(RepoId id)) -> Assert.Equal("unknown-repo", id)
     | other -> failwithf "expected RepoNotInProduct, got: %A" other
 
@@ -98,7 +100,7 @@ let ``multi-repo product with missing repo returns RepoNotInProduct`` () =
     let productConfig = mkProductConfig [ "repo-a", "."; "repo-b", "." ]
     let input = mkInput "my-feature" "My Feature" [] None
 
-    match Backlog.createBacklogItem productConfig input today with
+    match Backlogs.Create.execute productConfig input today with
     | Error(RepoNotInProduct _) -> Assert.True(true)
     | other -> failwithf "expected RepoNotInProduct, got: %A" other
 
@@ -111,7 +113,7 @@ let ``invalid item type returns InvalidItemType with the value`` () =
     let productConfig = mkProductConfig [ "main-repo", "." ]
     let input = mkInput "my-feature" "My Feature" ["main-repo"] (Some "invalid-type")
 
-    match Backlog.createBacklogItem productConfig input today with
+    match Backlogs.Create.execute productConfig input today with
     | Error(InvalidItemType value) -> Assert.Equal("invalid-type", value)
     | other -> failwithf "expected InvalidItemType, got: %A" other
 
@@ -130,7 +132,7 @@ let ``error message for invalid type includes "refactor"`` () =
     let productConfig = mkProductConfig [ "main-repo", "." ]
     let input = mkInput "my-feature" "My Feature" ["main-repo"] (Some "invalid-type")
 
-    match Backlog.createBacklogItem productConfig input today with
+    match Backlogs.Create.execute productConfig input today with
     | Error(InvalidItemType _) ->
         // Verify the domain error type is raised; error message formatting tested via CLI layer
         Assert.True(true)
@@ -293,7 +295,7 @@ let ``getBacklogItemDetail returns detail for valid item with no tasks`` () =
             | Ok id -> id
             | Error e -> failwithf "%A" e
 
-        match Backlog.getBacklogItemDetail backlogStore taskStore viewStore root backlogId with
+        match Backlogs.Query.getDetail backlogStore taskStore viewStore root backlogId with
         | Error e -> failwithf "expected Ok, got %A" e
         | Ok detail ->
             Assert.Equal(BacklogId.value detail.Item.Id, "my-feature")
@@ -317,7 +319,7 @@ let ``getBacklogItemDetail returns BacklogItemNotFound for unknown id`` () =
             | Ok id -> id
             | Error e -> failwithf "%A" e
 
-        match Backlog.getBacklogItemDetail backlogStore taskStore viewStore root backlogId with
+        match Backlogs.Query.getDetail backlogStore taskStore viewStore root backlogId with
         | Error(BacklogItemNotFound _) -> Assert.True(true)
         | other -> failwithf "expected BacklogItemNotFound, got %A" other
     finally
@@ -339,7 +341,7 @@ let ``getBacklogItemDetail with two tasks includes both tasks`` () =
             | Ok id -> id
             | Error e -> failwithf "%A" e
 
-        match Backlog.getBacklogItemDetail backlogStore taskStore viewStore root backlogId with
+        match Backlogs.Query.getDetail backlogStore taskStore viewStore root backlogId with
         | Error e -> failwithf "expected Ok, got %A" e
         | Ok detail ->
             Assert.Equal(2, detail.Tasks.Length)
@@ -364,7 +366,7 @@ let ``getBacklogItemDetail with no tasks yields Created status`` () =
             | Ok id -> id
             | Error e -> failwithf "%A" e
 
-        match Backlog.getBacklogItemDetail backlogStore taskStore viewStore root backlogId with
+        match Backlogs.Query.getDetail backlogStore taskStore viewStore root backlogId with
         | Error e -> failwithf "expected Ok, got %A" e
         | Ok detail -> Assert.Equal(BacklogItemStatus.Created, detail.Status)
     finally
@@ -386,7 +388,7 @@ let ``getBacklogItemDetail with all approved tasks yields Approved status`` () =
             | Ok id -> id
             | Error e -> failwithf "%A" e
 
-        match Backlog.getBacklogItemDetail backlogStore taskStore viewStore root backlogId with
+        match Backlogs.Query.getDetail backlogStore taskStore viewStore root backlogId with
         | Error e -> failwithf "expected Ok, got %A" e
         | Ok detail -> Assert.Equal(BacklogItemStatus.Approved, detail.Status)
     finally
@@ -437,7 +439,7 @@ let ``getBacklogItemDetail on archived item returns archived status`` () =
             | Ok id -> id
             | Error e -> failwithf "%A" e
 
-        match Backlog.getBacklogItemDetail backlogStore taskStore viewStore root backlogId with
+        match Backlogs.Query.getDetail backlogStore taskStore viewStore root backlogId with
         | Error e -> failwithf "expected Ok, got %A" e
         | Ok detail -> Assert.Equal(BacklogItemStatus.Archived, detail.Status)
     finally
@@ -459,7 +461,7 @@ let ``getBacklogItemDetail on archived item with tasks returns all tasks`` () =
             | Ok id -> id
             | Error e -> failwithf "%A" e
 
-        match Backlog.getBacklogItemDetail backlogStore taskStore viewStore root backlogId with
+        match Backlogs.Query.getDetail backlogStore taskStore viewStore root backlogId with
         | Error e -> failwithf "expected Ok, got %A" e
         | Ok detail ->
             Assert.Equal(2, detail.Tasks.Length)
@@ -483,7 +485,7 @@ let ``getBacklogItemDetail returns BacklogItemNotFound when not in active or arc
             | Ok id -> id
             | Error e -> failwithf "%A" e
 
-        match Backlog.getBacklogItemDetail backlogStore taskStore viewStore root backlogId with
+        match Backlogs.Query.getDetail backlogStore taskStore viewStore root backlogId with
         | Error(BacklogItemNotFound _) -> Assert.True(true)
         | other -> failwithf "expected BacklogItemNotFound, got %A" other
     finally
