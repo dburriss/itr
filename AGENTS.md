@@ -32,6 +32,7 @@
 ## Build and test
 
 - Run build and test before and after every change
+- Use TDD when building new features or fixing a bug
 - Build: `dotnet build`
 - Test: `dotnet test`
 - Clean: `dotnet clean`
