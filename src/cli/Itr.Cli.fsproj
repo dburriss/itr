@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="CliParsers.fs" />
     <Compile Include="InteractivePrompts.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
