@@ -7,8 +7,12 @@
 
   <ItemGroup>
     <Compile Include="Effect.fs" />
-    <Compile Include="Domain.fs" />
-    <Compile Include="Interfaces.fs" />
+    <Compile Include="Types.fs" />
+    <Compile Include="Validation.fs" />
+    <Compile Include="Portfolio.fs" />
+    <Compile Include="Product.fs" />
+    <Compile Include="Task.fs" />
+    <Compile Include="Backlog.fs" />
   </ItemGroup>
 
 </Project>

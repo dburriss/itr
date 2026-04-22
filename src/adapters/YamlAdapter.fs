@@ -204,9 +204,9 @@ let private taskStateToString (state: TaskState) : string =
     | TaskState.Validated -> "validated"
     | TaskState.Archived -> "archived"
 
-let private mapTaskDto (dto: ItrTaskDto) : Result<ItrTask, BacklogError> =
+let private mapTaskDto (dto: ItrTaskDto) : Result<ItrTask, TaskError> =
     match BacklogId.tryCreate dto.Source.Backlog with
-    | Error _ -> Error(ProductConfigParseError("<task>", $"Invalid backlog id: {dto.Source.Backlog}"))
+    | Error _ -> Error(TaskStoreError("<task>", $"Invalid backlog id: {dto.Source.Backlog}"))
     | Ok backlogId ->
         Ok
             { Id = TaskId.create dto.Id
@@ -645,7 +645,7 @@ type TaskStoreAdapter() =
                             let content = File.ReadAllText(path)
 
                             match parseYaml<ItrTaskDto> content with
-                            | Error msg -> Error(ProductConfigParseError(path, msg))
+                            | Error msg -> Error(TaskStoreError(path, msg))
                             | Ok dto ->
                                 match mapTaskDto dto with
                                 | Error e -> Error e
@@ -667,7 +667,7 @@ type TaskStoreAdapter() =
                                 | Error _ -> None)
                         )
                 with ex ->
-                    Error(ProductConfigParseError(dir, ex.Message))
+                    Error(TaskStoreError(dir, ex.Message))
 
         member _.ListArchivedTasks (coordRoot: string) (backlogId: BacklogId) =
             let archiveDir = Path.Combine(coordRoot, "BACKLOG", "_archive")
@@ -708,7 +708,7 @@ type TaskStoreAdapter() =
                                 |> List.map (fun path ->
                                     let content = File.ReadAllText(path)
                                     match parseYaml<ItrTaskDto> content with
-                                    | Error msg -> Error(ProductConfigParseError(path, msg))
+                                    | Error msg -> Error(TaskStoreError(path, msg))
                                     | Ok dto -> mapTaskDto dto)
 
                             let errors =
@@ -719,7 +719,7 @@ type TaskStoreAdapter() =
                             | [] ->
                                 Ok(results |> List.choose (function Ok t -> Some t | Error _ -> None))
                 with ex ->
-                    Error(ProductConfigParseError(archiveDir, ex.Message))
+                    Error(TaskStoreError(archiveDir, ex.Message))
 
         member _.WriteTask (coordRoot: string) (task: ItrTask) =
             let taskDir = ItrTask.taskDir coordRoot task.SourceBacklog task.Id
@@ -733,7 +733,7 @@ type TaskStoreAdapter() =
                 File.WriteAllText(path, yaml)
                 Ok()
             with ex ->
-                Error(ProductConfigParseError(path, ex.Message))
+                Error(TaskStoreError(path, ex.Message))
 
         member _.ArchiveTask (coordRoot: string) (backlogId: BacklogId) (taskId: TaskId) (date: string) =
             let tid = TaskId.value taskId
@@ -741,20 +741,20 @@ type TaskStoreAdapter() =
             let destPath = Path.Combine(coordRoot, "BACKLOG", BacklogId.value backlogId, "tasks", $"{date}-{tid}")
 
             if not (Directory.Exists(sourcePath)) then
-                Error(ProductConfigParseError(sourcePath, $"Task folder not found: {sourcePath}"))
+                Error(TaskStoreError(sourcePath, $"Task folder not found: {sourcePath}"))
             else
                 try
                     Directory.Move(sourcePath, destPath)
                     Ok()
                 with ex ->
-                    Error(ProductConfigParseError(sourcePath, ex.Message))
+                    Error(TaskStoreError(sourcePath, ex.Message))
 
         member _.ListAllTasks (coordRoot: string) =
             let backlogDir = Path.Combine(coordRoot, "BACKLOG")
             let archiveDir = Path.Combine(coordRoot, "BACKLOG", "_archive")
 
             /// Read all task.yaml files from tasks/ subdirs under a given backlog directory
-            let readTasksFromBacklogDir (dir: string) : Result<(ItrTask * string) list, BacklogError> =
+            let readTasksFromBacklogDir (dir: string) : Result<(ItrTask * string) list, TaskError> =
                 let tasksDir = Path.Combine(dir, "tasks")
                 if not (Directory.Exists(tasksDir)) then
                     Ok []
@@ -770,7 +770,7 @@ type TaskStoreAdapter() =
                             |> List.map (fun path ->
                                 let content = File.ReadAllText(path)
                                 match parseYaml<ItrTaskDto> content with
-                                | Error msg -> Error(ProductConfigParseError(path, msg))
+                                | Error msg -> Error(TaskStoreError(path, msg))
                                 | Ok dto ->
                                     match mapTaskDto dto with
                                     | Error e -> Error e
@@ -780,7 +780,7 @@ type TaskStoreAdapter() =
                         | e :: _ -> Error e
                         | [] -> Ok(results |> List.choose (function Ok tuple -> Some tuple | Error _ -> None))
                     with ex ->
-                        Error(ProductConfigParseError(tasksDir, ex.Message))
+                        Error(TaskStoreError(tasksDir, ex.Message))
 
             // Collect tasks from active backlog items (skip dirs starting with '_')
             let activeResult =
@@ -797,7 +797,7 @@ type TaskStoreAdapter() =
                         | e :: _ -> Error e
                         | [] -> Ok(results |> List.collect (function Ok ts -> ts | Error _ -> []))
                     with ex ->
-                        Error(ProductConfigParseError(backlogDir, ex.Message))
+                        Error(TaskStoreError(backlogDir, ex.Message))
 
             // Collect tasks from archived backlog items
             let archivedResult =
@@ -812,7 +812,7 @@ type TaskStoreAdapter() =
                         | e :: _ -> Error e
                         | [] -> Ok(results |> List.collect (function Ok ts -> ts | Error _ -> []))
                     with ex ->
-                        Error(ProductConfigParseError(archiveDir, ex.Message))
+                        Error(TaskStoreError(archiveDir, ex.Message))
 
             match activeResult, archivedResult with
             | Error e, _ -> Error e

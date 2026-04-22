@@ -3,6 +3,12 @@ module Itr.Features.Backlog
 open System
 open Itr.Domain
 
+/// Map a TaskError to a BacklogError for use in backlog-level pipelines.
+let private taskErrorToBacklogError (e: TaskError) : BacklogError =
+    match e with
+    | TaskStoreError(path, msg) -> ProductConfigParseError(path, msg)
+    | _ -> ProductConfigParseError("", $"%A{e}")
+
 // ---------------------------------------------------------------------------
 // Input type for the use case
 // ---------------------------------------------------------------------------
@@ -31,7 +37,7 @@ let createBacklogItem
 
     // 1. Validate backlog id
     match BacklogId.tryCreate input.BacklogId with
-    | Error e -> Error e
+    | Error _ -> Error(BacklogItemNotFound(BacklogId input.BacklogId))
     | Ok backlogId ->
 
     // 2. Validate title
@@ -72,9 +78,9 @@ let createBacklogItem
     let depResults =
         input.DependsOn |> List.map BacklogId.tryCreate
 
-    let depErrors = depResults |> List.choose (function Error e -> Some e | Ok _ -> None)
+    let depErrors = depResults |> List.choose (function Error _ -> Some () | Ok _ -> None)
     match depErrors with
-    | e :: _ -> Error e
+    | _ :: _ -> Error(BacklogItemNotFound(BacklogId ""))  // invalid dep id; value not used
     | [] ->
 
     let deps = depResults |> List.choose (function Ok id -> Some id | Error _ -> None)
@@ -151,7 +157,7 @@ let loadSnapshot
         |> List.map (fun (item, path) ->
             let id = BacklogId.value item.Id
             match taskStore.ListTasks coordRoot item.Id with
-            | Error e -> Error e
+            | Error e -> Error(taskErrorToBacklogError e)
             | Ok taskTuples ->
                 let tasks = taskTuples |> List.map fst
                 let status = BacklogItemStatus.compute tasks
@@ -168,7 +174,7 @@ let loadSnapshot
         |> List.map (fun (item, path) ->
             let id = BacklogId.value item.Id
             match taskStore.ListArchivedTasks coordRoot item.Id with
-            | Error e -> Error e
+            | Error e -> Error(taskErrorToBacklogError e)
             | Ok tasks ->
                 let status = BacklogItemStatus.compute tasks
                 Ok
@@ -326,7 +332,7 @@ let getBacklogItemDetail
             |> Result.map (List.map fst)
 
     match tasksResult with
-    | Error e -> Error e
+    | Error e -> Error(taskErrorToBacklogError e)
     | Ok tasks ->
 
     // 3. Load views to find view membership
