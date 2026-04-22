@@ -1,0 +1,17 @@
+id: refactor-program-entry-point
+title: Refactor Program.fs entry point
+repos:
+- itr
+type: refactor
+priority: 
+summary: |-
+  Program.fs currently contains significant non-wiring logic violating the entry point purity principle. This includes: JSON serialization built inline in each handler, string parsing helpers (tryParseTaskState, tryParseBacklogItemStatus), AI harness selection logic in handleTaskPlan, filesystem traversal in handleProductInfo, and output formatting (table/JSON/text) entirely inline in every handler. These concerns should be moved to appropriate adapter/formatter layers. See architecture-review-apr26.md Entry Point Purity section.
+acceptance_criteria:
+- JSON serialization is moved out of handlers into adapters or a formatter layer
+- String parsing helpers (tryParseTaskState, tryParseBacklogItemStatus) are moved out of Program.fs
+- AI harness selection logic (acp vs opencode-http protocol dispatch) is moved out of handleTaskPlan
+- Filesystem traversal in handleProductInfo (walking up dirs to find product.yaml) is moved to an adapter
+- Output formatting (table/JSON/text) is moved out of all handlers into a dedicated layer
+- Program.fs contains only wiring and dispatch logic
+dependencies: 
+created_at: 2026-04-22
