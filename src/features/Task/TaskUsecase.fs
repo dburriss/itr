@@ -138,13 +138,15 @@ let private deriveTaskId
 
 /// Pure pipeline: does not perform I/O. Returns the list of ItrTask values
 /// for the caller to write. Accepts already-loaded data as parameters.
+/// Note: repo validation (RepoNotInProduct) is a BacklogError concern; callers validate
+/// repos before invoking this function. This function only returns TaskError.
 let takeBacklogItem
     (productConfig: ProductConfig)
     (backlogItem: BacklogItem)
     (existingTasks: ItrTask list)
     (input: TakeInput)
     (today: System.DateOnly)
-    : Result<ItrTask list, BacklogError> =
+    : Result<ItrTask list, TaskError> =
 
     // 1. Validate all repos on the item exist in product.yaml
     let invalidRepo =
@@ -152,7 +154,7 @@ let takeBacklogItem
         |> List.tryFind (fun repoId -> not (Map.containsKey repoId productConfig.Repos))
 
     match invalidRepo with
-    | Some repoId -> Error(RepoNotInProduct repoId)
+    | Some repoId -> Error(TaskStoreError("", $"Repo '{RepoId.value repoId}' is not listed in product.yaml"))
     | None ->
 
         // 2. Handle --task-id override
@@ -221,7 +223,7 @@ let getTaskDetail
     (taskId: TaskId)
     (allTasks: ItrTask list)
     (taskYamlPath: string)
-    : Result<TaskDetail, BacklogError> =
+    : Result<TaskDetail, TaskError> =
 
     match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
     | None -> Error(TaskNotFound taskId)
@@ -267,7 +269,7 @@ let getTaskDetail
 /// States beyond Planned return InvalidTaskState error.
 let planTask
     (task: ItrTask)
-    : Result<ItrTask * bool, BacklogError> =
+    : Result<ItrTask * bool, TaskError> =
     match task.State with
     | TaskState.Planning ->
         Ok ({ task with State = TaskState.Planned }, false)
@@ -287,7 +289,7 @@ let planTask
 let approveTask
     (task: ItrTask)
     (planExists: bool)
-    : Result<ItrTask * bool, BacklogError> =
+    : Result<ItrTask * bool, TaskError> =
     match task.State with
     | TaskState.Approved ->
         Ok (task, true)

@@ -437,12 +437,15 @@ let private formatBacklogError (err: BacklogError) : string =
             "--repo is required when the product has multiple repos"
         else
             $"Repo '{RepoId.value id}' is not listed in product.yaml"
-    | TaskIdConflict id -> $"Task id '{TaskId.value id}' already exists"
-    | TaskIdOverrideRequiresSingleRepo -> "--task-id can only be used with single-repo backlog items"
     | DuplicateBacklogId id -> $"Backlog item '{BacklogId.value id}' already exists"
     | InvalidItemType value -> $"Invalid item type '{value}': must be feature | bug | chore | refactor | spike"
     | MissingTitle -> "--title is required"
+
+let private formatTaskError (err: TaskError) : string =
+    match err with
     | TaskNotFound id -> $"Task not found: {TaskId.value id}"
+    | TaskIdConflict id -> $"Task id '{TaskId.value id}' already exists"
+    | TaskIdOverrideRequiresSingleRepo -> "--task-id can only be used with single-repo backlog items"
     | InvalidTaskState(id, current) ->
         let stateStr =
             match current with
@@ -455,6 +458,7 @@ let private formatBacklogError (err: BacklogError) : string =
             | TaskState.Archived -> "archived"
         $"Invalid state transition for task '{TaskId.value id}': current state is '{stateStr}'"
     | MissingPlanArtifact id -> $"Cannot approve task '{TaskId.value id}': plan artifact does not exist"
+    | TaskStoreError(_, msg) -> msg
 
 let private formatPortfolioError (err: PortfolioError) : string =
     match err with
@@ -580,7 +584,7 @@ let private handleTaskList
     | _, _, _, Error msg -> Error msg
     | Ok backlogIdFilter, Ok stateFilter, Ok excludeList, Ok orderBy ->
         match taskStore.ListAllTasks coordRoot with
-        | Error e -> Error(formatBacklogError e)
+        | Error e -> Error(formatTaskError e)
         | Ok allTasks ->
             let summaries = Task.listTasks allTasks
             let filtered = Task.filterTasks backlogIdFilter repoId stateFilter excludeList summaries
@@ -672,16 +676,16 @@ let private handleTaskInfo
     let taskStore = deps :> ITaskStore
 
     match taskStore.ListAllTasks coordRoot with
-    | Error e -> Error(formatBacklogError e)
+    | Error e -> Error(formatTaskError e)
     | Ok allTaskTuples ->
         let allTasks = allTaskTuples |> List.map fst
         // Resolve plan path: need the taskYamlPath of the target task
         match allTaskTuples |> List.tryFind (fun (t, _) -> t.Id = taskId) with
-        | None -> Error(formatBacklogError (TaskNotFound taskId))
+        | None -> Error(formatTaskError (TaskNotFound taskId))
         | Some (_, taskYamlPath) ->
 
             match Task.getTaskDetail taskId allTasks taskYamlPath with
-            | Error e -> Error(formatBacklogError e)
+            | Error e -> Error(formatTaskError e)
             | Ok detail ->
                 let task = detail.Task
                 let id = TaskId.value task.Id
@@ -788,15 +792,15 @@ let private handleTaskPlan
 
     // Load all tasks to find the target
     match taskStore.ListAllTasks coordRoot with
-    | Error e -> Error(formatBacklogError e)
+    | Error e -> Error(formatTaskError e)
     | Ok allTaskTuples ->
         let allTasks = allTaskTuples |> List.map fst
         match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
-        | None -> Error(formatBacklogError (TaskNotFound taskId))
+        | None -> Error(formatTaskError (TaskNotFound taskId))
         | Some task ->
             // Validate state and get updated task
             match Task.planTask task with
-            | Error e -> Error(formatBacklogError e)
+            | Error e -> Error(formatTaskError e)
             | Ok (updatedTask, wasAlreadyPlanned) ->
                 if wasAlreadyPlanned then
                     printfn "Re-planning task %s (was already planned)." rawTaskId
@@ -896,7 +900,7 @@ let private handleTaskPlan
                         | Ok () ->
                             // Write updated task
                             match taskStore.WriteTask coordRoot updatedTask with
-                            | Error e -> Error(formatBacklogError e)
+                            | Error e -> Error(formatTaskError e)
                             | Ok () ->
                                 printfn "Plan written: %s" planPath
                                 Ok()
@@ -917,24 +921,24 @@ let private handleTaskApprove
     let fileSystem = deps :> IFileSystem
 
     match taskStore.ListAllTasks coordRoot with
-    | Error e -> Error(formatBacklogError e)
+    | Error e -> Error(formatTaskError e)
     | Ok allTaskTuples ->
         let allTasks = allTaskTuples |> List.map fst
         match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
-        | None -> Error(formatBacklogError (TaskNotFound taskId))
+        | None -> Error(formatTaskError (TaskNotFound taskId))
         | Some task ->
             let planPath = ItrTask.planFile coordRoot task.SourceBacklog (TaskId.create rawTaskId)
             let planExists = fileSystem.FileExists planPath
 
             match Task.approveTask task planExists with
-            | Error e -> Error(formatBacklogError e)
+            | Error e -> Error(formatTaskError e)
             | Ok (updatedTask, wasAlreadyApproved) ->
                 if wasAlreadyApproved then
                     printfn "Task '%s' is already approved." rawTaskId
                     Ok()
                 else
                     match taskStore.WriteTask coordRoot updatedTask with
-                    | Error e -> Error(formatBacklogError e)
+                    | Error e -> Error(formatTaskError e)
                     | Ok () ->
                         printfn "Task '%s' approved." rawTaskId
                         Ok()
@@ -1566,7 +1570,7 @@ let private handleBacklogTake
             |> Result.mapError formatBacklogError
             |> Result.bind (fun (backlogItem, _) ->
                 taskStore.ListTasks coordRoot backlogId
-                |> Result.mapError formatBacklogError
+                |> Result.mapError formatTaskError
                 |> Result.map (List.map fst)
                 |> Result.bind (fun existingTasks ->
                     let input =
@@ -1576,7 +1580,7 @@ let private handleBacklogTake
                     let today = DateOnly.FromDateTime(DateTime.UtcNow)
 
                     Task.takeBacklogItem productConfig backlogItem existingTasks input today
-                    |> Result.mapError formatBacklogError
+                    |> Result.mapError formatTaskError
                     |> Result.bind (fun newTasks ->
                         let writeResults =
                             newTasks
@@ -1586,7 +1590,7 @@ let private handleBacklogTake
                                     let taskId = TaskId.value task.Id
                                     let path = ItrTask.taskFile coordRoot task.SourceBacklog task.Id
                                     (taskId, path))
-                                |> Result.mapError formatBacklogError)
+                                |> Result.mapError formatTaskError)
 
                         let errors =
                             writeResults

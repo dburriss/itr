@@ -166,11 +166,11 @@ let ``task-id override on multi-repo item returns TaskIdOverrideRequiresSingleRe
 // ---------------------------------------------------------------------------
 
 [<Fact>]
-let ``repo not in product config returns RepoNotInProduct`` () =
+let ``repo not in product config returns TaskStoreError`` () =
     let productConfig = mkProductConfig [ "known-repo", "." ]
     let backlogItem = mkBacklogItem "my-feature" "My Feature" [ "unknown-repo" ]
     let input = mkInput "my-feature" None
 
     match Task.takeBacklogItem productConfig backlogItem [] input today with
-    | Error(RepoNotInProduct(RepoId id)) -> Assert.Equal("unknown-repo", id)
-    | other -> failwithf "expected RepoNotInProduct, got %A" other
+    | Error(TaskStoreError(_, msg)) -> Assert.Contains("unknown-repo", msg)
+    | other -> failwithf "expected TaskStoreError for unknown repo, got %A" other
