@@ -1,104 +1,6 @@
-module Itr.Features.Backlog
+module Itr.Domain.Backlogs.Query
 
-open System
 open Itr.Domain
-
-/// Map a TaskError to a BacklogError for use in backlog-level pipelines.
-let private taskErrorToBacklogError (e: TaskError) : BacklogError =
-    match e with
-    | TaskStoreError(path, msg) -> ProductConfigParseError(path, msg)
-    | _ -> ProductConfigParseError("", $"%A{e}")
-
-// ---------------------------------------------------------------------------
-// Input type for the use case
-// ---------------------------------------------------------------------------
-
-type CreateBacklogItemInput =
-    { BacklogId: string
-      Title: string
-      Repos: string list
-      ItemType: string option
-      Priority: string option
-      Summary: string option
-      AcceptanceCriteria: string list
-      DependsOn: string list }
-
-// ---------------------------------------------------------------------------
-// Pure createBacklogItem function
-// ---------------------------------------------------------------------------
-
-/// Pure pipeline: validates inputs and builds a BacklogItem.
-/// Does not perform any I/O.
-let createBacklogItem
-    (productConfig: ProductConfig)
-    (input: CreateBacklogItemInput)
-    (today: System.DateOnly)
-    : Result<BacklogItem, BacklogError> =
-
-    // 1. Validate backlog id
-    match BacklogId.tryCreate input.BacklogId with
-    | Error _ -> Error(BacklogItemNotFound(BacklogId input.BacklogId))
-    | Ok backlogId ->
-
-    // 2. Validate title
-    if System.String.IsNullOrWhiteSpace(input.Title) then
-        Error MissingTitle
-    else
-
-    // 3. Validate item type
-    let itemTypeStr = input.ItemType |> Option.defaultValue "feature"
-    match BacklogItemType.tryParse itemTypeStr with
-    | Error e -> Error e
-    | Ok itemType ->
-
-    // 4. Resolve repos
-    let resolvedReposResult =
-        match input.Repos with
-        | [] ->
-            // Auto-resolve if single repo
-            if productConfig.Repos.Count = 1 then
-                productConfig.Repos |> Map.toList |> List.map fst |> Ok
-            else
-                Error(RepoNotInProduct(RepoId ""))
-        | repos -> Ok (repos |> List.map RepoId)
-
-    match resolvedReposResult with
-    | Error e -> Error e
-    | Ok repoIds ->
-
-    // 5. Validate all repos exist in product config
-    let unknownRepo =
-        repoIds |> List.tryFind (fun repoId -> not (Map.containsKey repoId productConfig.Repos))
-
-    match unknownRepo with
-    | Some repoId -> Error(RepoNotInProduct repoId)
-    | None ->
-
-    // 6. Validate dependency ids (format only)
-    let depResults =
-        input.DependsOn |> List.map BacklogId.tryCreate
-
-    let depErrors = depResults |> List.choose (function Error _ -> Some () | Ok _ -> None)
-    match depErrors with
-    | _ :: _ -> Error(BacklogItemNotFound(BacklogId ""))  // invalid dep id; value not used
-    | [] ->
-
-    let deps = depResults |> List.choose (function Ok id -> Some id | Error _ -> None)
-
-    Ok
-        { Id = backlogId
-          Title = input.Title
-          Repos = repoIds
-          Type = itemType
-          Priority = input.Priority
-          Summary = input.Summary
-          AcceptanceCriteria = input.AcceptanceCriteria
-          Dependencies = deps
-          CreatedAt = today }
-
-// ---------------------------------------------------------------------------
-// BacklogListFilter
-// ---------------------------------------------------------------------------
 
 type BacklogListFilter =
     { ViewId: string option
@@ -107,14 +9,13 @@ type BacklogListFilter =
       ExcludeStatuses: BacklogItemStatus list
       OrderBy: string option }
 
-// ---------------------------------------------------------------------------
-// loadSnapshot
-// ---------------------------------------------------------------------------
+/// Map a TaskError to a BacklogError for use in backlog-level pipelines.
+let private taskErrorToBacklogError (e: TaskError) : BacklogError =
+    match e with
+    | TaskStoreError(path, msg) -> ProductConfigParseError(path, msg)
+    | _ -> ProductConfigParseError("", $"%A{e}")
 
 /// Load all backlog items, views, and tasks into a BacklogSnapshot.
-/// Items are sorted by CreatedAt ascending.
-/// Multi-view membership is resolved first-match (alphabetical filename) wins;
-/// a warning is emitted to stderr for duplicates.
 let loadSnapshot
     (backlogStore: IBacklogStore)
     (taskStore: ITaskStore)
@@ -122,22 +23,18 @@ let loadSnapshot
     (coordRoot: string)
     : Result<BacklogSnapshot, BacklogError> =
 
-    // 1. Load active items
     match backlogStore.ListBacklogItems coordRoot with
     | Error e -> Error e
     | Ok activeItemTuples ->
 
-    // 2. Load archived items
     match backlogStore.ListArchivedBacklogItems coordRoot with
     | Error e -> Error e
     | Ok archivedItemTuples ->
 
-    // 3. Load views
     match viewStore.ListViews coordRoot with
     | Error e -> Error e
     | Ok views ->
 
-    // 4. Build item → viewId map (first-match wins; warn on duplicates)
     let itemViewMap =
         views
         |> List.fold (fun (acc: Map<string, string>) view ->
@@ -151,7 +48,6 @@ let loadSnapshot
             ) acc
         ) Map.empty
 
-    // 5. Build summaries for active items
     let activeSummaryResults =
         activeItemTuples
         |> List.map (fun (item, path) ->
@@ -168,7 +64,6 @@ let loadSnapshot
                       TaskCount = tasks.Length
                       Path = path })
 
-    // 6. Build summaries for archived items
     let archivedSummaryResults =
         archivedItemTuples
         |> List.map (fun (item, path) ->
@@ -203,10 +98,6 @@ let loadSnapshot
 
         Ok { Items = summaries; Views = views }
 
-// ---------------------------------------------------------------------------
-// listBacklogItems (pure filter + ordering over snapshot)
-// ---------------------------------------------------------------------------
-
 /// Priority order: high=0, medium=1, low=2, other/None=3 (case-insensitive)
 let private priorityOrder (priority: string option) : int =
     match priority with
@@ -239,8 +130,7 @@ let private defaultSort (items: BacklogItemSummary list) : BacklogItemSummary li
             else compare a.Item.CreatedAt b.Item.CreatedAt)
 
 /// Pure filter + ordering: returns items from the snapshot matching the given filter.
-let listBacklogItems (filter: BacklogListFilter) (snapshot: BacklogSnapshot) : BacklogItemSummary list =
-    // Filter items
+let list (filter: BacklogListFilter) (snapshot: BacklogSnapshot) : BacklogItemSummary list =
     let filtered =
         snapshot.Items
         |> List.filter (fun s ->
@@ -263,7 +153,6 @@ let listBacklogItems (filter: BacklogListFilter) (snapshot: BacklogSnapshot) : B
 
             viewMatch && statusMatch && typeMatch && excludeMatch)
 
-    // Apply ordering
     match filter.OrderBy with
     | Some "created" ->
         filtered |> List.sortBy (fun s -> s.Item.CreatedAt)
@@ -272,14 +161,11 @@ let listBacklogItems (filter: BacklogListFilter) (snapshot: BacklogSnapshot) : B
     | Some "type" ->
         filtered |> List.sortBy (fun s -> typeOrder s.Item.Type)
     | _ ->
-        // View-based ordering when ViewId is set
         match filter.ViewId with
         | Some viewId ->
             match snapshot.Views |> List.tryFind (fun v -> v.Id = viewId) with
             | None -> defaultSort filtered
             | Some view ->
-                // Items in the view are sorted by their index in view.Items
-                // Items not in the view list are appended at end in default sort order
                 let viewItemIndex =
                     view.Items
                     |> List.mapi (fun i id -> id, i)
@@ -294,13 +180,8 @@ let listBacklogItems (filter: BacklogListFilter) (snapshot: BacklogSnapshot) : B
                 sortedInView @ sortedNotInView
         | None -> defaultSort filtered
 
-// ---------------------------------------------------------------------------
-// getBacklogItemDetail
-// ---------------------------------------------------------------------------
-
 /// Load a single backlog item with full detail: tasks, computed status, and view membership.
-/// Checks active items first; falls back to archived items if not found.
-let getBacklogItemDetail
+let getDetail
     (backlogStore: IBacklogStore)
     (taskStore: ITaskStore)
     (viewStore: IViewStore)
@@ -308,7 +189,6 @@ let getBacklogItemDetail
     (backlogId: BacklogId)
     : Result<BacklogItemDetail, BacklogError> =
 
-    // 1. Try loading the active item; on not-found, check archive
     let itemResult =
         match backlogStore.LoadBacklogItem coordRoot backlogId with
         | Ok (item, path) -> Ok(item, path, false)
@@ -323,7 +203,6 @@ let getBacklogItemDetail
     | Error e -> Error e
     | Ok(item, itemPath, isArchived) ->
 
-    // 2. Load tasks — archived items have tasks under the archive folder
     let tasksResult =
         if isArchived then
             taskStore.ListArchivedTasks coordRoot backlogId
@@ -335,19 +214,16 @@ let getBacklogItemDetail
     | Error e -> Error(taskErrorToBacklogError e)
     | Ok tasks ->
 
-    // 3. Load views to find view membership
     match viewStore.ListViews coordRoot with
     | Error e -> Error e
     | Ok views ->
 
-    // 4. Find the first view that contains this item
     let idStr = BacklogId.value backlogId
     let viewId =
         views
         |> List.tryPick (fun view ->
             if List.contains idStr view.Items then Some view.Id else None)
 
-    // 5. Compute status from task states (TaskState.Archived tasks yield BacklogItemStatus.Archived)
     let status = BacklogItemStatus.compute tasks
 
     Ok

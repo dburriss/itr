@@ -29,7 +29,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\features\Itr.Features.fsproj" />
+    
     <ProjectReference Include="..\..\src\adapters\Itr.Adapters.fsproj" />
   </ItemGroup>
 

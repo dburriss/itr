@@ -3,7 +3,7 @@ module Itr.Cli.InteractivePrompts
 open System
 open Spectre.Console
 open Itr.Domain
-open Itr.Features
+open Itr.Domain.Backlogs
 
 // ---------------------------------------------------------------------------
 // Pre-filled args from explicit CLI arguments
@@ -88,7 +88,7 @@ let promptBacklogAddWith
     (coordRoot: string)
     (productConfig: ProductConfig)
     (prefilled: PrefilledArgs)
-    : Result<Backlog.CreateBacklogItemInput, string> =
+    : Result<Backlogs.Create.Input, string> =
 
     // 3.3 Non-TTY detection
     // NOTE: Console.IsInputRedirected can return true in contexts that are still
@@ -222,5 +222,5 @@ let promptBacklogAdd
     (coordRoot: string)
     (productConfig: ProductConfig)
     (prefilled: PrefilledArgs)
-    : Result<Backlog.CreateBacklogItemInput, string> =
+    : Result<Backlogs.Create.Input, string> =
     promptBacklogAddWith defaultPromptFunctions backlogStore coordRoot productConfig prefilled

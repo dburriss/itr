@@ -5,7 +5,9 @@ open System.IO
 open Xunit
 open Itr.Domain
 open Itr.Adapters.YamlAdapter
-open Itr.Features
+open Itr.Domain.Portfolios
+open Itr.Domain.Tasks
+open Itr.Domain.Backlogs
 open Itr.Cli.InteractivePrompts
 
 // ---------------------------------------------------------------------------
@@ -218,14 +220,14 @@ let ``5.2 non-TTY returns error with helpful message`` () =
 // 5.4 Missing Title without --interactive returns error
 //
 // These validate the guard logic in handleBacklogAdd at the use-case level:
-// we exercise Backlog.createBacklogItem which enforces both validations.
+// we exercise Backlogs.Create.execute which enforces both validations.
 // ---------------------------------------------------------------------------
 
 [<Fact>]
 let ``5.3 createBacklogItem with empty backlog-id returns error`` () =
     let productConfig = mkSingleRepoProductConfig()
 
-    let input: Backlog.CreateBacklogItemInput =
+    let input: Backlogs.Create.Input =
         { BacklogId = ""
           Title = "Some Title"
           Repos = ["main-repo"]
@@ -237,7 +239,7 @@ let ``5.3 createBacklogItem with empty backlog-id returns error`` () =
 
     let today = DateOnly(2026, 3, 22)
 
-    match Backlog.createBacklogItem productConfig input today with
+    match Backlogs.Create.execute productConfig input today with
     | Ok _ -> failwith "expected error for empty backlog id"
     | Error e ->
         // BacklogId.tryCreate rejects empty string
@@ -248,7 +250,7 @@ let ``5.3 createBacklogItem with empty backlog-id returns error`` () =
 let ``5.4 createBacklogItem with empty title returns MissingTitle error`` () =
     let productConfig = mkSingleRepoProductConfig()
 
-    let input: Backlog.CreateBacklogItemInput =
+    let input: Backlogs.Create.Input =
         { BacklogId = "some-id"
           Title = ""
           Repos = ["main-repo"]
@@ -260,7 +262,7 @@ let ``5.4 createBacklogItem with empty title returns MissingTitle error`` () =
 
     let today = DateOnly(2026, 3, 22)
 
-    match Backlog.createBacklogItem productConfig input today with
+    match Backlogs.Create.execute productConfig input today with
     | Ok _ -> failwith "expected MissingTitle error"
     | Error e -> Assert.Equal(MissingTitle, e)
 

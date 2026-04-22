@@ -3,7 +3,7 @@ module Itr.Tests.Communication.TaskApproveDomainTests
 open System
 open Xunit
 open Itr.Domain
-open Itr.Features
+open Itr.Domain.Tasks
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -29,7 +29,7 @@ let private mkTask id backlogId state =
 let ``approveTask transitions Planned task with plan to Approved`` () =
     let task = mkTask "feat-a" "my-feature" TaskState.Planned
 
-    match Task.approveTask task true with
+    match Tasks.Approve.execute { Task = task; PlanExists = true } with
     | Error e -> failwithf "expected Ok, got Error: %A" e
     | Ok (updatedTask, wasAlreadyApproved) ->
         Assert.Equal(TaskState.Approved, updatedTask.State)
@@ -39,7 +39,7 @@ let ``approveTask transitions Planned task with plan to Approved`` () =
 let ``approveTask re-approving Approved task is idempotent`` () =
     let task = mkTask "feat-a" "my-feature" TaskState.Approved
 
-    match Task.approveTask task true with
+    match Tasks.Approve.execute { Task = task; PlanExists = true } with
     | Error e -> failwithf "expected Ok, got Error: %A" e
     | Ok (updatedTask, wasAlreadyApproved) ->
         Assert.Equal(TaskState.Approved, updatedTask.State)
@@ -50,7 +50,7 @@ let ``approveTask returns InvalidTaskState for Planning task`` () =
     let taskId = TaskId.create "feat-a"
     let task = mkTask "feat-a" "my-feature" TaskState.Planning
 
-    match Task.approveTask task true with
+    match Tasks.Approve.execute { Task = task; PlanExists = true } with
     | Ok _ -> failwith "expected Error, got Ok"
     | Error (InvalidTaskState (id, current)) ->
         Assert.Equal(taskId, id)
@@ -62,7 +62,7 @@ let ``approveTask returns InvalidTaskState for InProgress task`` () =
     let taskId = TaskId.create "feat-a"
     let task = mkTask "feat-a" "my-feature" TaskState.InProgress
 
-    match Task.approveTask task true with
+    match Tasks.Approve.execute { Task = task; PlanExists = true } with
     | Ok _ -> failwith "expected Error, got Ok"
     | Error (InvalidTaskState (id, current)) ->
         Assert.Equal(taskId, id)
@@ -74,7 +74,7 @@ let ``approveTask returns MissingPlanArtifact for Planned task without plan`` ()
     let taskId = TaskId.create "feat-a"
     let task = mkTask "feat-a" "my-feature" TaskState.Planned
 
-    match Task.approveTask task false with
+    match Tasks.Approve.execute { Task = task; PlanExists = false } with
     | Ok _ -> failwith "expected Error, got Ok"
     | Error (MissingPlanArtifact id) ->
         Assert.Equal(taskId, id)

@@ -27,7 +27,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\features\Itr.Features.fsproj" />
     <ProjectReference Include="..\adapters\Itr.Adapters.fsproj" />
   </ItemGroup>
 

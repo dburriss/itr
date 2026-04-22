@@ -5,12 +5,14 @@ open System.IO
 open System.Text
 open Xunit
 open Itr.Domain
-open Itr.Features
+open Itr.Domain.Portfolios
+open Itr.Domain.Tasks
+open Itr.Domain.Backlogs
 open Itr.Adapters
 open Itr.Adapters.PortfolioAdapter
 
 module DomainPortfolio = Itr.Domain.Portfolio
-module FeaturePortfolio = Itr.Features.Portfolio
+module FeaturePortfolio = Itr.Domain.Portfolios.Query
 
 /// Test dependency implementation
 type TestDeps(portfolioPath: string) =
@@ -113,7 +115,7 @@ let ``full pipeline resolves to ResolvedProduct`` () =
     let deps = TestDeps(fixture.PortfolioPath)
 
     let resolved =
-        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        FeaturePortfolio.load (Some fixture.PortfolioPath)
         |> Effect.run deps
         |> Result.bind (fun portfolio -> FeaturePortfolio.resolveActiveProfile portfolio None |> Effect.run deps)
         |> Result.bind (fun profile -> FeaturePortfolio.resolveProduct profile "alpha" |> Effect.run deps)
@@ -158,7 +160,7 @@ let ``all products resolve with standalone coord root`` () =
     let deps = TestDeps(fixture.PortfolioPath)
 
     let profile =
-        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        FeaturePortfolio.load (Some fixture.PortfolioPath)
         |> Effect.run deps
         |> Result.bind (fun portfolio -> FeaturePortfolio.resolveActiveProfile portfolio None |> Effect.run deps)
         |> getResult
@@ -210,7 +212,7 @@ let ``duplicate registration returns DuplicateProductId error`` () =
         let deps = TestDeps(portfolioPath)
 
         let profile =
-            FeaturePortfolio.loadPortfolio (Some portfolioPath)
+            FeaturePortfolio.load (Some portfolioPath)
             |> Effect.run deps
             |> Result.bind (fun portfolio -> FeaturePortfolio.resolveActiveProfile portfolio None |> Effect.run deps)
             |> getResult
@@ -249,7 +251,7 @@ let ``bootstrapIfMissing creates file and parent directory when both absent`` ()
         let configPath = Path.Combine(root, "subdir", "itr.json")
         let deps = TestDeps(configPath)
 
-        let result = FeaturePortfolio.bootstrapIfMissing configPath |> Effect.run deps
+        let result = Portfolios.BootstrapIfMissing.execute configPath |> Effect.run deps
 
         match result with
         | Ok wasCreated ->
@@ -274,7 +276,7 @@ let ``bootstrapIfMissing is idempotent when file already exists`` () =
         File.WriteAllText(configPath, originalContent)
 
         let deps = TestDeps(configPath)
-        let result = FeaturePortfolio.bootstrapIfMissing configPath |> Effect.run deps
+        let result = Portfolios.BootstrapIfMissing.execute configPath |> Effect.run deps
 
         match result with
         | Ok wasCreated ->
@@ -294,7 +296,7 @@ let ``bootstrapIfMissing returns BootstrapWriteError when write fails`` () =
     let configPath = Path.Combine(root, "itr.json")
     let deps = FailingWriteFsDeps("Permission denied")
 
-    let result = FeaturePortfolio.bootstrapIfMissing configPath |> Effect.run deps
+    let result = Portfolios.BootstrapIfMissing.execute configPath |> Effect.run deps
 
     match result with
     | Error(BootstrapWriteError(path, msg)) ->
@@ -359,10 +361,10 @@ let ``writeConfig then readConfig round-trip preserves defaultProfile and all pr
 // ---------------------------------------------------------------------------
 
 /// Helper: run addProfile usecase and persist result via SaveConfig
-let private runAddProfile (deps: TestDeps) (configPath: string) (input: FeaturePortfolio.AddProfileInput) =
+let private runAddProfile (deps: TestDeps) (configPath: string) (input: Portfolios.AddProfile.Input) =
     let portfolioConfig = deps :> IPortfolioConfig
 
-    FeaturePortfolio.addProfile configPath input
+    Portfolios.AddProfile.execute configPath input
     |> Effect.run deps
     |> Result.bind (fun updatedPortfolio -> portfolioConfig.SaveConfig configPath updatedPortfolio)
 
@@ -378,7 +380,7 @@ let ``profile add writes new profile to itr.json`` () =
 
         let deps = TestDeps(configPath)
 
-        let input: FeaturePortfolio.AddProfileInput =
+        let input: Portfolios.AddProfile.Input =
             { Name = "my-work"; GitIdentity = None; SetAsDefault = false }
 
         match runAddProfile deps configPath input with
@@ -402,7 +404,7 @@ let ``profile add with --set-default updates defaultProfile`` () =
 
         let deps = TestDeps(configPath)
 
-        let input: FeaturePortfolio.AddProfileInput =
+        let input: Portfolios.AddProfile.Input =
             { Name = "work"; GitIdentity = None; SetAsDefault = true }
 
         match runAddProfile deps configPath input with
@@ -433,7 +435,7 @@ let ``profile add duplicate name returns error and file is unchanged`` () =
 
         let deps = TestDeps(configPath)
 
-        let input: FeaturePortfolio.AddProfileInput =
+        let input: Portfolios.AddProfile.Input =
             { Name = "work"; GitIdentity = None; SetAsDefault = false }
 
         match runAddProfile deps configPath input with
@@ -460,7 +462,7 @@ let ``profile add preserves existing profiles`` () =
 
         let deps = TestDeps(configPath)
 
-        let input: FeaturePortfolio.AddProfileInput =
+        let input: Portfolios.AddProfile.Input =
             { Name = "work"; GitIdentity = None; SetAsDefault = false }
 
         match runAddProfile deps configPath input with
@@ -494,7 +496,7 @@ let ``profile add git-email without git-name is caught by CLI validation`` () =
 
         // Simulate what the CLI does: if git-email given without git-name, we don't call usecase
         // Verify that adding with git-name only succeeds
-        let input: FeaturePortfolio.AddProfileInput =
+        let input: Portfolios.AddProfile.Input =
             { Name = "dev"
               GitIdentity = Some { Name = "Alice"; Email = None }
               SetAsDefault = false }
@@ -523,7 +525,7 @@ let ``profile add git-email without git-name is caught by CLI validation`` () =
 let private runSetDefaultProfile (deps: TestDeps) (configPath: string) (name: string) =
     let portfolioConfig = deps :> IPortfolioConfig
 
-    FeaturePortfolio.setDefaultProfile configPath { Name = name }
+    Portfolios.SetDefaultProfile.execute configPath { Name = name }
     |> Effect.run deps
     |> Result.bind (fun updatedPortfolio -> portfolioConfig.SaveConfig configPath updatedPortfolio)
 
@@ -627,7 +629,7 @@ let ``profile set-default local creates itr.json if absent and sets defaultProfi
         let deps = TestDeps(globalConfigPath)
 
         // Bootstrap the local config (simulates --local creating the file)
-        match FeaturePortfolio.bootstrapIfMissing localConfigPath |> Effect.run deps with
+        match Portfolios.BootstrapIfMissing.execute localConfigPath |> Effect.run deps with
         | Error e -> failwithf "bootstrap failed: %A" e
         | Ok _ ->
             // Now setDefaultProfile on the local config (which has empty profiles - use global for profile validation)
@@ -716,7 +718,7 @@ let ``profile set-default case-insensitive lookup succeeds and stores canonical 
 let private makeItrJson (portfolioPath: string) =
     File.WriteAllText(portfolioPath, """{"defaultProfile": "default", "profiles": {"default": {"products": []}}}""")
 
-let private defaultInitInput idStr (path: string) : Portfolio.InitProductInput =
+let private defaultInitInput idStr (path: string) : Portfolios.InitProduct.Input =
     { Id = idStr
       Path = path
       RepoId = "my-repo"
@@ -743,7 +745,7 @@ let ``initProduct creates all expected files and itr.json updated when registere
             { defaultInitInput "my-product" productPath with
                 RegisterProfile = Some "default" }
 
-        match FeaturePortfolio.initProduct portfolioPath input |> Effect.run deps with
+        match Portfolios.InitProduct.execute portfolioPath input |> Effect.run deps with
         | Error e -> failwithf "expected Ok, got %A" e
         | Ok result ->
             Assert.True(File.Exists(Path.Combine(productPath, "product.yaml")), "product.yaml missing")
@@ -794,7 +796,7 @@ let ``initProduct skip registration leaves itr.json unchanged`` () =
         let deps = TestDeps(portfolioPath)
         let input = defaultInitInput "my-product" productPath
 
-        match FeaturePortfolio.initProduct portfolioPath input |> Effect.run deps with
+        match Portfolios.InitProduct.execute portfolioPath input |> Effect.run deps with
         | Error e -> failwithf "expected Ok, got %A" e
         | Ok result ->
             Assert.True(result.IsNone, "expected None when RegisterProfile=None")
@@ -825,19 +827,19 @@ let ``initProduct duplicate product root in profile returns error and itr.json u
             { defaultInitInput "my-product" productPath with
                 RegisterProfile = Some "default" }
 
-        match FeaturePortfolio.initProduct portfolioPath input1 |> Effect.run deps with
+        match Portfolios.InitProduct.execute portfolioPath input1 |> Effect.run deps with
         | Error e -> failwithf "first init expected Ok, got %A" e
         | Ok _ ->
             let afterFirst = File.ReadAllText(portfolioPath)
 
             // Try to register the same root again
-            let regInput: Portfolio.RegisterProductInput =
+            let regInput: Portfolios.RegisterProduct.Input =
                 { Path = productPath
                   Profile = Some "default" }
 
             let deps2 = TestDeps(portfolioPath)
 
-            match Portfolio.registerProduct portfolioPath regInput |> Effect.run deps2 with
+            match Portfolios.RegisterProduct.execute portfolioPath regInput |> Effect.run deps2 with
             | Error _ ->
                 Assert.Equal(afterFirst, File.ReadAllText(portfolioPath))
             | Ok _ -> failwith "expected error for duplicate registration"
@@ -879,10 +881,10 @@ let ``registerProduct end-to-end adds product root to profile in itr.json`` () =
 
         let deps = TestDeps(portfolioPath)
 
-        let input: FeaturePortfolio.RegisterProductInput =
+        let input: Portfolios.RegisterProduct.Input =
             { Path = productRoot; Profile = None }
 
-        match FeaturePortfolio.registerProduct portfolioPath input |> Effect.run deps with
+        match Portfolios.RegisterProduct.execute portfolioPath input |> Effect.run deps with
         | Error e -> failwithf "expected Ok, got %A" e
         | Ok updatedPortfolio ->
             let portfolioConfig = deps :> IPortfolioConfig
@@ -918,11 +920,11 @@ let ``registerProduct duplicate canonical id returns DuplicateProductId and file
 
         let deps = TestDeps(portfolioPath)
 
-        let input: FeaturePortfolio.RegisterProductInput =
+        let input: Portfolios.RegisterProduct.Input =
             { Path = productRoot; Profile = None }
 
         // First registration
-        match FeaturePortfolio.registerProduct portfolioPath input |> Effect.run deps with
+        match Portfolios.RegisterProduct.execute portfolioPath input |> Effect.run deps with
         | Error e -> failwithf "first registration expected Ok, got %A" e
         | Ok updatedPortfolio ->
             (deps :> IPortfolioConfig).SaveConfig portfolioPath updatedPortfolio
@@ -932,7 +934,7 @@ let ``registerProduct duplicate canonical id returns DuplicateProductId and file
             let deps2 = TestDeps(portfolioPath)
 
             // Second registration — same canonical id
-            match FeaturePortfolio.registerProduct portfolioPath input |> Effect.run deps2 with
+            match Portfolios.RegisterProduct.execute portfolioPath input |> Effect.run deps2 with
             | Error(DuplicateProductId(profileName, productId)) ->
                 Assert.Equal("work", profileName)
                 Assert.Equal("my-product", productId)
@@ -973,10 +975,10 @@ let ``registerProduct round-trip preserves existing profiles and products`` () =
 
         let deps = TestDeps(portfolioPath)
 
-        let input: FeaturePortfolio.RegisterProductInput =
+        let input: Portfolios.RegisterProduct.Input =
             { Path = newProductRoot; Profile = None }
 
-        match FeaturePortfolio.registerProduct portfolioPath input |> Effect.run deps with
+        match Portfolios.RegisterProduct.execute portfolioPath input |> Effect.run deps with
         | Error e -> failwithf "expected Ok, got %A" e
         | Ok updatedPortfolio ->
             (deps :> IPortfolioConfig).SaveConfig portfolioPath updatedPortfolio
@@ -1068,7 +1070,7 @@ let ``profile resolution flag overrides ITR_PROFILE and defaultProfile`` () =
     let deps = TestDepsWithEnv(fixture.PortfolioPath, Map.ofList [ "ITR_PROFILE", "personal" ])
 
     let profile =
-        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        FeaturePortfolio.load (Some fixture.PortfolioPath)
         |> Effect.run deps
         |> Result.bind (fun portfolio -> FeaturePortfolio.resolveActiveProfile portfolio (Some "side") |> Effect.run deps)
         |> getResult
@@ -1082,7 +1084,7 @@ let ``profile resolution ITR_PROFILE overrides defaultProfile when flag absent``
     let deps = TestDepsWithEnv(fixture.PortfolioPath, Map.ofList [ "ITR_PROFILE", "personal" ])
 
     let profile =
-        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        FeaturePortfolio.load (Some fixture.PortfolioPath)
         |> Effect.run deps
         |> Result.bind (fun portfolio -> FeaturePortfolio.resolveActiveProfile portfolio None |> Effect.run deps)
         |> getResult
@@ -1096,7 +1098,7 @@ let ``profile resolution falls through to defaultProfile when flag and ITR_PROFI
     let deps = TestDepsWithEnv(fixture.PortfolioPath, Map.empty)
 
     let profile =
-        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        FeaturePortfolio.load (Some fixture.PortfolioPath)
         |> Effect.run deps
         |> Result.bind (fun portfolio -> FeaturePortfolio.resolveActiveProfile portfolio None |> Effect.run deps)
         |> getResult
@@ -1110,7 +1112,7 @@ let ``profile resolution whitespace-only flag falls through to ITR_PROFILE then 
     let deps = TestDepsWithEnv(fixture.PortfolioPath, Map.ofList [ "ITR_PROFILE", "side" ])
 
     let profile =
-        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        FeaturePortfolio.load (Some fixture.PortfolioPath)
         |> Effect.run deps
         |> Result.bind (fun portfolio -> FeaturePortfolio.resolveActiveProfile portfolio (Some "   ") |> Effect.run deps)
         |> getResult
@@ -1263,7 +1265,7 @@ let ``product list resolves products for explicit --profile flag`` () =
     let deps = TestDeps(fixture.PortfolioPath)
 
     let portfolio =
-        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        FeaturePortfolio.load (Some fixture.PortfolioPath)
         |> Effect.run deps
         |> getResult
 
@@ -1287,7 +1289,7 @@ let ``product list resolves products using default profile when no flag given`` 
     let deps = TestDeps(fixture.PortfolioPath)
 
     let portfolio =
-        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        FeaturePortfolio.load (Some fixture.PortfolioPath)
         |> Effect.run deps
         |> getResult
 
@@ -1311,7 +1313,7 @@ let ``product list returns error when specified profile is not found`` () =
     let deps = TestDeps(fixture.PortfolioPath)
 
     let portfolio =
-        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        FeaturePortfolio.load (Some fixture.PortfolioPath)
         |> Effect.run deps
         |> getResult
 
@@ -1332,7 +1334,7 @@ let ``product list returns error when portfolio has no profiles`` () =
         let deps = TestDeps(portfolioPath)
 
         let portfolio =
-            FeaturePortfolio.loadPortfolio (Some portfolioPath)
+            FeaturePortfolio.load (Some portfolioPath)
             |> Effect.run deps
             |> getResult
 
@@ -1348,7 +1350,7 @@ let ``product list empty product list succeeds without error`` () =
     let deps = TestDeps(fixture.PortfolioPath)
 
     let portfolio =
-        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        FeaturePortfolio.load (Some fixture.PortfolioPath)
         |> Effect.run deps
         |> getResult
 
@@ -1368,7 +1370,7 @@ let ``product list json output fields are correct`` () =
     let deps = TestDeps(fixture.PortfolioPath)
 
     let portfolio =
-        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        FeaturePortfolio.load (Some fixture.PortfolioPath)
         |> Effect.run deps
         |> getResult
 
@@ -1398,7 +1400,7 @@ let ``product list text output fields are correct`` () =
     let deps = TestDeps(fixture.PortfolioPath)
 
     let portfolio =
-        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        FeaturePortfolio.load (Some fixture.PortfolioPath)
         |> Effect.run deps
         |> getResult
 
@@ -1433,7 +1435,7 @@ let ``product list table output has correct product data`` () =
     let deps = TestDeps(fixture.PortfolioPath)
 
     let portfolio =
-        FeaturePortfolio.loadPortfolio (Some fixture.PortfolioPath)
+        FeaturePortfolio.load (Some fixture.PortfolioPath)
         |> Effect.run deps
         |> getResult
 

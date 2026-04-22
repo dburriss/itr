@@ -13,6 +13,18 @@
     <Compile Include="Product.fs" />
     <Compile Include="Task.fs" />
     <Compile Include="Backlog.fs" />
+    <Compile Include="Portfolios/Query.fs" />
+    <Compile Include="Portfolios/BootstrapIfMissing.fs" />
+    <Compile Include="Portfolios/SetDefaultProfile.fs" />
+    <Compile Include="Portfolios/AddProfile.fs" />
+    <Compile Include="Portfolios/RegisterProduct.fs" />
+    <Compile Include="Portfolios/InitProduct.fs" />
+    <Compile Include="Tasks/Query.fs" />
+    <Compile Include="Tasks/Take.fs" />
+    <Compile Include="Tasks/Plan.fs" />
+    <Compile Include="Tasks/Approve.fs" />
+    <Compile Include="Backlogs/Query.fs" />
+    <Compile Include="Backlogs/Create.fs" />
   </ItemGroup>
 
 </Project>
