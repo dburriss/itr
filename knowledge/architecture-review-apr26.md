@@ -105,6 +105,20 @@ See: https://devonburriss.me/fp-architecture/
 
 ---
 
+## Entry Point Routing Refactor Decision (2026-04-22)
+
+The `dispatch` function (~550 lines, `src/cli/Program.fs:1798`) uses deeply nested `TryGetResult` chains (4–6 levels) mixing routing, portfolio resolution, and handler dispatch. Decided to simplify using F# active patterns.
+
+**Approach (Option A — routing only):**
+- Define ~16 partial active patterns (e.g. `BacklogTake`, `TaskPlan`, `ProductInit`) each flattening one Argu command path from `ParseResults<CliArgs>` down to the leaf `ParseResults<XxxArgs>`
+- Extract a shared `resolvePortfolio` helper for the repeated `load → resolveActiveProfile` boilerplate (~8 lines repeated 8+ times today)
+- Replace `dispatch` body with a flat `match results with | BacklogTake args -> ... | TaskPlan args -> ...` (~40 lines)
+- Handler function bodies (`handleTaskList`, `handleBacklogTake`, etc.) remain untouched
+
+**Out of scope for this change:** output formatting, JSON serialization, and parse helpers inline in handlers — those are a separate future concern toward fully closing the Entry Point Purity gap.
+
+---
+
 ## Interfaces: Richer Than Spec
 
 | Spec | Actual |
