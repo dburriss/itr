@@ -1,0 +1,14 @@
+id: task-plan-duplicate-write
+title: task plan --ai appends duplicate plan instead of overwriting
+repos:
+- itr
+type: bug
+priority: 
+summary: |-
+  When running 'task plan --ai', if the AI generates a revised plan, it appends it to the existing plan.md rather than overwriting. Results in duplicate plan content in the same file.
+acceptance_criteria:
+- Running task plan --ai on a task with an existing plan.md overwrites it, not appends
+- Running task plan --ai on a task with no plan.md creates it correctly
+- plan.md never contains more than one plan document
+dependencies: 
+created_at: 2026-04-22
