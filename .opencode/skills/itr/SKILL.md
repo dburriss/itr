@@ -97,7 +97,7 @@ $ITR_BIN backlog add <backlog-id> --title <title> [options]
 | `<backlog-id>` | Yes | Slug ID for the new item |
 | `--title <title>` | Yes | Short title |
 | `--repo <repo-id>` | No | Repo to assign to. Required if product has multiple repos |
-| `--item-type <type>` | No | `feature` \| `bug` \| `chore` \| `spike` (default: `feature`) |
+| `--item-type <type>` | No | `feature` \| `bug` \| `chore` \| `refactor` \| `spike` (default: `feature`) |
 | `--summary <text>` | No | Longer description |
 | `--priority <label>` | No | e.g. `high`, `medium`, `low` |
 | `--depends-on <id>` | No | Dependency on another backlog item ID. Repeatable |
@@ -132,7 +132,7 @@ $ITR_BIN backlog list [options]
 |---|---|
 | `--view <view>` | Filter by view ID |
 | `--status <status>` | Filter: `created` \| `planning` \| `planned` \| `approved` \| `in-progress` \| `completed` \| `archived` |
-| `--type <type>` | Filter: `feature` \| `bug` \| `chore` \| `spike` |
+| `--type <type>` | Filter: `feature` \| `bug` \| `chore` \| `refactor` \| `spike` |
 | `--exclude <status>` | Exclude by status. Repeatable |
 | `--order-by <field>` | `created` \| `priority` \| `type` |
 | `--output <format>` | `table` (default) \| `json` \| `text` |
