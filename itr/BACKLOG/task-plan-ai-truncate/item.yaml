@@ -1,0 +1,24 @@
+id: task-plan-ai-truncate
+title: task plan --ai truncates plan.md mid-write
+repos:
+- itr
+type: bug
+priority: 
+summary: |-
+  When running 'task plan --ai', the generated plan is truncated mid-sentence at approximately line 19 of the output. The AI stream completes successfully (confirmed via --debug showing the full response), but the file written to disk is cut off. Affects both first-time writes and re-plans. The truncation point appears consistent (~line 19, mid-word), suggesting a fixed buffer or byte-limit issue in the file write path.
+
+  To reproduce (exact commands that triggered this):
+  1. itr backlog add program-slimdown --title "Slim Program.fs to pure routing" --item-type refactor --summary "<long multi-sentence summary>"
+  2. itr backlog take program-slimdown
+  3. itr task plan program-slimdown --ai
+  4. Observe that plan.md is cut off mid-sentence around line 19.
+  5. Run again to confirm: itr task plan program-slimdown --ai --debug — the full response is visible in the debug ACP stream but plan.md on disk remains truncated.
+  Note: does not reproduce on all tasks; appears linked to tasks with longer summaries/more acceptance criteria.
+acceptance_criteria:
+- 'task plan --ai writes the complete AI response to plan.md, not a truncated portion'
+- The full plan is written correctly on first-time write (no existing plan.md)
+- The full plan is written correctly on re-plan (existing plan.md present)
+- '--debug output and plan.md content match (no content lost between stream and disk)'
+dependencies:
+
+created_at: 2026-04-23
