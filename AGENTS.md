@@ -33,6 +33,12 @@
 
 - Run build and test before and after every change
 - Use TDD when building new features or fixing a bug
+- Prefer Acceptance tests for usecase behavior and Communication tests for IO,
+  mapping, and formatting contracts
+- Acceptance tests should use in-memory test doubles where practical so they
+  stay fast and reliable
+- Avoid structural assertions on collaborator calls or internal orchestration
+  in usecase tests
 - Build: `dotnet build`
 - Test: `dotnet test`
 - Clean: `dotnet clean`
