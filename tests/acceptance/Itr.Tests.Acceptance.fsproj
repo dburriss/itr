@@ -7,12 +7,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="TestDoubles.fs" />
+    <Compile Include="TestBuilders.fs" />
     <Compile Include="PortfolioAcceptanceTests.fs" />
     <Compile Include="TaskAcceptanceTests.fs" />
     <Compile Include="TaskListAcceptanceTests.fs" />
     <Compile Include="TaskInfoAcceptanceTests.fs" />
     <Compile Include="TaskPlanAcceptanceTests.fs" />
     <Compile Include="TaskApproveAcceptanceTests.fs" />
+    <Compile Include="TaskApproveInMemoryTests.fs" />
     <Compile Include="BacklogAcceptanceTests.fs" />
     <Compile Include="BacklogAddInteractiveTests.fs" />
     <Compile Include="YamlAdapterTests.fs" />
