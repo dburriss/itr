@@ -8,7 +8,24 @@
 
   <ItemGroup>
     <Compile Include="CliParsers.fs" />
+    <Compile Include="CliArgs.fs" />
+    <Compile Include="AppDeps.fs" />
+    <Compile Include="ErrorFormatting.fs" />
+    <Compile Include="Shared/Rendering.fs" />
+    <Compile Include="Tasks/Approve.fs" />
+    <Compile Include="Tasks/Info.fs" />
+    <Compile Include="Tasks/List.fs" />
+    <Compile Include="Tasks/Plan.fs" />
+    <Compile Include="Portfolios/ProfileList.fs" />
+    <Compile Include="Portfolios/ProductList.fs" />
+    <Compile Include="Portfolios/ProductInfo.fs" />
+    <Compile Include="Backlogs/Info.fs" />
+    <Compile Include="Backlogs/List.fs" />
+    <Compile Include="Views/List.fs" />
     <Compile Include="InteractivePrompts.fs" />
+    <Compile Include="Backlogs/Take.fs" />
+    <Compile Include="Backlogs/Add.fs" />
+    <Compile Include="Portfolios/ProductRegister.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
