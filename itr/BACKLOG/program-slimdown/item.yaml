@@ -1,0 +1,19 @@
+id: program-slimdown
+title: Slim Program.fs to pure routing
+repos:
+- itr
+type: refactor
+priority:
+summary: |-
+  Reduce src/cli/Program.fs from ~1666 lines to ~400 lines by extracting Argu DUs to CliArgs.fs, composition root to AppDeps.fs, error formatters to ErrorFormatting.fs, tightening usecase deps with intersection constraints, building in-memory test infrastructure, pushing handler logic into effectful usecases with vertical-slice CLI files, and finally inlining trivialised handlers into dispatch arms.
+acceptance_criteria:
+- 'Change 1 complete: CliArgs.fs, AppDeps.fs, ErrorFormatting.fs extracted; Program.fs ~1200 lines; build and tests green'
+- 'Change 2 complete: all existing usecases use intersection-constraint deps signatures; no behaviour change; tests green'
+- 'Change 3 complete: tests/InMemory/ contains InMemoryFileSystem, InMemoryTaskStore, InMemoryBacklogStore, InMemoryViewStore, InMemoryPortfolioConfig, InMemoryProductConfig, InMemoryAgentHarness, and Fakes builder helpers; one usecase test converted as pattern reference'
+- 'Change 4 complete: all 13 handlers extracted to effectful usecases with vertical-slice cli/<Concept>/<Op>.fs files; each handler replaced by ~3-line dispatch entry; unit tests added for each; build and tests green'
+- 'Change 5 complete: trivialised handlers inlined into dispatch arms; named handleXxx functions removed; Program.fs ~400 lines'
+- 'Program.fs final state: opens, active patterns, resolvePortfolio/resolveProduct helpers, flat dispatch, main only'
+- No Argu ParseResults passed into domain modules; CLI layer owns toInput adapters
+- Interactive prompt paths (backlog add --interactive, product init prompts) remain in CLI layer
+dependencies:
+created_at: 2026-04-23
