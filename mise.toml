@@ -11,7 +11,7 @@ ITR_BIN = "src/cli/bin/Debug/net10.0/Itr.Cli"
 
 # Define tasks for building, testing, formatting, and running the project.
 [tasks.build]
-run = "dotnet build"
+run = "dotnet build --no-incremental -warnaserror"
 description = "Build the project using dotnet build."
 
 [tasks.test]
