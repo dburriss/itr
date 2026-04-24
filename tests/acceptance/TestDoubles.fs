@@ -57,7 +57,7 @@ type InMemoryTaskStore() =
         member _.ListArchivedTasks _coordRoot _backlogId = Ok []
 
         member this.WriteTask coordRoot task =
-            (this :> InMemoryTaskStore).Add coordRoot task
+            this.Add coordRoot task
             Ok()
 
         member _.ArchiveTask _coordRoot _backlogId _taskId _date = Ok()
@@ -95,7 +95,7 @@ type InMemoryBacklogStore() =
             items.ContainsKey(BacklogId.value backlogId)
 
         member this.WriteBacklogItem coordRoot item =
-            (this :> InMemoryBacklogStore).Add coordRoot item
+            this.Add coordRoot item
             Ok()
 
         member _.ListBacklogItems _coordRoot =
