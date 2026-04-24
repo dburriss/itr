@@ -20,7 +20,11 @@ module AcpMessages =
     /// Build an ACP `session/new` request with the given cwd.
     let buildSessionNew (id: int) (cwd: string) : string =
         let escapedCwd = cwd.Replace("\\", "\\\\").Replace("\"", "\\\"")
-        sprintf """{"jsonrpc":"2.0","id":%d,"method":"session/new","params":{"cwd":"%s","mcpServers":[]}}""" id escapedCwd
+
+        sprintf
+            """{"jsonrpc":"2.0","id":%d,"method":"session/new","params":{"cwd":"%s","mcpServers":[]}}"""
+            id
+            escapedCwd
 
     /// Build an ACP `session/prompt` request with the given session id and prompt text.
     let buildSessionPrompt (id: int) (sessionId: string) (prompt: string) : string =
@@ -31,10 +35,14 @@ module AcpMessages =
                 .Replace("\n", "\\n")
                 .Replace("\r", "\\r")
                 .Replace("\t", "\\t")
+
         let escapedSessionId = sessionId.Replace("\\", "\\\\").Replace("\"", "\\\"")
+
         sprintf
             """{"jsonrpc":"2.0","id":%d,"method":"session/prompt","params":{"sessionId":"%s","prompt":[{"type":"text","text":"%s"}]}}"""
-            id escapedSessionId escapedPrompt
+            id
+            escapedSessionId
+            escapedPrompt
 
     // ---------------------------------------------------------------------------
     // Parsing helpers (pure functions)
@@ -50,21 +58,21 @@ module AcpMessages =
             // Check for JSON-RPC error
             if root.TryGetProperty("error", ref Unchecked.defaultof<_>) then
                 let errEl = root.GetProperty("error")
+
                 let msg =
                     if errEl.TryGetProperty("message", ref Unchecked.defaultof<_>) then
                         errEl.GetProperty("message").GetString()
                     else
                         json
+
                 Error $"ACP session/new error: {msg}"
             else
                 match root.TryGetProperty("result") with
                 | true, resultEl ->
                     match resultEl.TryGetProperty("sessionId") with
                     | true, sidEl -> Ok(sidEl.GetString())
-                    | _ ->
-                        Error $"ACP session/new response missing 'result.sessionId': {json}"
-                | _ ->
-                    Error $"ACP session/new response missing 'result': {json}"
+                    | _ -> Error $"ACP session/new response missing 'result.sessionId': {json}"
+                | _ -> Error $"ACP session/new response missing 'result': {json}"
         with ex ->
             Error $"Failed to parse ACP session/new response: {ex.Message}"
 
@@ -89,7 +97,11 @@ module AcpMessages =
                                 match contentEl.TryGetProperty("text") with
                                 | true, textEl ->
                                     let text = textEl.GetString()
-                                    if not (isNull text) && text.Length > 0 then Some text else None
+
+                                    if not (isNull text) && text.Length > 0 then
+                                        Some text
+                                    else
+                                        None
                                 | _ -> None
                             | _ -> None
                         | _ -> None
@@ -121,6 +133,7 @@ module AcpMessages =
                 match root.TryGetProperty("id") with
                 | true, idEl -> idEl.ValueKind <> JsonValueKind.Null
                 | _ -> false
+
             let hasResult = fst (root.TryGetProperty("result"))
             let hasError = fst (root.TryGetProperty("error"))
             hasId && (hasResult || hasError)
@@ -147,7 +160,13 @@ type AcpHarnessAdapter(command: string, args: string list, cwd: string) =
             psi.RedirectStandardInput <- true
             psi.RedirectStandardOutput <- true
             psi.RedirectStandardError <- true
-            psi.WorkingDirectory <- if String.IsNullOrWhiteSpace(cwd) then Environment.CurrentDirectory else cwd
+
+            psi.WorkingDirectory <-
+                if String.IsNullOrWhiteSpace(cwd) then
+                    Environment.CurrentDirectory
+                else
+                    cwd
+
             psi.StandardInputEncoding <- Encoding.UTF8
             psi.StandardOutputEncoding <- Encoding.UTF8
 
@@ -167,9 +186,11 @@ type AcpHarnessAdapter(command: string, args: string list, cwd: string) =
 
                     // Drain stderr asynchronously so it does not block the process
                     let stderrLines = System.Collections.Concurrent.ConcurrentQueue<string>()
+
                     let stderrTask =
                         System.Threading.Tasks.Task.Run(fun () ->
                             let mutable line = stderr.ReadLine()
+
                             while not (isNull line) do
                                 stderrLines.Enqueue(line)
                                 line <- stderr.ReadLine())
@@ -182,6 +203,7 @@ type AcpHarnessAdapter(command: string, args: string list, cwd: string) =
                     let readLine () =
                         // Use a 120-second timeout via async
                         let readTask = System.Threading.Tasks.Task.Run(fun () -> stdout.ReadLine())
+
                         if readTask.Wait(TimeSpan.FromSeconds(120.0)) then
                             readTask.Result
                         else
@@ -193,6 +215,7 @@ type AcpHarnessAdapter(command: string, args: string list, cwd: string) =
 
                     // Read initialize response
                     let initResp = readLine ()
+
                     if isNull initResp then
                         p.Kill()
                         Error "ACP agent timed out waiting for initialize response"
@@ -204,6 +227,7 @@ type AcpHarnessAdapter(command: string, args: string list, cwd: string) =
                         writeLine sessionNewMsg
 
                         let sessionNewResp = readLine ()
+
                         if isNull sessionNewResp then
                             p.Kill()
                             Error "ACP agent timed out waiting for session/new response"
@@ -227,6 +251,7 @@ type AcpHarnessAdapter(command: string, args: string list, cwd: string) =
 
                                 while not finished do
                                     let line = readLine ()
+
                                     if isNull line then
                                         finished <- true
                                         errorMsg <- Some "ACP agent timed out waiting for session/prompt response"
@@ -252,6 +277,7 @@ type AcpHarnessAdapter(command: string, args: string list, cwd: string) =
                                 // Drain remaining stderr lines for debug output
                                 stderrTask.Wait(TimeSpan.FromSeconds(1.0)) |> ignore
                                 let mutable stderrLine = ""
+
                                 while stderrLines.TryDequeue(&stderrLine) do
                                     debugPrint debug "stderr" stderrLine
 
@@ -261,5 +287,9 @@ type AcpHarnessAdapter(command: string, args: string list, cwd: string) =
                                 | Some e -> Error e
                                 | None -> Ok(accumulated.ToString())
                 with ex ->
-                    try p.Kill() with _ -> ()
+                    try
+                        p.Kill()
+                    with _ ->
+                        ()
+
                     Error $"ACP adapter error: {ex.Message}"

@@ -11,12 +11,15 @@ module ProductLocator =
     let locateProductRoot (fs: IFileSystem) (startDir: string) : string option =
         let rec tryFind (dir: string) =
             let candidate = Path.Combine(dir, "product.yaml")
+
             if fs.FileExists candidate then
                 Some dir
             else
                 let parent = Path.GetDirectoryName(dir)
+
                 if isNull parent || parent = dir then
                     None
                 else
                     tryFind parent
+
         tryFind startDir

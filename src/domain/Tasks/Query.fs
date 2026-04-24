@@ -34,13 +34,20 @@ let list (tasks: (ItrTask * string) list) : TaskSummary list =
             | TaskState.Validated
             | TaskState.Archived -> true
             | _ -> false
+
         let planMdPath =
             let dir = Path.GetDirectoryName(taskYamlPath)
-            if isNull dir || dir = "" then None
+
+            if isNull dir || dir = "" then
+                None
             else
                 let candidate = Path.Combine(dir, "plan.md")
                 if File.Exists(candidate) then Some candidate else None
-        { Task = task; PlanApproved = planApproved; TaskYamlPath = taskYamlPath; PlanMdPath = planMdPath })
+
+        { Task = task
+          PlanApproved = planApproved
+          TaskYamlPath = taskYamlPath
+          PlanMdPath = planMdPath })
 
 type FilterInput =
     { BacklogId: BacklogId option
@@ -56,14 +63,17 @@ let filter (input: FilterInput) (summaries: TaskSummary list) : TaskSummary list
             match input.BacklogId with
             | None -> true
             | Some bid -> s.Task.SourceBacklog = bid
+
         let matchesRepo =
             match input.Repo with
             | None -> true
             | Some rid -> s.Task.Repo = rid
+
         let matchesState =
             match input.State with
             | None -> true
             | Some st -> s.Task.State = st
+
         let notExcluded = not (List.contains s.Task.State input.Exclude)
         matchesBacklog && matchesRepo && matchesState && notExcluded)
 
@@ -88,7 +98,9 @@ let getDetail (input: DetailInput) : Result<TaskDetail, TaskError> =
 
         let planMdPath =
             let dir = Path.GetDirectoryName(input.TaskYamlPath)
-            if isNull dir || dir = "" then None
+
+            if isNull dir || dir = "" then
+                None
             else
                 let candidate = Path.Combine(dir, "plan.md")
                 if File.Exists(candidate) then Some candidate else None
@@ -98,7 +110,10 @@ let getDetail (input: DetailInput) : Result<TaskDetail, TaskError> =
         let siblings =
             input.AllTasks
             |> List.filter (fun t -> t.Id <> input.TaskId && t.SourceBacklog = task.SourceBacklog)
-            |> List.map (fun t -> { Id = t.Id; Repo = t.Repo; State = t.State })
+            |> List.map (fun t ->
+                { Id = t.Id
+                  Repo = t.Repo
+                  State = t.State })
 
         Ok
             { Task = task

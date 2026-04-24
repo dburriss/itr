@@ -40,8 +40,12 @@ type TestDeps(portfolioPath: string) =
 
     interface IPortfolioConfig with
         member _.ConfigPath() = portfolioPath
-        member _.LoadConfig path = readConfig (fsAdapter :> IFileSystem) homeDir path
-        member _.SaveConfig path portfolio = writeConfig (fsAdapter :> IFileSystem) homeDir path portfolio
+
+        member _.LoadConfig path =
+            readConfig (fsAdapter :> IFileSystem) homeDir path
+
+        member _.SaveConfig path portfolio =
+            writeConfig (fsAdapter :> IFileSystem) homeDir path portfolio
 
     interface IProductConfig with
         member _.LoadProductConfig root =
@@ -310,8 +314,7 @@ let ``bootstrapIfMissing returns BootstrapWriteError when write fails`` () =
 
 [<Fact>]
 let ``writeConfig then readConfig round-trip preserves defaultProfile and all profiles`` () =
-    let root =
-        Path.Combine(Path.GetTempPath(), $"itr-roundtrip-{Guid.NewGuid():N}")
+    let root = Path.Combine(Path.GetTempPath(), $"itr-roundtrip-{Guid.NewGuid():N}")
 
     try
         Directory.CreateDirectory(root) |> ignore
@@ -325,11 +328,20 @@ let ``writeConfig then readConfig round-trip preserves defaultProfile and all pr
                 [ { Name = ProfileName.create "work"
                     Products = []
                     GitIdentity = None
-                    AgentConfig = { Protocol = "opencode-http"; Command = "opencode"; Args = [] } }
+                    AgentConfig =
+                      { Protocol = "opencode-http"
+                        Command = "opencode"
+                        Args = [] } }
                   { Name = ProfileName.create "personal"
                     Products = []
-                    GitIdentity = Some { Name = "Alice"; Email = Some "alice@example.com" }
-                    AgentConfig = { Protocol = "opencode-http"; Command = "opencode"; Args = [] } } ]
+                    GitIdentity =
+                      Some
+                          { Name = "Alice"
+                            Email = Some "alice@example.com" }
+                    AgentConfig =
+                      { Protocol = "opencode-http"
+                        Command = "opencode"
+                        Args = [] } } ]
             |> Result.defaultWith (fun e -> failwithf "failed to build test portfolio: %A" e)
 
         match writeConfig fs homeDir configPath portfolio with
@@ -350,8 +362,7 @@ let ``writeConfig then readConfig round-trip preserves defaultProfile and all pr
 
                     match loaded.Profiles |> Map.tryFind (ProfileName.create name) with
                     | None -> failwithf "profile '%s' not found after round-trip" name
-                    | Some loadedProfile ->
-                        Assert.Equal(kvp.Value.GitIdentity, loadedProfile.GitIdentity)
+                    | Some loadedProfile -> Assert.Equal(kvp.Value.GitIdentity, loadedProfile.GitIdentity)
     finally
         if Directory.Exists(root) then
             Directory.Delete(root, true)
@@ -370,8 +381,7 @@ let private runAddProfile (deps: TestDeps) (configPath: string) (input: Portfoli
 
 [<Fact>]
 let ``profile add writes new profile to itr.json`` () =
-    let root =
-        Path.Combine(Path.GetTempPath(), $"itr-profiles-add-{Guid.NewGuid():N}")
+    let root = Path.Combine(Path.GetTempPath(), $"itr-profiles-add-{Guid.NewGuid():N}")
 
     try
         Directory.CreateDirectory(root) |> ignore
@@ -381,7 +391,9 @@ let ``profile add writes new profile to itr.json`` () =
         let deps = TestDeps(configPath)
 
         let input: Portfolios.AddProfile.Input =
-            { Name = "my-work"; GitIdentity = None; SetAsDefault = false }
+            { Name = "my-work"
+              GitIdentity = None
+              SetAsDefault = false }
 
         match runAddProfile deps configPath input with
         | Error e -> failwithf "expected Ok, got %A" e
@@ -405,7 +417,9 @@ let ``profile add with --set-default updates defaultProfile`` () =
         let deps = TestDeps(configPath)
 
         let input: Portfolios.AddProfile.Input =
-            { Name = "work"; GitIdentity = None; SetAsDefault = true }
+            { Name = "work"
+              GitIdentity = None
+              SetAsDefault = true }
 
         match runAddProfile deps configPath input with
         | Error e -> failwithf "expected Ok, got %A" e
@@ -414,20 +428,19 @@ let ``profile add with --set-default updates defaultProfile`` () =
 
             match portfolioConfig.LoadConfig configPath with
             | Error e -> failwithf "readConfig failed: %A" e
-            | Ok loaded ->
-                Assert.Equal(Some "work", loaded.DefaultProfile |> Option.map ProfileName.value)
+            | Ok loaded -> Assert.Equal(Some "work", loaded.DefaultProfile |> Option.map ProfileName.value)
     finally
         if Directory.Exists(root) then
             Directory.Delete(root, true)
 
 [<Fact>]
 let ``profile add duplicate name returns error and file is unchanged`` () =
-    let root =
-        Path.Combine(Path.GetTempPath(), $"itr-profiles-dup-{Guid.NewGuid():N}")
+    let root = Path.Combine(Path.GetTempPath(), $"itr-profiles-dup-{Guid.NewGuid():N}")
 
     try
         Directory.CreateDirectory(root) |> ignore
         let configPath = Path.Combine(root, "itr.json")
+
         let originalContent =
             """{"defaultProfile": "work", "profiles": {"work": {"products": []}}}"""
 
@@ -436,7 +449,9 @@ let ``profile add duplicate name returns error and file is unchanged`` () =
         let deps = TestDeps(configPath)
 
         let input: Portfolios.AddProfile.Input =
-            { Name = "work"; GitIdentity = None; SetAsDefault = false }
+            { Name = "work"
+              GitIdentity = None
+              SetAsDefault = false }
 
         match runAddProfile deps configPath input with
         | Error(DuplicateProfileName name) ->
@@ -455,15 +470,14 @@ let ``profile add preserves existing profiles`` () =
     try
         Directory.CreateDirectory(root) |> ignore
         let configPath = Path.Combine(root, "itr.json")
-        File.WriteAllText(
-            configPath,
-            """{"defaultProfile": "personal", "profiles": {"personal": {"products": []}}}"""
-        )
+        File.WriteAllText(configPath, """{"defaultProfile": "personal", "profiles": {"personal": {"products": []}}}""")
 
         let deps = TestDeps(configPath)
 
         let input: Portfolios.AddProfile.Input =
-            { Name = "work"; GitIdentity = None; SetAsDefault = false }
+            { Name = "work"
+              GitIdentity = None
+              SetAsDefault = false }
 
         match runAddProfile deps configPath input with
         | Error e -> failwithf "expected Ok, got %A" e
@@ -511,8 +525,7 @@ let ``profile add git-email without git-name is caught by CLI validation`` () =
             | Ok loaded ->
                 match loaded.Profiles |> Map.tryFind (ProfileName.create "dev") with
                 | None -> failwith "profile 'dev' not found"
-                | Some p ->
-                    Assert.Equal(Some { Name = "Alice"; Email = None }, p.GitIdentity)
+                | Some p -> Assert.Equal(Some { Name = "Alice"; Email = None }, p.GitIdentity)
     finally
         if Directory.Exists(root) then
             Directory.Delete(root, true)
@@ -537,6 +550,7 @@ let ``profile set-default updates defaultProfile in global itr.json`` () =
     try
         Directory.CreateDirectory(root) |> ignore
         let configPath = Path.Combine(root, "itr.json")
+
         File.WriteAllText(
             configPath,
             """{"defaultProfile": "personal", "profiles": {"work": {"products": []}, "personal": {"products": []}}}"""
@@ -551,8 +565,7 @@ let ``profile set-default updates defaultProfile in global itr.json`` () =
 
             match portfolioConfig.LoadConfig configPath with
             | Error e -> failwithf "LoadConfig failed: %A" e
-            | Ok loaded ->
-                Assert.Equal(Some "work", loaded.DefaultProfile |> Option.map ProfileName.value)
+            | Ok loaded -> Assert.Equal(Some "work", loaded.DefaultProfile |> Option.map ProfileName.value)
     finally
         if Directory.Exists(root) then
             Directory.Delete(root, true)
@@ -565,10 +578,7 @@ let ``profile set-default returns ProfileNotFound for non-existent profile`` () 
     try
         Directory.CreateDirectory(root) |> ignore
         let configPath = Path.Combine(root, "itr.json")
-        File.WriteAllText(
-            configPath,
-            """{"defaultProfile": "work", "profiles": {"work": {"products": []}}}"""
-        )
+        File.WriteAllText(configPath, """{"defaultProfile": "work", "profiles": {"work": {"products": []}}}""")
 
         let deps = TestDeps(configPath)
 
@@ -587,6 +597,7 @@ let ``profile set-default preserves other profiles when updating default`` () =
     try
         Directory.CreateDirectory(root) |> ignore
         let configPath = Path.Combine(root, "itr.json")
+
         File.WriteAllText(
             configPath,
             """{"defaultProfile": "work", "profiles": {"work": {"products": []}, "personal": {"products": []}}}"""
@@ -618,10 +629,7 @@ let ``profile set-default local creates itr.json if absent and sets defaultProfi
         Directory.CreateDirectory(root) |> ignore
         // Global config has the profile
         let globalConfigPath = Path.Combine(root, "global.json")
-        File.WriteAllText(
-            globalConfigPath,
-            """{"defaultProfile": null, "profiles": {"work": {"products": []}}}"""
-        )
+        File.WriteAllText(globalConfigPath, """{"defaultProfile": null, "profiles": {"work": {"products": []}}}""")
 
         // Local config does NOT exist yet
         let localConfigPath = Path.Combine(root, "local.json")
@@ -635,10 +643,7 @@ let ``profile set-default local creates itr.json if absent and sets defaultProfi
             // Now setDefaultProfile on the local config (which has empty profiles - use global for profile validation)
             // For the local path test, we need the profile in the local config to set default.
             // Write a minimal local config with the profile already.
-            File.WriteAllText(
-                localConfigPath,
-                """{"defaultProfile": null, "profiles": {"work": {"products": []}}}"""
-            )
+            File.WriteAllText(localConfigPath, """{"defaultProfile": null, "profiles": {"work": {"products": []}}}""")
 
             let localDeps = TestDeps(localConfigPath)
 
@@ -649,8 +654,7 @@ let ``profile set-default local creates itr.json if absent and sets defaultProfi
 
                 match portfolioConfig.LoadConfig localConfigPath with
                 | Error e -> failwithf "LoadConfig failed: %A" e
-                | Ok loaded ->
-                    Assert.Equal(Some "work", loaded.DefaultProfile |> Option.map ProfileName.value)
+                | Ok loaded -> Assert.Equal(Some "work", loaded.DefaultProfile |> Option.map ProfileName.value)
     finally
         if Directory.Exists(root) then
             Directory.Delete(root, true)
@@ -694,10 +698,7 @@ let ``profile set-default case-insensitive lookup succeeds and stores canonical 
     try
         Directory.CreateDirectory(root) |> ignore
         let configPath = Path.Combine(root, "itr.json")
-        File.WriteAllText(
-            configPath,
-            """{"defaultProfile": null, "profiles": {"work": {"products": []}}}"""
-        )
+        File.WriteAllText(configPath, """{"defaultProfile": null, "profiles": {"work": {"products": []}}}""")
 
         let deps = TestDeps(configPath)
 
@@ -708,8 +709,7 @@ let ``profile set-default case-insensitive lookup succeeds and stores canonical 
 
             match portfolioConfig.LoadConfig configPath with
             | Error e -> failwithf "LoadConfig failed: %A" e
-            | Ok loaded ->
-                Assert.Equal(Some "work", loaded.DefaultProfile |> Option.map ProfileName.value)
+            | Ok loaded -> Assert.Equal(Some "work", loaded.DefaultProfile |> Option.map ProfileName.value)
     finally
         if Directory.Exists(root) then
             Directory.Delete(root, true)
@@ -728,8 +728,7 @@ let private defaultInitInput idStr (path: string) : Portfolios.InitProduct.Input
 
 [<Fact>]
 let ``initProduct creates all expected files and itr.json updated when registered`` () =
-    let root =
-        Path.Combine(Path.GetTempPath(), $"itr-init-product-{Guid.NewGuid():N}")
+    let root = Path.Combine(Path.GetTempPath(), $"itr-init-product-{Guid.NewGuid():N}")
 
     try
         Directory.CreateDirectory(root) |> ignore
@@ -781,8 +780,7 @@ let ``initProduct creates all expected files and itr.json updated when registere
 
 [<Fact>]
 let ``initProduct skip registration leaves itr.json unchanged`` () =
-    let root =
-        Path.Combine(Path.GetTempPath(), $"itr-init-noreg-{Guid.NewGuid():N}")
+    let root = Path.Combine(Path.GetTempPath(), $"itr-init-noreg-{Guid.NewGuid():N}")
 
     try
         Directory.CreateDirectory(root) |> ignore
@@ -808,8 +806,7 @@ let ``initProduct skip registration leaves itr.json unchanged`` () =
 
 [<Fact>]
 let ``initProduct duplicate product root in profile returns error and itr.json unchanged`` () =
-    let root =
-        Path.Combine(Path.GetTempPath(), $"itr-init-dup-{Guid.NewGuid():N}")
+    let root = Path.Combine(Path.GetTempPath(), $"itr-init-dup-{Guid.NewGuid():N}")
 
     try
         Directory.CreateDirectory(root) |> ignore
@@ -840,8 +837,7 @@ let ``initProduct duplicate product root in profile returns error and itr.json u
             let deps2 = TestDeps(portfolioPath)
 
             match Portfolios.RegisterProduct.execute portfolioPath regInput |> Effect.run deps2 with
-            | Error _ ->
-                Assert.Equal(afterFirst, File.ReadAllText(portfolioPath))
+            | Error _ -> Assert.Equal(afterFirst, File.ReadAllText(portfolioPath))
             | Ok _ -> failwith "expected error for duplicate registration"
     finally
         if Directory.Exists(root) then
@@ -860,15 +856,11 @@ let private makePortfolioJson (portfolioPath: string) (profileName: string) =
 
 /// Helper: write product.yaml with given id
 let private writeProductYamlWithId (dir: string) (id: string) =
-    File.WriteAllText(
-        Path.Combine(dir, "product.yaml"),
-        $"id: {id}\ncoordination:\n  mode: standalone\n  path: .itr\n"
-    )
+    File.WriteAllText(Path.Combine(dir, "product.yaml"), $"id: {id}\ncoordination:\n  mode: standalone\n  path: .itr\n")
 
 [<Fact>]
 let ``registerProduct end-to-end adds product root to profile in itr.json`` () =
-    let root =
-        Path.Combine(Path.GetTempPath(), $"itr-reg-e2e-{Guid.NewGuid():N}")
+    let root = Path.Combine(Path.GetTempPath(), $"itr-reg-e2e-{Guid.NewGuid():N}")
 
     try
         Directory.CreateDirectory(root) |> ignore
@@ -881,8 +873,7 @@ let ``registerProduct end-to-end adds product root to profile in itr.json`` () =
 
         let deps = TestDeps(portfolioPath)
 
-        let input: Portfolios.RegisterProduct.Input =
-            { Path = productRoot; Profile = None }
+        let input: Portfolios.RegisterProduct.Input = { Path = productRoot; Profile = None }
 
         match Portfolios.RegisterProduct.execute portfolioPath input |> Effect.run deps with
         | Error e -> failwithf "expected Ok, got %A" e
@@ -906,8 +897,7 @@ let ``registerProduct end-to-end adds product root to profile in itr.json`` () =
 
 [<Fact>]
 let ``registerProduct duplicate canonical id returns DuplicateProductId and file unchanged`` () =
-    let root =
-        Path.Combine(Path.GetTempPath(), $"itr-reg-dup2-{Guid.NewGuid():N}")
+    let root = Path.Combine(Path.GetTempPath(), $"itr-reg-dup2-{Guid.NewGuid():N}")
 
     try
         Directory.CreateDirectory(root) |> ignore
@@ -920,8 +910,7 @@ let ``registerProduct duplicate canonical id returns DuplicateProductId and file
 
         let deps = TestDeps(portfolioPath)
 
-        let input: Portfolios.RegisterProduct.Input =
-            { Path = productRoot; Profile = None }
+        let input: Portfolios.RegisterProduct.Input = { Path = productRoot; Profile = None }
 
         // First registration
         match Portfolios.RegisterProduct.execute portfolioPath input |> Effect.run deps with
@@ -946,8 +935,7 @@ let ``registerProduct duplicate canonical id returns DuplicateProductId and file
 
 [<Fact>]
 let ``registerProduct round-trip preserves existing profiles and products`` () =
-    let root =
-        Path.Combine(Path.GetTempPath(), $"itr-reg-roundtrip-{Guid.NewGuid():N}")
+    let root = Path.Combine(Path.GetTempPath(), $"itr-reg-roundtrip-{Guid.NewGuid():N}")
 
     try
         Directory.CreateDirectory(root) |> ignore
@@ -976,7 +964,8 @@ let ``registerProduct round-trip preserves existing profiles and products`` () =
         let deps = TestDeps(portfolioPath)
 
         let input: Portfolios.RegisterProduct.Input =
-            { Path = newProductRoot; Profile = None }
+            { Path = newProductRoot
+              Profile = None }
 
         match Portfolios.RegisterProduct.execute portfolioPath input |> Effect.run deps with
         | Error e -> failwithf "expected Ok, got %A" e
@@ -997,7 +986,9 @@ let ``registerProduct round-trip preserves existing profiles and products`` () =
             Assert.Equal(2, workProfile.Products.Length)
 
             // existing product still present
-            let roots = workProfile.Products |> List.map (fun p -> let (ProductRoot r) = p.Root in r)
+            let roots =
+                workProfile.Products |> List.map (fun p -> let (ProductRoot r) = p.Root in r)
+
             Assert.Contains(existingProductRoot, roots)
             Assert.Contains(newProductRoot, roots)
     finally
@@ -1020,15 +1011,26 @@ type TestDepsWithEnv(portfolioPath: string, envVars: Map<string, string>) =
         member _.HomeDirectory() = homeDir
 
     interface IFileSystem with
-        member _.ReadFile path = (fsAdapter :> IFileSystem).ReadFile path
-        member _.WriteFile path content = (fsAdapter :> IFileSystem).WriteFile path content
-        member _.FileExists path = (fsAdapter :> IFileSystem).FileExists path
-        member _.DirectoryExists path = (fsAdapter :> IFileSystem).DirectoryExists path
+        member _.ReadFile path =
+            (fsAdapter :> IFileSystem).ReadFile path
+
+        member _.WriteFile path content =
+            (fsAdapter :> IFileSystem).WriteFile path content
+
+        member _.FileExists path =
+            (fsAdapter :> IFileSystem).FileExists path
+
+        member _.DirectoryExists path =
+            (fsAdapter :> IFileSystem).DirectoryExists path
 
     interface IPortfolioConfig with
         member _.ConfigPath() = portfolioPath
-        member _.LoadConfig path = readConfig (fsAdapter :> IFileSystem) homeDir path
-        member _.SaveConfig path portfolio = writeConfig (fsAdapter :> IFileSystem) homeDir path portfolio
+
+        member _.LoadConfig path =
+            readConfig (fsAdapter :> IFileSystem) homeDir path
+
+        member _.SaveConfig path portfolio =
+            writeConfig (fsAdapter :> IFileSystem) homeDir path portfolio
 
     interface IProductConfig with
         member _.LoadProductConfig root =
@@ -1036,8 +1038,7 @@ type TestDepsWithEnv(portfolioPath: string, envVars: Map<string, string>) =
 
 /// Fixture with three named profiles: "work", "personal", "side" for profile resolution tests
 type MultiProfileFixture() =
-    let root =
-        Path.Combine(Path.GetTempPath(), $"itr-multi-profile-{Guid.NewGuid():N}")
+    let root = Path.Combine(Path.GetTempPath(), $"itr-multi-profile-{Guid.NewGuid():N}")
 
     let portfolioPath = Path.Combine(root, "itr.json")
 
@@ -1067,12 +1068,14 @@ type MultiProfileFixture() =
 let ``profile resolution flag overrides ITR_PROFILE and defaultProfile`` () =
     use fixture = new MultiProfileFixture()
     // ITR_PROFILE=personal; flag="side" → flag wins
-    let deps = TestDepsWithEnv(fixture.PortfolioPath, Map.ofList [ "ITR_PROFILE", "personal" ])
+    let deps =
+        TestDepsWithEnv(fixture.PortfolioPath, Map.ofList [ "ITR_PROFILE", "personal" ])
 
     let profile =
         FeaturePortfolio.load (Some fixture.PortfolioPath)
         |> Effect.run deps
-        |> Result.bind (fun portfolio -> FeaturePortfolio.resolveActiveProfile portfolio (Some "side") |> Effect.run deps)
+        |> Result.bind (fun portfolio ->
+            FeaturePortfolio.resolveActiveProfile portfolio (Some "side") |> Effect.run deps)
         |> getResult
 
     Assert.Equal("side", profile.Name |> ProfileName.value)
@@ -1081,7 +1084,8 @@ let ``profile resolution flag overrides ITR_PROFILE and defaultProfile`` () =
 let ``profile resolution ITR_PROFILE overrides defaultProfile when flag absent`` () =
     use fixture = new MultiProfileFixture()
     // defaultProfile=work; ITR_PROFILE=personal; flag absent → env wins
-    let deps = TestDepsWithEnv(fixture.PortfolioPath, Map.ofList [ "ITR_PROFILE", "personal" ])
+    let deps =
+        TestDepsWithEnv(fixture.PortfolioPath, Map.ofList [ "ITR_PROFILE", "personal" ])
 
     let profile =
         FeaturePortfolio.load (Some fixture.PortfolioPath)
@@ -1109,12 +1113,14 @@ let ``profile resolution falls through to defaultProfile when flag and ITR_PROFI
 let ``profile resolution whitespace-only flag falls through to ITR_PROFILE then default`` () =
     use fixture = new MultiProfileFixture()
     // Whitespace flag → should fall through to ITR_PROFILE=side
-    let deps = TestDepsWithEnv(fixture.PortfolioPath, Map.ofList [ "ITR_PROFILE", "side" ])
+    let deps =
+        TestDepsWithEnv(fixture.PortfolioPath, Map.ofList [ "ITR_PROFILE", "side" ])
 
     let profile =
         FeaturePortfolio.load (Some fixture.PortfolioPath)
         |> Effect.run deps
-        |> Result.bind (fun portfolio -> FeaturePortfolio.resolveActiveProfile portfolio (Some "   ") |> Effect.run deps)
+        |> Result.bind (fun portfolio ->
+            FeaturePortfolio.resolveActiveProfile portfolio (Some "   ") |> Effect.run deps)
         |> getResult
 
     Assert.Equal("side", profile.Name |> ProfileName.value)
@@ -1125,10 +1131,12 @@ let private captureConsole (action: unit -> unit) : string =
     let writer = new StringWriter(sb)
     let original = Console.Out
     Console.SetOut(writer)
+
     try
         action ()
     finally
         Console.SetOut(original)
+
     sb.ToString()
 
 /// Helper: build a Portfolio with named profiles for list tests
@@ -1136,16 +1144,25 @@ let private buildPortfolioForList () =
     let workProfile: Profile =
         { Name = ProfileName.create "work"
           Products = []
-          GitIdentity = Some { Name = "Alice"; Email = Some "alice@work.com" }
-          AgentConfig = { Protocol = "opencode-http"; Command = "opencode"; Args = [] } }
+          GitIdentity =
+            Some
+                { Name = "Alice"
+                  Email = Some "alice@work.com" }
+          AgentConfig =
+            { Protocol = "opencode-http"
+              Command = "opencode"
+              Args = [] } }
+
     let personalProfile: Profile =
         { Name = ProfileName.create "personal"
           Products = []
           GitIdentity = None
-          AgentConfig = { Protocol = "opencode-http"; Command = "opencode"; Args = [] } }
-    DomainPortfolio.tryCreate
-        (Some(ProfileName.create "work"))
-        [ workProfile; personalProfile ]
+          AgentConfig =
+            { Protocol = "opencode-http"
+              Command = "opencode"
+              Args = [] } }
+
+    DomainPortfolio.tryCreate (Some(ProfileName.create "work")) [ workProfile; personalProfile ]
     |> Result.defaultWith (fun e -> failwithf "failed to build test portfolio: %A" e)
 
 [<Fact>]
@@ -1170,13 +1187,18 @@ let ``profile list json output includes isDefault field`` () =
         |> Map.toList
         |> List.map (fun (name, profile) ->
             let nameStr = ProfileName.value name
+
             let isDefault =
                 match portfolio.DefaultProfile with
                 | Some d -> d = name
                 | None -> false
-            let gitName = profile.GitIdentity |> Option.map (fun g -> g.Name) |> Option.defaultValue ""
+
+            let gitName =
+                profile.GitIdentity |> Option.map (fun g -> g.Name) |> Option.defaultValue ""
+
             let gitEmail =
                 profile.GitIdentity |> Option.bind (fun g -> g.Email) |> Option.defaultValue ""
+
             let productCount = profile.Products.Length
             (nameStr, isDefault, gitName, gitEmail, productCount))
     // work profile should be the default
@@ -1198,12 +1220,14 @@ let ``profile list with empty portfolio returns empty profiles list`` () =
     let emptyPortfolio =
         DomainPortfolio.tryCreate None []
         |> Result.defaultWith (fun e -> failwithf "failed to build empty portfolio: %A" e)
+
     Assert.Equal(0, emptyPortfolio.Profiles.Count)
     // Verify empty map produces empty list (no error)
     let profiles =
         emptyPortfolio.Profiles
         |> Map.toList
         |> List.map (fun (name, _) -> ProfileName.value name)
+
     Assert.Empty(profiles)
 
 // ---------------------------------------------------------------------------
@@ -1212,8 +1236,7 @@ let ``profile list with empty portfolio returns empty profiles list`` () =
 
 /// Fixture for product list tests: two profiles, with products registered in the "work" profile
 type ProductListFixture() =
-    let root =
-        Path.Combine(Path.GetTempPath(), $"itr-product-list-{Guid.NewGuid():N}")
+    let root = Path.Combine(Path.GetTempPath(), $"itr-product-list-{Guid.NewGuid():N}")
 
     let portfolioPath = Path.Combine(root, "itr.json")
     let workProductRoot = Path.Combine(root, "work-product")
@@ -1275,9 +1298,7 @@ let ``product list resolves products for explicit --profile flag`` () =
         |> Effect.run deps
         |> getResult
 
-    let pairs =
-        FeaturePortfolio.loadAllDefinitions profile deps
-        |> getResult
+    let pairs = FeaturePortfolio.loadAllDefinitions profile deps |> getResult
 
     Assert.Equal(1, pairs.Length)
     let (_, def) = pairs.[0]
@@ -1301,9 +1322,7 @@ let ``product list resolves products using default profile when no flag given`` 
 
     Assert.Equal("work", ProfileName.value profile.Name)
 
-    let pairs =
-        FeaturePortfolio.loadAllDefinitions profile deps
-        |> getResult
+    let pairs = FeaturePortfolio.loadAllDefinitions profile deps |> getResult
 
     Assert.Equal(1, pairs.Length)
 
@@ -1317,7 +1336,10 @@ let ``product list returns error when specified profile is not found`` () =
         |> Effect.run deps
         |> getResult
 
-    match FeaturePortfolio.resolveActiveProfile portfolio (Some "nonexistent") |> Effect.run deps with
+    match
+        FeaturePortfolio.resolveActiveProfile portfolio (Some "nonexistent")
+        |> Effect.run deps
+    with
     | Error(ProfileNotFound name) -> Assert.Equal("nonexistent", name)
     | other -> failwithf "expected ProfileNotFound, got %A" other
 
@@ -1334,9 +1356,7 @@ let ``product list returns error when portfolio has no profiles`` () =
         let deps = TestDeps(portfolioPath)
 
         let portfolio =
-            FeaturePortfolio.load (Some portfolioPath)
-            |> Effect.run deps
-            |> getResult
+            FeaturePortfolio.load (Some portfolioPath) |> Effect.run deps |> getResult
 
         // Simulate the handler check
         Assert.True(portfolio.Profiles.IsEmpty, "expected empty profiles")
@@ -1379,9 +1399,7 @@ let ``product list json output fields are correct`` () =
         |> Effect.run deps
         |> getResult
 
-    let pairs =
-        FeaturePortfolio.loadAllDefinitions profile deps
-        |> getResult
+    let pairs = FeaturePortfolio.loadAllDefinitions profile deps |> getResult
 
     Assert.Equal(1, pairs.Length)
     let (_, def) = pairs.[0]
@@ -1409,9 +1427,7 @@ let ``product list text output fields are correct`` () =
         |> Effect.run deps
         |> getResult
 
-    let pairs =
-        FeaturePortfolio.loadAllDefinitions profile deps
-        |> getResult
+    let pairs = FeaturePortfolio.loadAllDefinitions profile deps |> getResult
 
     // Simulate text output format: id\trepoCount\tcoordRoot
     let lines =
@@ -1444,9 +1460,7 @@ let ``product list table output has correct product data`` () =
         |> Effect.run deps
         |> getResult
 
-    let pairs =
-        FeaturePortfolio.loadAllDefinitions profile deps
-        |> getResult
+    let pairs = FeaturePortfolio.loadAllDefinitions profile deps |> getResult
 
     // Verify domain data would produce correct table rows
     let rows =

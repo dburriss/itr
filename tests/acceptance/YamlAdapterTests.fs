@@ -134,7 +134,9 @@ let ``ArchiveBacklogItem moves BACKLOG folder to archive subfolder with date pre
         match store.ArchiveBacklogItem root backlogId "2026-03-20" with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok() ->
-            let archivedPath = Path.Combine(root, "BACKLOG", "_archive", "2026-03-20-my-feature")
+            let archivedPath =
+                Path.Combine(root, "BACKLOG", "_archive", "2026-03-20-my-feature")
+
             Assert.True(Directory.Exists(archivedPath), $"Expected archive directory at: {archivedPath}")
             let originalPath = Path.Combine(root, "BACKLOG", bid)
             Assert.False(Directory.Exists(originalPath), $"Original directory should be gone: {originalPath}")

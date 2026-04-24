@@ -19,7 +19,8 @@ let tryParseBacklogItemStatus (s: string) : BacklogItemStatus option =
     | "planning" -> Some BacklogItemStatus.Planning
     | "planned" -> Some BacklogItemStatus.Planned
     | "approved" -> Some BacklogItemStatus.Approved
-    | "in-progress" | "inprogress" -> Some BacklogItemStatus.InProgress
+    | "in-progress"
+    | "inprogress" -> Some BacklogItemStatus.InProgress
     | "completed" -> Some BacklogItemStatus.Completed
     | "archived" -> Some BacklogItemStatus.Archived
     | _ -> None
@@ -29,11 +30,14 @@ let tryParseTaskState (s: string) : Result<TaskState, string> =
     | "planning" -> Ok TaskState.Planning
     | "planned" -> Ok TaskState.Planned
     | "approved" -> Ok TaskState.Approved
-    | "in_progress" | "in-progress" -> Ok TaskState.InProgress
+    | "in_progress"
+    | "in-progress" -> Ok TaskState.InProgress
     | "implemented" -> Ok TaskState.Implemented
     | "validated" -> Ok TaskState.Validated
     | "archived" -> Ok TaskState.Archived
-    | other -> Error $"Unknown task state '{other}': must be planning | planned | approved | in_progress | implemented | validated | archived"
+    | other ->
+        Error
+            $"Unknown task state '{other}': must be planning | planned | approved | in_progress | implemented | validated | archived"
 
 let taskStateToDisplayString (state: TaskState) : string =
     match state with

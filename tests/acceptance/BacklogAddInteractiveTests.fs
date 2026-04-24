@@ -21,8 +21,7 @@ let private mkSingleRepoProductConfig () =
         | Error e -> failwithf "%A" e
 
     let repos =
-        [ RepoId "main-repo", ({ Path = "./"; Url = None }: RepoConfig) ]
-        |> Map.ofList
+        [ RepoId "main-repo", ({ Path = "./"; Url = None }: RepoConfig) ] |> Map.ofList
 
     { Id = productId; Repos = repos }
 
@@ -52,14 +51,19 @@ let private stubFns
     (confirm: bool)
     : PromptFunctions =
 
-    let selectAnswers = System.Collections.Generic.Queue<string>([itemType; priority; repo])
-    let textAnswers = System.Collections.Generic.Queue<string>([backlogId; title])
-    let optionalAnswers = System.Collections.Generic.Queue<string>(acEntries @ [""])
+    let selectAnswers =
+        System.Collections.Generic.Queue<string>([ itemType; priority; repo ])
+
+    let textAnswers = System.Collections.Generic.Queue<string>([ backlogId; title ])
+    let optionalAnswers = System.Collections.Generic.Queue<string>(acEntries @ [ "" ])
 
     { AskText = fun _q _d -> textAnswers.Dequeue()
-      AskOptionalText = fun _q ->
-            if optionalAnswers.Count > 0 then optionalAnswers.Dequeue()
-            else ""
+      AskOptionalText =
+        fun _q ->
+            if optionalAnswers.Count > 0 then
+                optionalAnswers.Dequeue()
+            else
+                ""
       AskSelect = fun _q _choices -> selectAnswers.Dequeue()
       AskMultiSelect = fun _q _choices -> multiSelectResult
       AskConfirm = fun _q -> confirm
@@ -78,19 +82,24 @@ let private emptyBacklogStore () =
 
 [<Fact>]
 let ``5.1 explicit title skips title prompt and uses provided value`` () =
-    let (store, coordRoot, root) = emptyBacklogStore()
+    let (store, coordRoot, root) = emptyBacklogStore ()
+
     try
-        let productConfig = mkSingleRepoProductConfig()
+        let productConfig = mkSingleRepoProductConfig ()
 
         // All select prompts: type, priority (repo auto-filled for single-repo)
-        let selectAnswers = System.Collections.Generic.Queue<string>(["feature"; "low"])
-        let textAnswers = System.Collections.Generic.Queue<string>(["my-feature"])   // only id prompt
-        let optionalAnswers = System.Collections.Generic.Queue<string>([""])          // AC: empty -> stop
+        let selectAnswers = System.Collections.Generic.Queue<string>([ "feature"; "low" ])
+        let textAnswers = System.Collections.Generic.Queue<string>([ "my-feature" ]) // only id prompt
+        let optionalAnswers = System.Collections.Generic.Queue<string>([ "" ]) // AC: empty -> stop
 
         let fns: PromptFunctions =
             { AskText = fun _q _d -> textAnswers.Dequeue()
-              AskOptionalText = fun _q ->
-                    if optionalAnswers.Count > 0 then optionalAnswers.Dequeue() else ""
+              AskOptionalText =
+                fun _q ->
+                    if optionalAnswers.Count > 0 then
+                        optionalAnswers.Dequeue()
+                    else
+                        ""
               AskSelect = fun _q _choices -> selectAnswers.Dequeue()
               AskMultiSelect = fun _q _choices -> []
               AskConfirm = fun _q -> true
@@ -112,22 +121,28 @@ let ``5.1 explicit title skips title prompt and uses provided value`` () =
             // id came from text prompt
             Assert.Equal("my-feature", input.BacklogId)
     finally
-        if Directory.Exists(root) then Directory.Delete(root, true)
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
 
 [<Fact>]
 let ``5.1 explicit backlog-id skips id prompt and uses provided value`` () =
-    let (store, coordRoot, root) = emptyBacklogStore()
-    try
-        let productConfig = mkSingleRepoProductConfig()
+    let (store, coordRoot, root) = emptyBacklogStore ()
 
-        let selectAnswers = System.Collections.Generic.Queue<string>(["feature"; "low"])
-        let textAnswers = System.Collections.Generic.Queue<string>(["Prompted Title"])   // only title prompt
-        let optionalAnswers = System.Collections.Generic.Queue<string>([""])
+    try
+        let productConfig = mkSingleRepoProductConfig ()
+
+        let selectAnswers = System.Collections.Generic.Queue<string>([ "feature"; "low" ])
+        let textAnswers = System.Collections.Generic.Queue<string>([ "Prompted Title" ]) // only title prompt
+        let optionalAnswers = System.Collections.Generic.Queue<string>([ "" ])
 
         let fns: PromptFunctions =
             { AskText = fun _q _d -> textAnswers.Dequeue()
-              AskOptionalText = fun _q ->
-                    if optionalAnswers.Count > 0 then optionalAnswers.Dequeue() else ""
+              AskOptionalText =
+                fun _q ->
+                    if optionalAnswers.Count > 0 then
+                        optionalAnswers.Dequeue()
+                    else
+                        ""
               AskSelect = fun _q _choices -> selectAnswers.Dequeue()
               AskMultiSelect = fun _q _choices -> []
               AskConfirm = fun _q -> true
@@ -148,22 +163,28 @@ let ``5.1 explicit backlog-id skips id prompt and uses provided value`` () =
             Assert.Equal("prefilled-id", input.BacklogId)
             Assert.Equal("Prompted Title", input.Title)
     finally
-        if Directory.Exists(root) then Directory.Delete(root, true)
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
 
 [<Fact>]
 let ``5.1 explicit depends-on skips dependencies prompt`` () =
-    let (store, coordRoot, root) = emptyBacklogStore()
-    try
-        let productConfig = mkSingleRepoProductConfig()
+    let (store, coordRoot, root) = emptyBacklogStore ()
 
-        let selectAnswers = System.Collections.Generic.Queue<string>(["feature"; "low"])
-        let textAnswers = System.Collections.Generic.Queue<string>(["my-id"; "My Title"])
-        let optionalAnswers = System.Collections.Generic.Queue<string>([""])
+    try
+        let productConfig = mkSingleRepoProductConfig ()
+
+        let selectAnswers = System.Collections.Generic.Queue<string>([ "feature"; "low" ])
+        let textAnswers = System.Collections.Generic.Queue<string>([ "my-id"; "My Title" ])
+        let optionalAnswers = System.Collections.Generic.Queue<string>([ "" ])
 
         let fns: PromptFunctions =
             { AskText = fun _q _d -> textAnswers.Dequeue()
-              AskOptionalText = fun _q ->
-                    if optionalAnswers.Count > 0 then optionalAnswers.Dequeue() else ""
+              AskOptionalText =
+                fun _q ->
+                    if optionalAnswers.Count > 0 then
+                        optionalAnswers.Dequeue()
+                    else
+                        ""
               AskSelect = fun _q _choices -> selectAnswers.Dequeue()
               AskMultiSelect = fun _q _choices -> failwith "multi-select should not be called"
               AskConfirm = fun _q -> true
@@ -176,14 +197,14 @@ let ``5.1 explicit depends-on skips dependencies prompt`` () =
               ItemType = None
               Priority = None
               Summary = None
-              DependsOn = ["dep-1"; "dep-2"] }
+              DependsOn = [ "dep-1"; "dep-2" ] }
 
         match promptBacklogAddWith fns store coordRoot productConfig prefilled with
         | Error msg -> failwithf "expected Ok, got Error: %s" msg
-        | Ok input ->
-            Assert.Equal<string list>(["dep-1"; "dep-2"], input.DependsOn)
+        | Ok input -> Assert.Equal<string list>([ "dep-1"; "dep-2" ], input.DependsOn)
     finally
-        if Directory.Exists(root) then Directory.Delete(root, true)
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
 
 // ---------------------------------------------------------------------------
 // 5.2 Non-TTY guard (skipped - Zellij panes are interactive but report stdin
@@ -192,9 +213,10 @@ let ``5.1 explicit depends-on skips dependencies prompt`` () =
 
 [<Fact(Skip = "Non-TTY guard disabled: Zellij command panes report stdin as redirected but are still interactive")>]
 let ``5.2 non-TTY returns error with helpful message`` () =
-    let (store, coordRoot, root) = emptyBacklogStore()
+    let (store, coordRoot, root) = emptyBacklogStore ()
+
     try
-        let productConfig = mkSingleRepoProductConfig()
+        let productConfig = mkSingleRepoProductConfig ()
 
         let fns: PromptFunctions =
             { AskText = fun _q _d -> failwith "should not be called"
@@ -202,18 +224,23 @@ let ``5.2 non-TTY returns error with helpful message`` () =
               AskSelect = fun _q _choices -> failwith "should not be called"
               AskMultiSelect = fun _q _choices -> failwith "should not be called"
               AskConfirm = fun _q -> failwith "should not be called"
-              IsInputRedirected = fun () -> true }  // simulate non-TTY
+              IsInputRedirected = fun () -> true } // simulate non-TTY
 
         let prefilled: PrefilledArgs =
-            { BacklogId = None; Title = None; Repo = None
-              ItemType = None; Priority = None; Summary = None; DependsOn = [] }
+            { BacklogId = None
+              Title = None
+              Repo = None
+              ItemType = None
+              Priority = None
+              Summary = None
+              DependsOn = [] }
 
         match promptBacklogAddWith fns store coordRoot productConfig prefilled with
         | Ok _ -> failwith "expected Error for non-TTY"
-        | Error msg ->
-            Assert.Contains("terminal", msg)
+        | Error msg -> Assert.Contains("terminal", msg)
     finally
-        if Directory.Exists(root) then Directory.Delete(root, true)
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
 
 // ---------------------------------------------------------------------------
 // 5.3 Missing Backlog_Id without --interactive returns error
@@ -225,12 +252,12 @@ let ``5.2 non-TTY returns error with helpful message`` () =
 
 [<Fact>]
 let ``5.3 createBacklogItem with empty backlog-id returns error`` () =
-    let productConfig = mkSingleRepoProductConfig()
+    let productConfig = mkSingleRepoProductConfig ()
 
     let input: Backlogs.Create.Input =
         { BacklogId = ""
           Title = "Some Title"
-          Repos = ["main-repo"]
+          Repos = [ "main-repo" ]
           ItemType = None
           Priority = None
           Summary = None
@@ -248,12 +275,12 @@ let ``5.3 createBacklogItem with empty backlog-id returns error`` () =
 
 [<Fact>]
 let ``5.4 createBacklogItem with empty title returns MissingTitle error`` () =
-    let productConfig = mkSingleRepoProductConfig()
+    let productConfig = mkSingleRepoProductConfig ()
 
     let input: Backlogs.Create.Input =
         { BacklogId = "some-id"
           Title = ""
-          Repos = ["main-repo"]
+          Repos = [ "main-repo" ]
           ItemType = None
           Priority = None
           Summary = None
@@ -272,29 +299,40 @@ let ``5.4 createBacklogItem with empty title returns MissingTitle error`` () =
 
 [<Fact>]
 let ``cancelled confirmation returns Error Cancelled`` () =
-    let (store, coordRoot, root) = emptyBacklogStore()
-    try
-        let productConfig = mkSingleRepoProductConfig()
+    let (store, coordRoot, root) = emptyBacklogStore ()
 
-        let selectAnswers = System.Collections.Generic.Queue<string>(["feature"; "low"])
-        let textAnswers = System.Collections.Generic.Queue<string>(["my-id"; "My Title"])
-        let optionalAnswers = System.Collections.Generic.Queue<string>([""])
+    try
+        let productConfig = mkSingleRepoProductConfig ()
+
+        let selectAnswers = System.Collections.Generic.Queue<string>([ "feature"; "low" ])
+        let textAnswers = System.Collections.Generic.Queue<string>([ "my-id"; "My Title" ])
+        let optionalAnswers = System.Collections.Generic.Queue<string>([ "" ])
 
         let fns: PromptFunctions =
             { AskText = fun _q _d -> textAnswers.Dequeue()
-              AskOptionalText = fun _q ->
-                    if optionalAnswers.Count > 0 then optionalAnswers.Dequeue() else ""
+              AskOptionalText =
+                fun _q ->
+                    if optionalAnswers.Count > 0 then
+                        optionalAnswers.Dequeue()
+                    else
+                        ""
               AskSelect = fun _q _choices -> selectAnswers.Dequeue()
               AskMultiSelect = fun _q _choices -> []
-              AskConfirm = fun _q -> false   // reject
+              AskConfirm = fun _q -> false // reject
               IsInputRedirected = fun () -> false }
 
         let prefilled: PrefilledArgs =
-            { BacklogId = None; Title = None; Repo = None
-              ItemType = None; Priority = None; Summary = None; DependsOn = [] }
+            { BacklogId = None
+              Title = None
+              Repo = None
+              ItemType = None
+              Priority = None
+              Summary = None
+              DependsOn = [] }
 
         match promptBacklogAddWith fns store coordRoot productConfig prefilled with
         | Ok _ -> failwith "expected Error on cancellation"
         | Error msg -> Assert.Equal("Cancelled", msg)
     finally
-        if Directory.Exists(root) then Directory.Delete(root, true)
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)

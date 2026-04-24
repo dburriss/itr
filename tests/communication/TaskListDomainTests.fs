@@ -108,12 +108,20 @@ let ``listTasks preserves the original task reference`` () =
 
 [<Fact>]
 let ``filterTasks with no filters returns all summaries`` () =
-    let tasks = [
-        mkTask "t1" "feat-a" "repo-a" TaskState.Planning
-        mkTask "t2" "feat-b" "repo-b" TaskState.Approved
-    ]
+    let tasks =
+        [ mkTask "t1" "feat-a" "repo-a" TaskState.Planning
+          mkTask "t2" "feat-b" "repo-b" TaskState.Approved ]
+
     let summaries = Tasks.Query.list (tasks |> List.map (fun t -> (t, "")))
-    let result = Tasks.Query.filter { BacklogId = None; Repo = None; State = None; Exclude = [] } summaries
+
+    let result =
+        Tasks.Query.filter
+            { BacklogId = None
+              Repo = None
+              State = None
+              Exclude = [] }
+            summaries
+
     Assert.Equal(2, result.Length)
 
 // ---------------------------------------------------------------------------
@@ -122,12 +130,20 @@ let ``filterTasks with no filters returns all summaries`` () =
 
 [<Fact>]
 let ``filterTasks by backlog id returns only matching tasks`` () =
-    let tasks = [
-        mkTask "t1" "feat-a" "repo" TaskState.Planning
-        mkTask "t2" "feat-b" "repo" TaskState.Planning
-    ]
+    let tasks =
+        [ mkTask "t1" "feat-a" "repo" TaskState.Planning
+          mkTask "t2" "feat-b" "repo" TaskState.Planning ]
+
     let summaries = Tasks.Query.list (tasks |> List.map (fun t -> (t, "")))
-    let result = Tasks.Query.filter { BacklogId = (Some(mkBacklogId "feat-a")); Repo = None; State = None; Exclude = [] } summaries
+
+    let result =
+        Tasks.Query.filter
+            { BacklogId = (Some(mkBacklogId "feat-a"))
+              Repo = None
+              State = None
+              Exclude = [] }
+            summaries
+
     Assert.Equal(1, result.Length)
     Assert.Equal("feat-a", BacklogId.value result.[0].Task.SourceBacklog)
 
@@ -135,7 +151,15 @@ let ``filterTasks by backlog id returns only matching tasks`` () =
 let ``filterTasks by backlog id with no matches returns empty`` () =
     let tasks = [ mkTask "t1" "feat-a" "repo" TaskState.Planning ]
     let summaries = Tasks.Query.list (tasks |> List.map (fun t -> (t, "")))
-    let result = Tasks.Query.filter { BacklogId = (Some(mkBacklogId "feat-b")); Repo = None; State = None; Exclude = [] } summaries
+
+    let result =
+        Tasks.Query.filter
+            { BacklogId = (Some(mkBacklogId "feat-b"))
+              Repo = None
+              State = None
+              Exclude = [] }
+            summaries
+
     Assert.Empty(result)
 
 // ---------------------------------------------------------------------------
@@ -144,12 +168,20 @@ let ``filterTasks by backlog id with no matches returns empty`` () =
 
 [<Fact>]
 let ``filterTasks by repo returns only matching tasks`` () =
-    let tasks = [
-        mkTask "t1" "feat-a" "repo-a" TaskState.Planning
-        mkTask "t2" "feat-a" "repo-b" TaskState.Planning
-    ]
+    let tasks =
+        [ mkTask "t1" "feat-a" "repo-a" TaskState.Planning
+          mkTask "t2" "feat-a" "repo-b" TaskState.Planning ]
+
     let summaries = Tasks.Query.list (tasks |> List.map (fun t -> (t, "")))
-    let result = Tasks.Query.filter { BacklogId = None; Repo = Some(RepoId "repo-a"); State = None; Exclude = [] } summaries
+
+    let result =
+        Tasks.Query.filter
+            { BacklogId = None
+              Repo = Some(RepoId "repo-a")
+              State = None
+              Exclude = [] }
+            summaries
+
     Assert.Equal(1, result.Length)
     Assert.Equal(RepoId "repo-a", result.[0].Task.Repo)
 
@@ -159,13 +191,21 @@ let ``filterTasks by repo returns only matching tasks`` () =
 
 [<Fact>]
 let ``filterTasks by state returns only tasks in that state`` () =
-    let tasks = [
-        mkTask "t1" "feat" "repo" TaskState.Planning
-        mkTask "t2" "feat" "repo" TaskState.Approved
-        mkTask "t3" "feat" "repo" TaskState.InProgress
-    ]
+    let tasks =
+        [ mkTask "t1" "feat" "repo" TaskState.Planning
+          mkTask "t2" "feat" "repo" TaskState.Approved
+          mkTask "t3" "feat" "repo" TaskState.InProgress ]
+
     let summaries = Tasks.Query.list (tasks |> List.map (fun t -> (t, "")))
-    let result = Tasks.Query.filter { BacklogId = None; Repo = None; State = Some TaskState.Planning; Exclude = [] } summaries
+
+    let result =
+        Tasks.Query.filter
+            { BacklogId = None
+              Repo = None
+              State = Some TaskState.Planning
+              Exclude = [] }
+            summaries
+
     Assert.Equal(1, result.Length)
     Assert.Equal(TaskState.Planning, result.[0].Task.State)
 
@@ -175,24 +215,33 @@ let ``filterTasks by state returns only tasks in that state`` () =
 
 [<Fact>]
 let ``filterTasks by repo and state uses AND semantics`` () =
-    let tasks = [
-        mkTask "t1" "feat-a" "repo-a" TaskState.Planning
-        mkTask "t2" "feat-a" "repo-b" TaskState.Planning
-        mkTask "t3" "feat-a" "repo-a" TaskState.Approved
-    ]
+    let tasks =
+        [ mkTask "t1" "feat-a" "repo-a" TaskState.Planning
+          mkTask "t2" "feat-a" "repo-b" TaskState.Planning
+          mkTask "t3" "feat-a" "repo-a" TaskState.Approved ]
+
     let summaries = Tasks.Query.list (tasks |> List.map (fun t -> (t, "")))
-    let result = Tasks.Query.filter { BacklogId = None; Repo = Some(RepoId "repo-a"); State = Some TaskState.Planning; Exclude = [] } summaries
+
+    let result =
+        Tasks.Query.filter
+            { BacklogId = None
+              Repo = Some(RepoId "repo-a")
+              State = Some TaskState.Planning
+              Exclude = [] }
+            summaries
+
     Assert.Equal(1, result.Length)
     Assert.Equal("t1", TaskId.value result.[0].Task.Id)
 
 [<Fact>]
 let ``filterTasks by backlog, repo, and state all together`` () =
-    let tasks = [
-        mkTask "t1" "feat-a" "repo-a" TaskState.Planning
-        mkTask "t2" "feat-b" "repo-a" TaskState.Planning
-        mkTask "t3" "feat-a" "repo-a" TaskState.Approved
-    ]
+    let tasks =
+        [ mkTask "t1" "feat-a" "repo-a" TaskState.Planning
+          mkTask "t2" "feat-b" "repo-a" TaskState.Planning
+          mkTask "t3" "feat-a" "repo-a" TaskState.Approved ]
+
     let summaries = Tasks.Query.list (tasks |> List.map (fun t -> (t, "")))
+
     let result =
         Tasks.Query.filter
             { BacklogId = Some(mkBacklogId "feat-a")
@@ -200,6 +249,7 @@ let ``filterTasks by backlog, repo, and state all together`` () =
               State = Some TaskState.Planning
               Exclude = [] }
             summaries
+
     Assert.Equal(1, result.Length)
     Assert.Equal("t1", TaskId.value result.[0].Task.Id)
 
@@ -209,12 +259,20 @@ let ``filterTasks by backlog, repo, and state all together`` () =
 
 [<Fact>]
 let ``filterTasks with empty exclude list includes archived tasks`` () =
-    let tasks = [
-        mkTask "t1" "feat" "repo" TaskState.Planning
-        mkTask "t2" "feat" "repo" TaskState.Archived
-    ]
+    let tasks =
+        [ mkTask "t1" "feat" "repo" TaskState.Planning
+          mkTask "t2" "feat" "repo" TaskState.Archived ]
+
     let summaries = Tasks.Query.list (tasks |> List.map (fun t -> (t, "")))
-    let result = Tasks.Query.filter { BacklogId = None; Repo = None; State = None; Exclude = [] } summaries
+
+    let result =
+        Tasks.Query.filter
+            { BacklogId = None
+              Repo = None
+              State = None
+              Exclude = [] }
+            summaries
+
     Assert.Equal(2, result.Length)
     let states = result |> List.map (fun s -> s.Task.State) |> Set.ofList
     Assert.Contains(TaskState.Archived, states)
@@ -225,12 +283,20 @@ let ``filterTasks with empty exclude list includes archived tasks`` () =
 
 [<Fact>]
 let ``filterTasks with exclude archived removes archived tasks`` () =
-    let tasks = [
-        mkTask "t1" "feat" "repo" TaskState.Planning
-        mkTask "t2" "feat" "repo" TaskState.Archived
-    ]
+    let tasks =
+        [ mkTask "t1" "feat" "repo" TaskState.Planning
+          mkTask "t2" "feat" "repo" TaskState.Archived ]
+
     let summaries = Tasks.Query.list (tasks |> List.map (fun t -> (t, "")))
-    let result = Tasks.Query.filter { BacklogId = None; Repo = None; State = None; Exclude = [TaskState.Archived] } summaries
+
+    let result =
+        Tasks.Query.filter
+            { BacklogId = None
+              Repo = None
+              State = None
+              Exclude = [ TaskState.Archived ] }
+            summaries
+
     Assert.Equal(1, result.Length)
     Assert.Equal(TaskState.Planning, result.[0].Task.State)
 
@@ -246,11 +312,12 @@ let ``orderBy created sorts tasks oldest-first by CreatedAt`` () =
           Repo = RepoId repo
           State = state
           CreatedAt = date }
-    let tasks = [
-        mkTaskWithDate "t-newest" "feat" "repo" TaskState.Planning (DateOnly(2026, 3, 15))
-        mkTaskWithDate "t-oldest" "feat" "repo" TaskState.Planning (DateOnly(2026, 1, 1))
-        mkTaskWithDate "t-middle" "feat" "repo" TaskState.Planning (DateOnly(2026, 2, 1))
-    ]
+
+    let tasks =
+        [ mkTaskWithDate "t-newest" "feat" "repo" TaskState.Planning (DateOnly(2026, 3, 15))
+          mkTaskWithDate "t-oldest" "feat" "repo" TaskState.Planning (DateOnly(2026, 1, 1))
+          mkTaskWithDate "t-middle" "feat" "repo" TaskState.Planning (DateOnly(2026, 2, 1)) ]
+
     let summaries = Tasks.Query.list (tasks |> List.map (fun t -> (t, "")))
     let ordered = summaries |> List.sortBy (fun s -> s.Task.CreatedAt)
     Assert.Equal("t-oldest", TaskId.value ordered.[0].Task.Id)
@@ -272,13 +339,17 @@ let ``orderBy state sorts tasks by priority order descending`` () =
         | TaskState.Implemented -> 3
         | TaskState.Validated -> 2
         | TaskState.Archived -> 1
-    let tasks = [
-        mkTask "t-archived" "feat" "repo" TaskState.Archived
-        mkTask "t-planning" "feat" "repo" TaskState.Planning
-        mkTask "t-approved" "feat" "repo" TaskState.Approved
-    ]
+
+    let tasks =
+        [ mkTask "t-archived" "feat" "repo" TaskState.Archived
+          mkTask "t-planning" "feat" "repo" TaskState.Planning
+          mkTask "t-approved" "feat" "repo" TaskState.Approved ]
+
     let summaries = Tasks.Query.list (tasks |> List.map (fun t -> (t, "")))
-    let ordered = summaries |> List.sortByDescending (fun s -> taskStatePriority s.Task.State)
+
+    let ordered =
+        summaries |> List.sortByDescending (fun s -> taskStatePriority s.Task.State)
+
     Assert.Equal(TaskState.Planning, ordered.[0].Task.State)
     Assert.Equal(TaskState.Approved, ordered.[1].Task.State)
     Assert.Equal(TaskState.Archived, ordered.[2].Task.State)
@@ -290,13 +361,21 @@ let ``orderBy state sorts tasks by priority order descending`` () =
 [<Fact>]
 let ``filterTasks with multiple excluded states removes all of them`` () =
     // Verifies the exclude list handles multiple states (supports the validation path)
-    let tasks = [
-        mkTask "t1" "feat" "repo" TaskState.Planning
-        mkTask "t2" "feat" "repo" TaskState.Archived
-        mkTask "t3" "feat" "repo" TaskState.Approved
-    ]
+    let tasks =
+        [ mkTask "t1" "feat" "repo" TaskState.Planning
+          mkTask "t2" "feat" "repo" TaskState.Archived
+          mkTask "t3" "feat" "repo" TaskState.Approved ]
+
     let summaries = Tasks.Query.list (tasks |> List.map (fun t -> (t, "")))
-    let result = Tasks.Query.filter { BacklogId = None; Repo = None; State = None; Exclude = [TaskState.Archived; TaskState.Planning] } summaries
+
+    let result =
+        Tasks.Query.filter
+            { BacklogId = None
+              Repo = None
+              State = None
+              Exclude = [ TaskState.Archived; TaskState.Planning ] }
+            summaries
+
     Assert.Equal(1, result.Length)
     Assert.Equal(TaskState.Approved, result.[0].Task.State)
 
@@ -308,11 +387,19 @@ let ``filterTasks with multiple excluded states removes all of them`` () =
 [<Fact>]
 let ``filterTasks with empty exclude list returns same tasks regardless of state`` () =
     // Confirms exclude=[] is a no-op on filtering, validating the default path
-    let tasks = [
-        mkTask "t1" "feat" "repo" TaskState.Planning
-        mkTask "t2" "feat" "repo" TaskState.Validated
-        mkTask "t3" "feat" "repo" TaskState.Archived
-    ]
+    let tasks =
+        [ mkTask "t1" "feat" "repo" TaskState.Planning
+          mkTask "t2" "feat" "repo" TaskState.Validated
+          mkTask "t3" "feat" "repo" TaskState.Archived ]
+
     let summaries = Tasks.Query.list (tasks |> List.map (fun t -> (t, "")))
-    let result = Tasks.Query.filter { BacklogId = None; Repo = None; State = None; Exclude = [] } summaries
+
+    let result =
+        Tasks.Query.filter
+            { BacklogId = None
+              Repo = None
+              State = None
+              Exclude = [] }
+            summaries
+
     Assert.Equal(3, result.Length)

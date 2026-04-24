@@ -35,13 +35,18 @@ let execute<'deps when 'deps :> IPortfolioConfig>
                         { Name = profileName
                           Products = []
                           GitIdentity = input.GitIdentity
-                          AgentConfig = { Protocol = "opencode-http"; Command = "opencode"; Args = [] } }
+                          AgentConfig =
+                            { Protocol = "opencode-http"
+                              Command = "opencode"
+                              Args = [] } }
 
                     let updatedProfiles = portfolio.Profiles |> Map.add profileName newProfile
 
                     let updatedDefault =
-                        if input.SetAsDefault then Some profileName
-                        else portfolio.DefaultProfile
+                        if input.SetAsDefault then
+                            Some profileName
+                        else
+                            portfolio.DefaultProfile
 
                     Ok
                         { portfolio with

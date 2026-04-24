@@ -66,6 +66,7 @@ let ``buildSessionPrompt includes sessionId and prompt content block`` () =
 let ``extractChunkText returns Some text from valid session/update message`` () =
     let json =
         """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"sess-abc","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Hello"}}}}"""
+
     let result = AcpMessages.extractChunkText json
     Assert.Equal(Some "Hello", result)
 
@@ -84,6 +85,7 @@ let ``extractChunkText returns None for malformed input`` () =
 let ``extractChunkText returns None when content has no agent_message_chunk blocks`` () =
     let json =
         """{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"sess-abc","update":{"sessionUpdate":"tool_call","content":{"type":"text","text":"ignored"}}}}"""
+
     let result = AcpMessages.extractChunkText json
     Assert.Equal(None, result)
 
@@ -94,6 +96,7 @@ let ``extractChunkText returns None when content has no agent_message_chunk bloc
 [<Fact>]
 let ``extractSessionId returns Ok sessionId from valid session/new response`` () =
     let json = """{"jsonrpc":"2.0","id":1,"result":{"sessionId":"sess-abc"}}"""
+
     match AcpMessages.extractSessionId json with
     | Ok sid -> Assert.Equal("sess-abc", sid)
     | Error e -> Assert.Fail($"Expected Ok, got Error: {e}")
@@ -107,13 +110,16 @@ let ``extractSessionId returns Error on malformed input`` () =
 [<Fact>]
 let ``extractSessionId returns Error when sessionId field is missing`` () =
     let json = """{"jsonrpc":"2.0","id":1,"result":{}}"""
+
     match AcpMessages.extractSessionId json with
     | Ok sid -> Assert.Fail($"Expected Error, got Ok: {sid}")
     | Error _ -> () // expected
 
 [<Fact>]
 let ``extractSessionId returns Error on JSON-RPC error response`` () =
-    let json = """{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"Invalid Request"}}"""
+    let json =
+        """{"jsonrpc":"2.0","id":1,"error":{"code":-32600,"message":"Invalid Request"}}"""
+
     match AcpMessages.extractSessionId json with
     | Ok sid -> Assert.Fail($"Expected Error, got Ok: {sid}")
     | Error msg -> Assert.Contains("Invalid Request", msg)
@@ -135,7 +141,9 @@ let ``trimPreamble strips preamble before first heading`` () =
 
 [<Fact>]
 let ``trimPreamble strips multi-line preamble before first heading`` () =
-    let content = "Let me think about this.\nOkay, here it is:\n# My Task\n## Steps\n1. Do thing."
+    let content =
+        "Let me think about this.\nOkay, here it is:\n# My Task\n## Steps\n1. Do thing."
+
     let result = AcpMessages.trimPreamble content
     Assert.Equal("# My Task\n## Steps\n1. Do thing.", result)
 
@@ -156,15 +164,17 @@ let ``trimPreamble handles empty string`` () =
 let ``LoadLocalConfig returns Some AgentConfig when file present with agent section`` () =
     let dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
     Directory.CreateDirectory(dir) |> ignore
+
     try
         let json = """{"agent":{"protocol":"acp","command":"my-agent","args":["--flag"]}}"""
         File.WriteAllText(Path.Combine(dir, "itr.json"), json)
+
         match PortfolioAdapter.LoadLocalConfig dir with
         | None -> Assert.Fail("Expected Some, got None")
         | Some config ->
             Assert.Equal("acp", config.Protocol)
             Assert.Equal("my-agent", config.Command)
-            Assert.Equal<string list>(["--flag"], config.Args)
+            Assert.Equal<string list>([ "--flag" ], config.Args)
     finally
         Directory.Delete(dir, true)
 
@@ -172,6 +182,7 @@ let ``LoadLocalConfig returns Some AgentConfig when file present with agent sect
 let ``LoadLocalConfig returns None when file is absent`` () =
     let dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
     Directory.CreateDirectory(dir) |> ignore
+
     try
         let result = PortfolioAdapter.LoadLocalConfig dir
         Assert.Equal(None, result)
@@ -182,6 +193,7 @@ let ``LoadLocalConfig returns None when file is absent`` () =
 let ``LoadLocalConfig returns None when file is present but has no agent section`` () =
     let dir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
     Directory.CreateDirectory(dir) |> ignore
+
     try
         let json = """{"someOtherField":"value"}"""
         File.WriteAllText(Path.Combine(dir, "itr.json"), json)

@@ -27,76 +27,85 @@ let loadSnapshot
     | Error e -> Error e
     | Ok activeItemTuples ->
 
-    match backlogStore.ListArchivedBacklogItems coordRoot with
-    | Error e -> Error e
-    | Ok archivedItemTuples ->
+        match backlogStore.ListArchivedBacklogItems coordRoot with
+        | Error e -> Error e
+        | Ok archivedItemTuples ->
 
-    match viewStore.ListViews coordRoot with
-    | Error e -> Error e
-    | Ok views ->
+            match viewStore.ListViews coordRoot with
+            | Error e -> Error e
+            | Ok views ->
 
-    let itemViewMap =
-        views
-        |> List.fold (fun (acc: Map<string, string>) view ->
-            view.Items
-            |> List.fold (fun innerAcc itemId ->
-                if Map.containsKey itemId innerAcc then
-                    eprintfn "Warning: item '%s' appears in multiple views; keeping first assignment" itemId
-                    innerAcc
-                else
-                    Map.add itemId view.Id innerAcc
-            ) acc
-        ) Map.empty
+                let itemViewMap =
+                    views
+                    |> List.fold
+                        (fun (acc: Map<string, string>) view ->
+                            view.Items
+                            |> List.fold
+                                (fun innerAcc itemId ->
+                                    if Map.containsKey itemId innerAcc then
+                                        eprintfn
+                                            "Warning: item '%s' appears in multiple views; keeping first assignment"
+                                            itemId
 
-    let activeSummaryResults =
-        activeItemTuples
-        |> List.map (fun (item, path) ->
-            let id = BacklogId.value item.Id
-            match taskStore.ListTasks coordRoot item.Id with
-            | Error e -> Error(taskErrorToBacklogError e)
-            | Ok taskTuples ->
-                let tasks = taskTuples |> List.map fst
-                let status = BacklogItemStatus.compute tasks
-                Ok
-                    { Item = item
-                      Status = status
-                      ViewId = Map.tryFind id itemViewMap
-                      TaskCount = tasks.Length
-                      Path = path })
+                                        innerAcc
+                                    else
+                                        Map.add itemId view.Id innerAcc)
+                                acc)
+                        Map.empty
 
-    let archivedSummaryResults =
-        archivedItemTuples
-        |> List.map (fun (item, path) ->
-            let id = BacklogId.value item.Id
-            match taskStore.ListArchivedTasks coordRoot item.Id with
-            | Error e -> Error(taskErrorToBacklogError e)
-            | Ok tasks ->
-                let status = BacklogItemStatus.compute tasks
-                Ok
-                    { Item = item
-                      Status = status
-                      ViewId = Map.tryFind id itemViewMap
-                      TaskCount = tasks.Length
-                      Path = path })
+                let activeSummaryResults =
+                    activeItemTuples
+                    |> List.map (fun (item, path) ->
+                        let id = BacklogId.value item.Id
 
-    let allResults = activeSummaryResults @ archivedSummaryResults
+                        match taskStore.ListTasks coordRoot item.Id with
+                        | Error e -> Error(taskErrorToBacklogError e)
+                        | Ok taskTuples ->
+                            let tasks = taskTuples |> List.map fst
+                            let status = BacklogItemStatus.compute tasks
 
-    let errors =
-        allResults
-        |> List.choose (function
-            | Error e -> Some e
-            | Ok _ -> None)
+                            Ok
+                                { Item = item
+                                  Status = status
+                                  ViewId = Map.tryFind id itemViewMap
+                                  TaskCount = tasks.Length
+                                  Path = path })
 
-    match errors with
-    | e :: _ -> Error e
-    | [] ->
-        let summaries =
-            allResults
-            |> List.choose (function
-                | Ok s -> Some s
-                | Error _ -> None)
+                let archivedSummaryResults =
+                    archivedItemTuples
+                    |> List.map (fun (item, path) ->
+                        let id = BacklogId.value item.Id
 
-        Ok { Items = summaries; Views = views }
+                        match taskStore.ListArchivedTasks coordRoot item.Id with
+                        | Error e -> Error(taskErrorToBacklogError e)
+                        | Ok tasks ->
+                            let status = BacklogItemStatus.compute tasks
+
+                            Ok
+                                { Item = item
+                                  Status = status
+                                  ViewId = Map.tryFind id itemViewMap
+                                  TaskCount = tasks.Length
+                                  Path = path })
+
+                let allResults = activeSummaryResults @ archivedSummaryResults
+
+                let errors =
+                    allResults
+                    |> List.choose (function
+                        | Error e -> Some e
+                        | Ok _ -> None)
+
+                match errors with
+                | e :: _ -> Error e
+                | [] ->
+                    let summaries =
+                        allResults
+                        |> List.choose (function
+                            | Ok s -> Some s
+                            | Error _ -> None)
+
+                    Ok { Items = summaries; Views = views }
 
 /// Priority order: high=0, medium=1, low=2, other/None=3 (case-insensitive)
 let private priorityOrder (priority: string option) : int =
@@ -123,11 +132,16 @@ let private defaultSort (items: BacklogItemSummary list) : BacklogItemSummary li
     items
     |> List.sortWith (fun a b ->
         let tc = compare (typeOrder a.Item.Type) (typeOrder b.Item.Type)
-        if tc <> 0 then tc
+
+        if tc <> 0 then
+            tc
         else
             let pc = compare (priorityOrder a.Item.Priority) (priorityOrder b.Item.Priority)
-            if pc <> 0 then pc
-            else compare a.Item.CreatedAt b.Item.CreatedAt)
+
+            if pc <> 0 then
+                pc
+            else
+                compare a.Item.CreatedAt b.Item.CreatedAt)
 
 /// Pure filter + ordering: returns items from the snapshot matching the given filter.
 let list (filter: BacklogListFilter) (snapshot: BacklogSnapshot) : BacklogItemSummary list =
@@ -154,28 +168,24 @@ let list (filter: BacklogListFilter) (snapshot: BacklogSnapshot) : BacklogItemSu
             viewMatch && statusMatch && typeMatch && excludeMatch)
 
     match filter.OrderBy with
-    | Some "created" ->
-        filtered |> List.sortBy (fun s -> s.Item.CreatedAt)
-    | Some "priority" ->
-        filtered |> List.sortBy (fun s -> priorityOrder s.Item.Priority)
-    | Some "type" ->
-        filtered |> List.sortBy (fun s -> typeOrder s.Item.Type)
+    | Some "created" -> filtered |> List.sortBy (fun s -> s.Item.CreatedAt)
+    | Some "priority" -> filtered |> List.sortBy (fun s -> priorityOrder s.Item.Priority)
+    | Some "type" -> filtered |> List.sortBy (fun s -> typeOrder s.Item.Type)
     | _ ->
         match filter.ViewId with
         | Some viewId ->
             match snapshot.Views |> List.tryFind (fun v -> v.Id = viewId) with
             | None -> defaultSort filtered
             | Some view ->
-                let viewItemIndex =
-                    view.Items
-                    |> List.mapi (fun i id -> id, i)
-                    |> Map.ofList
+                let viewItemIndex = view.Items |> List.mapi (fun i id -> id, i) |> Map.ofList
+
                 let inView, notInView =
                     filtered
-                    |> List.partition (fun s ->
-                        Map.containsKey (BacklogId.value s.Item.Id) viewItemIndex)
+                    |> List.partition (fun s -> Map.containsKey (BacklogId.value s.Item.Id) viewItemIndex)
+
                 let sortedInView =
                     inView |> List.sortBy (fun s -> viewItemIndex.[BacklogId.value s.Item.Id])
+
                 let sortedNotInView = defaultSort notInView
                 sortedInView @ sortedNotInView
         | None -> defaultSort filtered
@@ -191,44 +201,47 @@ let getDetail
 
     let itemResult =
         match backlogStore.LoadBacklogItem coordRoot backlogId with
-        | Ok (item, path) -> Ok(item, path, false)
+        | Ok(item, path) -> Ok(item, path, false)
         | Error(BacklogItemNotFound _) ->
             match backlogStore.LoadArchivedBacklogItem coordRoot backlogId with
             | Error e -> Error e
             | Ok None -> Error(BacklogItemNotFound backlogId)
-            | Ok(Some (item, path)) -> Ok(item, path, true)
+            | Ok(Some(item, path)) -> Ok(item, path, true)
         | Error e -> Error e
 
     match itemResult with
     | Error e -> Error e
     | Ok(item, itemPath, isArchived) ->
 
-    let tasksResult =
-        if isArchived then
-            taskStore.ListArchivedTasks coordRoot backlogId
-        else
-            taskStore.ListTasks coordRoot backlogId
-            |> Result.map (List.map fst)
+        let tasksResult =
+            if isArchived then
+                taskStore.ListArchivedTasks coordRoot backlogId
+            else
+                taskStore.ListTasks coordRoot backlogId |> Result.map (List.map fst)
 
-    match tasksResult with
-    | Error e -> Error(taskErrorToBacklogError e)
-    | Ok tasks ->
+        match tasksResult with
+        | Error e -> Error(taskErrorToBacklogError e)
+        | Ok tasks ->
 
-    match viewStore.ListViews coordRoot with
-    | Error e -> Error e
-    | Ok views ->
+            match viewStore.ListViews coordRoot with
+            | Error e -> Error e
+            | Ok views ->
 
-    let idStr = BacklogId.value backlogId
-    let viewId =
-        views
-        |> List.tryPick (fun view ->
-            if List.contains idStr view.Items then Some view.Id else None)
+                let idStr = BacklogId.value backlogId
 
-    let status = BacklogItemStatus.compute tasks
+                let viewId =
+                    views
+                    |> List.tryPick (fun view ->
+                        if List.contains idStr view.Items then
+                            Some view.Id
+                        else
+                            None)
 
-    Ok
-        { Item = item
-          Status = status
-          ViewId = viewId
-          Tasks = tasks
-          Path = itemPath }
+                let status = BacklogItemStatus.compute tasks
+
+                Ok
+                    { Item = item
+                      Status = status
+                      ViewId = viewId
+                      Tasks = tasks
+                      Path = itemPath }

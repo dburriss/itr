@@ -20,4 +20,6 @@ let execute<'deps when 'deps :> IPortfolioConfig>
             match Portfolio.tryFindProfileCaseInsensitive input.Name portfolio with
             | None -> Error(ProfileNotFound input.Name)
             | Some profile ->
-                Ok { portfolio with DefaultProfile = Some profile.Name }))
+                Ok
+                    { portfolio with
+                        DefaultProfile = Some profile.Name }))

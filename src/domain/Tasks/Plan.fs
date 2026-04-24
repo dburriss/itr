@@ -6,9 +6,6 @@ open Itr.Domain
 /// Returns (updatedTask, wasAlreadyPlanned) on success.
 let execute (task: ItrTask) : Result<ItrTask * bool, TaskError> =
     match task.State with
-    | TaskState.Planning ->
-        Ok ({ task with State = TaskState.Planned }, false)
-    | TaskState.Planned ->
-        Ok (task, true)
-    | other ->
-        Error (InvalidTaskState (task.Id, other))
+    | TaskState.Planning -> Ok({ task with State = TaskState.Planned }, false)
+    | TaskState.Planned -> Ok(task, true)
+    | other -> Error(InvalidTaskState(task.Id, other))

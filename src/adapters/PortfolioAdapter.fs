@@ -53,16 +53,31 @@ let expandPath (homeDir: string) (value: string) : string =
         expandedHome |> expandUnixEnvVars |> Environment.ExpandEnvironmentVariables
 
 let private defaultAgentConfig () : AgentConfig =
-    { Protocol = "opencode-http"; Command = "opencode"; Args = [] }
+    { Protocol = "opencode-http"
+      Command = "opencode"
+      Args = [] }
 
 let private mapAgentConfig (dto: AgentConfigDto option) : AgentConfig =
     match dto with
     | None -> defaultAgentConfig ()
     | Some d ->
-        let protocol = if String.IsNullOrWhiteSpace(d.protocol) then "opencode-http" else d.protocol
-        let command = if String.IsNullOrWhiteSpace(d.command) then "opencode" else d.command
+        let protocol =
+            if String.IsNullOrWhiteSpace(d.protocol) then
+                "opencode-http"
+            else
+                d.protocol
+
+        let command =
+            if String.IsNullOrWhiteSpace(d.command) then
+                "opencode"
+            else
+                d.command
+
         let args = if isNull d.args then [] else d.args |> Array.toList
-        { Protocol = protocol; Command = command; Args = args }
+
+        { Protocol = protocol
+          Command = command
+          Args = args }
 
 let private mapProduct homeDir (rootPath: string) : ProductRef =
     { Root = ProductRoot(expandPath homeDir rootPath) }
@@ -126,7 +141,12 @@ let readConfig (fs: IFileSystem) (homeDir: string) (path: string) : Result<Portf
             with ex ->
                 Error(ConfigParseError(resolvedPath, ex.Message))
 
-let writeConfig (fs: IFileSystem) (homeDir: string) (path: string) (portfolio: Portfolio) : Result<unit, PortfolioError> =
+let writeConfig
+    (fs: IFileSystem)
+    (homeDir: string)
+    (path: string)
+    (portfolio: Portfolio)
+    : Result<unit, PortfolioError> =
     let resolvedPath = expandPath homeDir path
 
     try
@@ -199,7 +219,9 @@ let LoadLocalConfig (productRoot: string) : AgentConfig option =
     else
         try
             let json = System.IO.File.ReadAllText(path)
-            let dto = JsonSerializer.Deserialize<LocalConfigDto>(json, jsonOptions ()) |> Option.ofObj
+
+            let dto =
+                JsonSerializer.Deserialize<LocalConfigDto>(json, jsonOptions ()) |> Option.ofObj
 
             match dto with
             | None -> None

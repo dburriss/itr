@@ -23,7 +23,10 @@ let private mkProfile name products =
     { Name = ProfileName.create name
       Products = products
       GitIdentity = None
-      AgentConfig = { Protocol = "opencode-http"; Command = "opencode"; Args = [] } }
+      AgentConfig =
+        { Protocol = "opencode-http"
+          Command = "opencode"
+          Args = [] } }
 
 /// Test deps for environment operations
 type TestEnvDeps(envVars: Map<string, string>) =
@@ -251,7 +254,10 @@ let ``resolveActiveProfile defaultProfile names non-existent profile returns Pro
 
     let deps = TestEnvDeps(Map.empty)
 
-    match FeaturePortfolio.resolveActiveProfile portfolioXyzDefault None |> Effect.run deps with
+    match
+        FeaturePortfolio.resolveActiveProfile portfolioXyzDefault None
+        |> Effect.run deps
+    with
     | Error(ProfileNotFound name) -> Assert.Equal("xyz", name)
     | other -> failwithf "expected ProfileNotFound \"xyz\", got %A" other
 
@@ -286,7 +292,10 @@ let ``resolveActiveProfile defaultProfile=Work matches profile named work`` () =
 
     let deps = TestEnvDeps(Map.empty)
 
-    match FeaturePortfolio.resolveActiveProfile portfolioMixedCaseDefault None |> Effect.run deps with
+    match
+        FeaturePortfolio.resolveActiveProfile portfolioMixedCaseDefault None
+        |> Effect.run deps
+    with
     | Ok profile -> Assert.Equal("work", profile.Name |> ProfileName.value)
     | Error e -> failwithf "expected success, got %A" e
 
@@ -401,7 +410,9 @@ let ``addProfile returns updated portfolio with new profile`` () =
     let deps = StubPortfolioConfig(portfolio)
 
     let input: Portfolios.AddProfile.Input =
-        { Name = "personal"; GitIdentity = None; SetAsDefault = false }
+        { Name = "personal"
+          GitIdentity = None
+          SetAsDefault = false }
 
     match Portfolios.AddProfile.execute "/stub/itr.json" input |> Effect.run deps with
     | Ok updated ->
@@ -416,7 +427,9 @@ let ``addProfile returns DuplicateProfileName for existing name`` () =
     let deps = StubPortfolioConfig(portfolio)
 
     let input: Portfolios.AddProfile.Input =
-        { Name = "work"; GitIdentity = None; SetAsDefault = false }
+        { Name = "work"
+          GitIdentity = None
+          SetAsDefault = false }
 
     match Portfolios.AddProfile.execute "/stub/itr.json" input |> Effect.run deps with
     | Error(DuplicateProfileName name) -> Assert.Equal("work", name)
@@ -429,11 +442,12 @@ let ``addProfile with setAsDefault updates DefaultProfile`` () =
     let deps = StubPortfolioConfig(portfolio)
 
     let input: Portfolios.AddProfile.Input =
-        { Name = "personal"; GitIdentity = None; SetAsDefault = true }
+        { Name = "personal"
+          GitIdentity = None
+          SetAsDefault = true }
 
     match Portfolios.AddProfile.execute "/stub/itr.json" input |> Effect.run deps with
-    | Ok updated ->
-        Assert.Equal(Some "personal", updated.DefaultProfile |> Option.map ProfileName.value)
+    | Ok updated -> Assert.Equal(Some "personal", updated.DefaultProfile |> Option.map ProfileName.value)
     | Error e -> failwithf "expected Ok, got %A" e
 
 [<Fact>]
@@ -442,7 +456,9 @@ let ``addProfile returns InvalidProfileName for invalid name`` () =
     let deps = StubPortfolioConfig(portfolio)
 
     let input: Portfolios.AddProfile.Input =
-        { Name = "My Work"; GitIdentity = None; SetAsDefault = false }
+        { Name = "My Work"
+          GitIdentity = None
+          SetAsDefault = false }
 
     match Portfolios.AddProfile.execute "/stub/itr.json" input |> Effect.run deps with
     | Error(InvalidProfileName(value, _)) -> Assert.Equal("My Work", value)
@@ -462,8 +478,7 @@ let ``setDefaultProfile sets DefaultProfile to matched profile name`` () =
     let input: Portfolios.SetDefaultProfile.Input = { Name = "personal" }
 
     match Portfolios.SetDefaultProfile.execute "/stub/itr.json" input |> Effect.run deps with
-    | Ok updated ->
-        Assert.Equal(Some "personal", updated.DefaultProfile |> Option.map ProfileName.value)
+    | Ok updated -> Assert.Equal(Some "personal", updated.DefaultProfile |> Option.map ProfileName.value)
     | Error e -> failwithf "expected Ok, got %A" e
 
 [<Fact>]
@@ -487,20 +502,14 @@ let ``setDefaultProfile lookup is case-insensitive`` () =
     let input: Portfolios.SetDefaultProfile.Input = { Name = "WORK" }
 
     match Portfolios.SetDefaultProfile.execute "/stub/itr.json" input |> Effect.run deps with
-    | Ok updated ->
-        Assert.Equal(Some "work", updated.DefaultProfile |> Option.map ProfileName.value)
+    | Ok updated -> Assert.Equal(Some "work", updated.DefaultProfile |> Option.map ProfileName.value)
     | Error e -> failwithf "expected Ok, got %A" e
 
 /// Combined test deps for registerProduct: IPortfolioConfig + IProductConfig + IFileSystem.
 /// dirExists: controls IFileSystem.DirectoryExists
 /// productDefs: maps root path → ProductDefinition
 /// portfolio: the portfolio returned by LoadConfig
-type TestRegisterDeps
-    (
-        portfolio: Portfolio,
-        dirExists: string -> bool,
-        productDefs: Map<string, ProductDefinition>
-    ) =
+type TestRegisterDeps(portfolio: Portfolio, dirExists: string -> bool, productDefs: Map<string, ProductDefinition>) =
     interface IPortfolioConfig with
         member _.ConfigPath() = "/stub/itr.json"
         member _.LoadConfig _ = Ok portfolio
@@ -508,7 +517,10 @@ type TestRegisterDeps
 
     interface IFileSystem with
         member _.ReadFile _ = Error(FileNotFound "not implemented")
-        member _.WriteFile _ _ = Error(IoException("", "not implemented"))
+
+        member _.WriteFile _ _ =
+            Error(IoException("", "not implemented"))
+
         member _.FileExists _ = false
         member _.DirectoryExists path = dirExists path
 
@@ -523,7 +535,10 @@ let private mkRegPortfolio profileName products =
         { Name = ProfileName.create profileName
           Products = products
           GitIdentity = None
-          AgentConfig = { Protocol = "opencode-http"; Command = "opencode"; Args = [] } }
+          AgentConfig =
+            { Protocol = "opencode-http"
+              Command = "opencode"
+              Args = [] } }
 
     DomainPortfolio.tryCreate (Some(ProfileName.create profileName)) [ profile ]
     |> Result.defaultWith (fun e -> failwithf "failed to build portfolio: %A" e)
@@ -538,8 +553,7 @@ let ``registerProduct valid path adds ProductRef to active profile and returns u
     let deps =
         TestRegisterDeps(portfolio, (fun _ -> true), Map.ofList [ root, definition ])
 
-    let input: Portfolios.RegisterProduct.Input =
-        { Path = root; Profile = None }
+    let input: Portfolios.RegisterProduct.Input = { Path = root; Profile = None }
 
     match Portfolios.RegisterProduct.execute "/stub/itr.json" input |> Effect.run deps with
     | Ok updated ->
@@ -558,14 +572,9 @@ let ``registerProduct duplicate canonical id returns DuplicateProductId portfoli
     let portfolio = mkRegPortfolio "work" [ mkProductRef root ]
 
     let deps =
-        TestRegisterDeps(
-            portfolio,
-            (fun _ -> true),
-            Map.ofList [ root, definition; root2, definition2 ]
-        )
+        TestRegisterDeps(portfolio, (fun _ -> true), Map.ofList [ root, definition; root2, definition2 ])
 
-    let input: Portfolios.RegisterProduct.Input =
-        { Path = root2; Profile = None }
+    let input: Portfolios.RegisterProduct.Input = { Path = root2; Profile = None }
 
     match Portfolios.RegisterProduct.execute "/stub/itr.json" input |> Effect.run deps with
     | Error(DuplicateProductId(profileName, productId)) ->
@@ -579,11 +588,9 @@ let ``registerProduct non-existent directory returns ProductConfigError portfoli
 
     let portfolio = mkRegPortfolio "work" []
 
-    let deps =
-        TestRegisterDeps(portfolio, (fun _ -> false), Map.empty)
+    let deps = TestRegisterDeps(portfolio, (fun _ -> false), Map.empty)
 
-    let input: Portfolios.RegisterProduct.Input =
-        { Path = root; Profile = None }
+    let input: Portfolios.RegisterProduct.Input = { Path = root; Profile = None }
 
     match Portfolios.RegisterProduct.execute "/stub/itr.json" input |> Effect.run deps with
     | Error(ProductConfigError _) -> Assert.True(true)
@@ -596,11 +603,9 @@ let ``registerProduct missing product yaml propagates ProductConfigError`` () =
     let portfolio = mkRegPortfolio "work" []
 
     // dirExists returns true but productDefs is empty → LoadProductConfig returns Error
-    let deps =
-        TestRegisterDeps(portfolio, (fun _ -> true), Map.empty)
+    let deps = TestRegisterDeps(portfolio, (fun _ -> true), Map.empty)
 
-    let input: Portfolios.RegisterProduct.Input =
-        { Path = root; Profile = None }
+    let input: Portfolios.RegisterProduct.Input = { Path = root; Profile = None }
 
     match Portfolios.RegisterProduct.execute "/stub/itr.json" input |> Effect.run deps with
     | Error(ProductConfigError _) -> Assert.True(true)
@@ -617,7 +622,8 @@ let ``registerProduct named profile not found returns ProfileNotFound`` () =
         TestRegisterDeps(portfolio, (fun _ -> true), Map.ofList [ root, definition ])
 
     let input: Portfolios.RegisterProduct.Input =
-        { Path = root; Profile = Some "nonexistent" }
+        { Path = root
+          Profile = Some "nonexistent" }
 
     match Portfolios.RegisterProduct.execute "/stub/itr.json" input |> Effect.run deps with
     | Error(ProfileNotFound name) -> Assert.Equal("nonexistent", name)
@@ -673,15 +679,17 @@ type TestInitDeps
                           Repo = None
                           Path = None }
                       CoordRoot = coordRoot }
-            | Error _ ->
-                Error(ProductConfigError(root, "product.yaml not found (test stub)"))
+            | Error _ -> Error(ProductConfigError(root, "product.yaml not found (test stub)"))
 
 let private mkInitPortfolio () =
     let profile =
         { Name = ProfileName.create "default"
           Products = []
           GitIdentity = None
-          AgentConfig = { Protocol = "opencode-http"; Command = "opencode"; Args = [] } }
+          AgentConfig =
+            { Protocol = "opencode-http"
+              Command = "opencode"
+              Args = [] } }
 
     DomainPortfolio.tryCreate (Some(ProfileName.create "default")) [ profile ]
     |> Result.defaultWith (fun e -> failwithf "failed to build test portfolio: %A" e)
@@ -700,8 +708,7 @@ let ``initProduct with valid inputs and RegisterProfile=None writes all files an
     let written = System.Collections.Generic.List<string * string>()
     let portfolio = mkInitPortfolio ()
 
-    let deps =
-        TestInitDeps((fun _ -> true), (fun _ -> false), written, portfolio)
+    let deps = TestInitDeps((fun _ -> true), (fun _ -> false), written, portfolio)
 
     let input = defaultInitInput "my-product" path
 
@@ -720,8 +727,7 @@ let ``initProduct with RegisterProfile=Some writes files and returns Some update
     let written = System.Collections.Generic.List<string * string>()
     let portfolio = mkInitPortfolio ()
 
-    let deps =
-        TestInitDeps((fun _ -> true), (fun _ -> false), written, portfolio)
+    let deps = TestInitDeps((fun _ -> true), (fun _ -> false), written, portfolio)
 
     let input =
         { defaultInitInput "my-product" path with
@@ -732,8 +738,7 @@ let ``initProduct with RegisterProfile=Some writes files and returns Some update
         let paths = written |> Seq.map fst |> Seq.toList
         Assert.Contains(IO.Path.Combine(path, "product.yaml"), paths)
 
-        let profile =
-            updatedPortfolio.Profiles |> Map.find (ProfileName.create "default")
+        let profile = updatedPortfolio.Profiles |> Map.find (ProfileName.create "default")
 
         Assert.Equal(1, profile.Products.Length)
     | other -> failwithf "expected Ok Some, got %A" other
@@ -747,8 +752,7 @@ let ``initProduct when product.yaml already exists returns ProductConfigError an
     let fileExistsStub p =
         p = IO.Path.Combine(path, "product.yaml")
 
-    let deps =
-        TestInitDeps((fun _ -> true), fileExistsStub, written, portfolio)
+    let deps = TestInitDeps((fun _ -> true), fileExistsStub, written, portfolio)
 
     let input = defaultInitInput "my-product" path
 
@@ -762,8 +766,7 @@ let ``initProduct when path directory does not exist returns ProductConfigError`
     let written = System.Collections.Generic.List<string * string>()
     let portfolio = mkInitPortfolio ()
 
-    let deps =
-        TestInitDeps((fun _ -> false), (fun _ -> false), written, portfolio)
+    let deps = TestInitDeps((fun _ -> false), (fun _ -> false), written, portfolio)
 
     let input = defaultInitInput "my-product" path
 
@@ -777,8 +780,7 @@ let ``initProduct with invalid id returns InvalidProductId`` () =
     let written = System.Collections.Generic.List<string * string>()
     let portfolio = mkInitPortfolio ()
 
-    let deps =
-        TestInitDeps((fun _ -> true), (fun _ -> false), written, portfolio)
+    let deps = TestInitDeps((fun _ -> true), (fun _ -> false), written, portfolio)
 
     let input = defaultInitInput "INVALID_ID" path
 
@@ -794,8 +796,7 @@ let ``initProduct with CoordinationMode=standalone writes yaml without coordinat
     let written = System.Collections.Generic.List<string * string>()
     let portfolio = mkInitPortfolio ()
 
-    let deps =
-        TestInitDeps((fun _ -> true), (fun _ -> false), written, portfolio)
+    let deps = TestInitDeps((fun _ -> true), (fun _ -> false), written, portfolio)
 
     let input =
         { defaultInitInput "my-product" path with

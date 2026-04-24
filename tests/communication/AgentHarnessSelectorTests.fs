@@ -26,6 +26,7 @@ let ``trySelectHarness opencode-http returns Ok`` () =
 [<Fact>]
 let ``trySelectHarness unknown protocol returns Error`` () =
     let result = AgentHarnessSelector.trySelectHarness "grpc" "" [] ""
+
     match result with
     | Error msg -> Assert.Contains("grpc", msg)
     | Ok _ -> Assert.Fail("Expected error for unknown protocol")

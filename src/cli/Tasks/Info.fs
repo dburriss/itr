@@ -23,20 +23,26 @@ let handle
     | Error e -> Error(formatTaskError e)
     | Ok allTaskTuples ->
         let allTasks = allTaskTuples |> List.map fst
+
         match allTaskTuples |> List.tryFind (fun (t, _) -> t.Id = taskId) with
         | None -> Error(formatTaskError (TaskNotFound taskId))
-        | Some (_, taskYamlPath) ->
+        | Some(_, taskYamlPath) ->
 
-            let detailInput: Tasks.Query.DetailInput = { TaskId = taskId; AllTasks = allTasks; TaskYamlPath = taskYamlPath }
+            let detailInput: Tasks.Query.DetailInput =
+                { TaskId = taskId
+                  AllTasks = allTasks
+                  TaskYamlPath = taskYamlPath }
+
             match Tasks.Query.getDetail detailInput with
             | Error e -> Error(formatTaskError e)
             | Ok detail ->
-                let taskDetailView : TaskDetailView =
+                let taskDetailView: TaskDetailView =
                     { Task = detail.Task
                       Siblings = detail.Siblings
                       PlanExists = detail.PlanExists
                       PlanApproved = detail.PlanApproved
                       TaskYamlPath = detail.TaskYamlPath
                       PlanMdPath = detail.PlanMdPath }
+
                 TaskFormatter.formatDetail format taskDetailView
                 Ok()

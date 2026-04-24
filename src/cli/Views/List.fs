@@ -24,7 +24,9 @@ let handle
         | Error e -> Error(formatBacklogError e)
         | Ok archivedItems ->
             let archivedIds =
-                archivedItems |> List.map (fun (item, _) -> BacklogId.value item.Id) |> Set.ofList
+                archivedItems
+                |> List.map (fun (item, _) -> BacklogId.value item.Id)
+                |> Set.ofList
 
             if views.IsEmpty then
                 match format with
@@ -37,10 +39,10 @@ let handle
                     |> List.map (fun view ->
                         let description = view.Description |> Option.defaultValue ""
                         let total = view.Items.Length
+
                         let archived =
-                            view.Items
-                            |> List.filter (fun id -> archivedIds.Contains(id))
-                            |> List.length
+                            view.Items |> List.filter (fun id -> archivedIds.Contains(id)) |> List.length
+
                         (view.Id, description, total, archived))
 
                 match format with
@@ -49,9 +51,15 @@ let handle
                         rows
                         |> List.map (fun (id, description, total, archived) ->
                             let descJson = description.Replace("\"", "\\\"")
-                            sprintf "  { \"id\": \"%s\", \"description\": \"%s\", \"items\": %d, \"archived\": %d }"
-                                id descJson total archived)
+
+                            sprintf
+                                "  { \"id\": \"%s\", \"description\": \"%s\", \"items\": %d, \"archived\": %d }"
+                                id
+                                descJson
+                                total
+                                archived)
                         |> String.concat ",\n"
+
                     printfn "["
                     printfn "%s" items
                     printfn "]"

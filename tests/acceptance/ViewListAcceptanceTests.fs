@@ -14,27 +14,35 @@ open Itr.Domain.Backlogs
 // ---------------------------------------------------------------------------
 
 let private mkRoot () =
-    let root = Path.Combine(Path.GetTempPath(), $"itr-view-list-tests-{Guid.NewGuid():N}")
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-view-list-tests-{Guid.NewGuid():N}")
+
     Directory.CreateDirectory(root) |> ignore
     root
 
 let private writeViewYaml (coordRoot: string) (viewId: string) (description: string option) (items: string list) =
     let viewsDir = Path.Combine(coordRoot, "BACKLOG", "_views")
     Directory.CreateDirectory(viewsDir) |> ignore
+
     let descLine =
         match description with
         | Some d -> $"description: {d}\n"
         | None -> ""
+
     let itemLines =
-        if items.IsEmpty then ""
+        if items.IsEmpty then
+            ""
         else
             let lines = items |> List.map (fun i -> $"  - {i}") |> String.concat "\n"
             $"items:\n{lines}\n"
+
     let yaml = $"id: {viewId}\n{descLine}{itemLines}"
     File.WriteAllText(Path.Combine(viewsDir, $"{viewId}.yaml"), yaml)
 
 let private writeArchivedItemYaml (coordRoot: string) (backlogId: string) =
-    let archiveDir = Path.Combine(coordRoot, "BACKLOG", "_archive", $"2026-01-01-{backlogId}")
+    let archiveDir =
+        Path.Combine(coordRoot, "BACKLOG", "_archive", $"2026-01-01-{backlogId}")
+
     Directory.CreateDirectory(archiveDir) |> ignore
     let yaml = $"id: {backlogId}\ntitle: Archived {backlogId}\nrepos:\n  - repo-1\n"
     File.WriteAllText(Path.Combine(archiveDir, "item.yaml"), yaml)
@@ -46,11 +54,13 @@ let private writeArchivedItemYaml (coordRoot: string) (backlogId: string) =
 [<Fact>]
 let ``ListViews returns multiple views with correct item counts`` () =
     let root = mkRoot ()
+
     try
-        writeViewYaml root "sprint-1" (Some "Sprint 1 scope") ["feat-a"; "feat-b"; "feat-c"]
-        writeViewYaml root "sprint-2" (Some "Sprint 2 scope") ["feat-d"]
+        writeViewYaml root "sprint-1" (Some "Sprint 1 scope") [ "feat-a"; "feat-b"; "feat-c" ]
+        writeViewYaml root "sprint-2" (Some "Sprint 2 scope") [ "feat-d" ]
 
         let viewStore = ViewStoreAdapter() :> IViewStore
+
         match viewStore.ListViews root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok views ->
@@ -70,27 +80,29 @@ let ``ListViews returns multiple views with correct item counts`` () =
 [<Fact>]
 let ``ListViews returns empty list when no views directory exists`` () =
     let root = mkRoot ()
+
     try
         let viewStore = ViewStoreAdapter() :> IViewStore
+
         match viewStore.ListViews root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
-        | Ok views ->
-            Assert.Empty(views)
+        | Ok views -> Assert.Empty(views)
     finally
         Directory.Delete(root, true)
 
 [<Fact>]
 let ``ListViews returns empty list when views directory is empty`` () =
     let root = mkRoot ()
+
     try
         let viewsDir = Path.Combine(root, "BACKLOG", "_views")
         Directory.CreateDirectory(viewsDir) |> ignore
 
         let viewStore = ViewStoreAdapter() :> IViewStore
+
         match viewStore.ListViews root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
-        | Ok views ->
-            Assert.Empty(views)
+        | Ok views -> Assert.Empty(views)
     finally
         Directory.Delete(root, true)
 
@@ -101,8 +113,9 @@ let ``ListViews returns empty list when views directory is empty`` () =
 [<Fact>]
 let ``view list JSON output fields are correct`` () =
     let root = mkRoot ()
+
     try
-        writeViewYaml root "my-view" (Some "A test view") ["item-1"; "item-2"]
+        writeViewYaml root "my-view" (Some "A test view") [ "item-1"; "item-2" ]
         writeArchivedItemYaml root "item-1"
 
         let viewStore = ViewStoreAdapter() :> IViewStore
@@ -115,18 +128,26 @@ let ``view list JSON output fields are correct`` () =
             | Error e -> failwithf "expected Ok, got Error: %A" e
             | Ok archivedItems ->
                 let archivedIds =
-                    archivedItems |> List.map (fun (item, _) -> BacklogId.value item.Id) |> Set.ofList
+                    archivedItems
+                    |> List.map (fun (item, _) -> BacklogId.value item.Id)
+                    |> Set.ofList
 
                 let view = views |> List.find (fun v -> v.Id = "my-view")
                 let total = view.Items.Length
+
                 let archived =
                     view.Items |> List.filter (fun id -> archivedIds.Contains(id)) |> List.length
 
                 // Simulate what the JSON handler would produce
                 let description = view.Description |> Option.defaultValue ""
+
                 let line =
-                    sprintf "  { \"id\": \"%s\", \"description\": \"%s\", \"items\": %d, \"archived\": %d }"
-                        view.Id description total archived
+                    sprintf
+                        "  { \"id\": \"%s\", \"description\": \"%s\", \"items\": %d, \"archived\": %d }"
+                        view.Id
+                        description
+                        total
+                        archived
 
                 Assert.Equal("my-view", view.Id)
                 Assert.Equal(2, total)
@@ -144,8 +165,9 @@ let ``view list JSON output fields are correct`` () =
 [<Fact>]
 let ``view list text output is tab-separated with correct fields`` () =
     let root = mkRoot ()
+
     try
-        writeViewYaml root "v1" (Some "View One") ["a"; "b"]
+        writeViewYaml root "v1" (Some "View One") [ "a"; "b" ]
 
         let viewStore = ViewStoreAdapter() :> IViewStore
         let backlogStore = BacklogStoreAdapter() :> IBacklogStore
@@ -157,11 +179,14 @@ let ``view list text output is tab-separated with correct fields`` () =
             | Error e -> failwithf "expected Ok, got Error: %A" e
             | Ok archivedItems ->
                 let archivedIds =
-                    archivedItems |> List.map (fun (item, _) -> BacklogId.value item.Id) |> Set.ofList
+                    archivedItems
+                    |> List.map (fun (item, _) -> BacklogId.value item.Id)
+                    |> Set.ofList
 
                 let view = views.[0]
                 let description = view.Description |> Option.defaultValue ""
                 let total = view.Items.Length
+
                 let archived =
                     view.Items |> List.filter (fun id -> archivedIds.Contains(id)) |> List.length
 
@@ -184,10 +209,12 @@ let ``view list text output is tab-separated with correct fields`` () =
 [<Fact>]
 let ``view with no description field renders as empty string`` () =
     let root = mkRoot ()
+
     try
-        writeViewYaml root "nodesc" None ["item-x"]
+        writeViewYaml root "nodesc" None [ "item-x" ]
 
         let viewStore = ViewStoreAdapter() :> IViewStore
+
         match viewStore.ListViews root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok views ->
@@ -209,9 +236,10 @@ let ``view with no description field renders as empty string`` () =
 [<Fact>]
 let ``archived item count reflects only items that appear in archived backlog`` () =
     let root = mkRoot ()
+
     try
         // View with 4 items; 2 are archived
-        writeViewYaml root "mixed-view" (Some "Mixed") ["active-1"; "active-2"; "archived-a"; "archived-b"]
+        writeViewYaml root "mixed-view" (Some "Mixed") [ "active-1"; "active-2"; "archived-a"; "archived-b" ]
         writeArchivedItemYaml root "archived-a"
         writeArchivedItemYaml root "archived-b"
 
@@ -225,14 +253,15 @@ let ``archived item count reflects only items that appear in archived backlog`` 
             | Error e -> failwithf "expected Ok, got Error: %A" e
             | Ok archivedItems ->
                 let archivedIds =
-                    archivedItems |> List.map (fun (item, _) -> BacklogId.value item.Id) |> Set.ofList
+                    archivedItems
+                    |> List.map (fun (item, _) -> BacklogId.value item.Id)
+                    |> Set.ofList
 
                 let view = views |> List.find (fun v -> v.Id = "mixed-view")
                 let total = view.Items.Length
+
                 let archived =
-                    view.Items
-                    |> List.filter (fun id -> archivedIds.Contains(id))
-                    |> List.length
+                    view.Items |> List.filter (fun id -> archivedIds.Contains(id)) |> List.length
 
                 Assert.Equal(4, total)
                 Assert.Equal(2, archived)

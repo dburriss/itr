@@ -36,9 +36,11 @@ let defaultPromptFunctions: PromptFunctions =
         fun question defaultValue ->
             let prompt = TextPrompt<string>(question)
             prompt.AllowEmpty <- false
+
             match defaultValue with
             | Some d -> prompt.DefaultValue(d) |> ignore
             | None -> ()
+
             AnsiConsole.Prompt(prompt)
 
       AskOptionalText =
@@ -62,21 +64,18 @@ let defaultPromptFunctions: PromptFunctions =
             prompt.AddChoices(choices) |> ignore
             AnsiConsole.Prompt(prompt) |> Seq.toList
 
-      AskConfirm =
-        fun question ->
-            AnsiConsole.Confirm(question)
+      AskConfirm = fun question -> AnsiConsole.Confirm(question)
 
-      IsInputRedirected =
-        fun () -> Console.IsInputRedirected }
+      IsInputRedirected = fun () -> Console.IsInputRedirected }
 
 // ---------------------------------------------------------------------------
 // Slug validation
 // ---------------------------------------------------------------------------
 
 let private isValidSlug (s: string) =
-    not (String.IsNullOrWhiteSpace(s)) &&
-    not (s.Contains(' ')) &&
-    System.Text.RegularExpressions.Regex.IsMatch(s, @"^[a-z0-9][a-z0-9-]*$")
+    not (String.IsNullOrWhiteSpace(s))
+    && not (s.Contains(' '))
+    && System.Text.RegularExpressions.Regex.IsMatch(s, @"^[a-z0-9][a-z0-9-]*$")
 
 // ---------------------------------------------------------------------------
 // Main prompt function (internal, with injectable prompt functions for testing)
@@ -106,10 +105,13 @@ let promptBacklogAddWith
         | Some id -> id
         | None ->
             let mutable result = ""
+
             while not (isValidSlug result) do
                 result <- fns.AskText "Backlog ID (slug: lowercase letters, numbers, hyphens):" None
+
                 if not (isValidSlug result) then
                     AnsiConsole.MarkupLine("[red]ID must match [a-z0-9][a-z0-9-]* with no spaces.[/]")
+
             result
 
     // 3.5 title prompt
@@ -118,25 +120,26 @@ let promptBacklogAddWith
         | Some t -> t
         | None ->
             let mutable result = ""
+
             while String.IsNullOrWhiteSpace(result) do
                 result <- fns.AskText "Title:" None
+
                 if String.IsNullOrWhiteSpace(result) then
                     AnsiConsole.MarkupLine("[red]Title cannot be empty.[/]")
+
             result
 
     // 3.6 type prompt
     let itemType =
         match prefilled.ItemType with
         | Some t -> t
-        | None ->
-            fns.AskSelect "Type:" ["feature"; "bug"; "chore"; "refactor"; "spike"]
+        | None -> fns.AskSelect "Type:" [ "feature"; "bug"; "chore"; "refactor"; "spike" ]
 
     // 3.7 priority prompt
     let priority =
         match prefilled.Priority with
         | Some p -> p
-        | None ->
-            fns.AskSelect "Priority:" ["low"; "medium"; "high"]
+        | None -> fns.AskSelect "Priority:" [ "low"; "medium"; "high" ]
 
     // 3.8 summary prompt (optional)
     let summary =
@@ -152,10 +155,10 @@ let promptBacklogAddWith
         | Some r -> r
         | None ->
             let repos = productConfig.Repos |> Map.toList |> List.map (fun (RepoId k, _) -> k)
+
             match repos with
-            | [singleRepo] -> singleRepo
-            | _ ->
-                fns.AskSelect "Repo:" repos
+            | [ singleRepo ] -> singleRepo
+            | _ -> fns.AskSelect "Repo:" repos
 
     // 3.10 dependencies prompt
     let dependencies =
@@ -166,27 +169,48 @@ let promptBacklogAddWith
             | Error _ -> []
             | Ok items ->
                 let itemList = items |> List.map fst
-                if itemList.IsEmpty then []
+
+                if itemList.IsEmpty then
+                    []
                 else
-                    let sorted = itemList |> List.sortBy (fun i -> BacklogId.value i.Id) |> List.map (fun i -> BacklogId.value i.Id)
+                    let sorted =
+                        itemList
+                        |> List.sortBy (fun i -> BacklogId.value i.Id)
+                        |> List.map (fun i -> BacklogId.value i.Id)
+
                     fns.AskMultiSelect "Dependencies (space to select, enter to confirm):" sorted
 
     // 3.11 acceptance criteria loop
     let acceptanceCriteria =
         let mutable criteria = []
         let mutable continueLoop = true
+
         while continueLoop do
             let entry = fns.AskOptionalText "Acceptance criterion (leave empty to stop):"
+
             if String.IsNullOrWhiteSpace(entry) then
                 continueLoop <- false
             else
-                criteria <- criteria @ [entry]
+                criteria <- criteria @ [ entry ]
+
         criteria
 
     // 3.12 confirmation summary
     let summaryStr = summary |> Option.defaultValue "(none)"
-    let depsStr = if dependencies.IsEmpty then "(none)" else String.concat ", " dependencies
-    let acStr = if acceptanceCriteria.IsEmpty then "(none)" else acceptanceCriteria |> List.mapi (fun i c -> $"{i+1}. {c}") |> String.concat "; "
+
+    let depsStr =
+        if dependencies.IsEmpty then
+            "(none)"
+        else
+            String.concat ", " dependencies
+
+    let acStr =
+        if acceptanceCriteria.IsEmpty then
+            "(none)"
+        else
+            acceptanceCriteria
+            |> List.mapi (fun i c -> $"{i + 1}. {c}")
+            |> String.concat "; "
 
     let table = Spectre.Console.Table()
     table.AddColumn("Field") |> ignore
@@ -206,7 +230,7 @@ let promptBacklogAddWith
         Ok
             { BacklogId = backlogId
               Title = title
-              Repos = [repo]
+              Repos = [ repo ]
               ItemType = Some itemType
               Priority = Some priority
               Summary = summary

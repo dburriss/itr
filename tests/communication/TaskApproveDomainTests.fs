@@ -14,9 +14,9 @@ let private today = DateOnly(2026, 3, 15)
 let private mkTask id backlogId state =
     { Id = TaskId.create id
       SourceBacklog =
-          match BacklogId.tryCreate backlogId with
-          | Ok bid -> bid
-          | Error e -> failwithf "invalid backlog id %s: %A" backlogId e
+        match BacklogId.tryCreate backlogId with
+        | Ok bid -> bid
+        | Error e -> failwithf "invalid backlog id %s: %A" backlogId e
       Repo = RepoId "main-repo"
       State = state
       CreatedAt = today }
@@ -31,7 +31,7 @@ let ``approveTask transitions Planned task with plan to Approved`` () =
 
     match Tasks.Approve.execute { Task = task; PlanExists = true } with
     | Error e -> failwithf "expected Ok, got Error: %A" e
-    | Ok (updatedTask, wasAlreadyApproved) ->
+    | Ok(updatedTask, wasAlreadyApproved) ->
         Assert.Equal(TaskState.Approved, updatedTask.State)
         Assert.False(wasAlreadyApproved)
 
@@ -41,7 +41,7 @@ let ``approveTask re-approving Approved task is idempotent`` () =
 
     match Tasks.Approve.execute { Task = task; PlanExists = true } with
     | Error e -> failwithf "expected Ok, got Error: %A" e
-    | Ok (updatedTask, wasAlreadyApproved) ->
+    | Ok(updatedTask, wasAlreadyApproved) ->
         Assert.Equal(TaskState.Approved, updatedTask.State)
         Assert.True(wasAlreadyApproved)
 
@@ -52,7 +52,7 @@ let ``approveTask returns InvalidTaskState for Planning task`` () =
 
     match Tasks.Approve.execute { Task = task; PlanExists = true } with
     | Ok _ -> failwith "expected Error, got Ok"
-    | Error (InvalidTaskState (id, current)) ->
+    | Error(InvalidTaskState(id, current)) ->
         Assert.Equal(taskId, id)
         Assert.Equal(TaskState.Planning, current)
     | Error e -> failwithf "unexpected error: %A" e
@@ -64,7 +64,7 @@ let ``approveTask returns InvalidTaskState for InProgress task`` () =
 
     match Tasks.Approve.execute { Task = task; PlanExists = true } with
     | Ok _ -> failwith "expected Error, got Ok"
-    | Error (InvalidTaskState (id, current)) ->
+    | Error(InvalidTaskState(id, current)) ->
         Assert.Equal(taskId, id)
         Assert.Equal(TaskState.InProgress, current)
     | Error e -> failwithf "unexpected error: %A" e
@@ -76,6 +76,5 @@ let ``approveTask returns MissingPlanArtifact for Planned task without plan`` ()
 
     match Tasks.Approve.execute { Task = task; PlanExists = false } with
     | Ok _ -> failwith "expected Error, got Ok"
-    | Error (MissingPlanArtifact id) ->
-        Assert.Equal(taskId, id)
+    | Error(MissingPlanArtifact id) -> Assert.Equal(taskId, id)
     | Error e -> failwithf "unexpected error: %A" e
