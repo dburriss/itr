@@ -20,62 +20,68 @@ type Input =
 
 /// Pure pipeline: validates inputs and builds a BacklogItem.
 /// Does not perform any I/O.
-let execute
-    (productConfig: ProductConfig)
-    (input: Input)
-    (today: System.DateOnly)
-    : Result<BacklogItem, BacklogError> =
+let execute (productConfig: ProductConfig) (input: Input) (today: System.DateOnly) : Result<BacklogItem, BacklogError> =
 
     match BacklogId.tryCreate input.BacklogId with
     | Error _ -> Error(BacklogItemNotFound(BacklogId input.BacklogId))
     | Ok backlogId ->
 
-    if System.String.IsNullOrWhiteSpace(input.Title) then
-        Error MissingTitle
-    else
+        if System.String.IsNullOrWhiteSpace(input.Title) then
+            Error MissingTitle
+        else
 
-    let itemTypeStr = input.ItemType |> Option.defaultValue "feature"
-    match BacklogItemType.tryParse itemTypeStr with
-    | Error e -> Error e
-    | Ok itemType ->
+            let itemTypeStr = input.ItemType |> Option.defaultValue "feature"
 
-    let resolvedReposResult =
-        match input.Repos with
-        | [] ->
-            if productConfig.Repos.Count = 1 then
-                productConfig.Repos |> Map.toList |> List.map fst |> Ok
-            else
-                Error(RepoNotInProduct(RepoId ""))
-        | repos -> Ok (repos |> List.map RepoId)
+            match BacklogItemType.tryParse itemTypeStr with
+            | Error e -> Error e
+            | Ok itemType ->
 
-    match resolvedReposResult with
-    | Error e -> Error e
-    | Ok repoIds ->
+                let resolvedReposResult =
+                    match input.Repos with
+                    | [] ->
+                        if productConfig.Repos.Count = 1 then
+                            productConfig.Repos |> Map.toList |> List.map fst |> Ok
+                        else
+                            Error(RepoNotInProduct(RepoId ""))
+                    | repos -> Ok(repos |> List.map RepoId)
 
-    let unknownRepo =
-        repoIds |> List.tryFind (fun repoId -> not (Map.containsKey repoId productConfig.Repos))
+                match resolvedReposResult with
+                | Error e -> Error e
+                | Ok repoIds ->
 
-    match unknownRepo with
-    | Some repoId -> Error(RepoNotInProduct repoId)
-    | None ->
+                    let unknownRepo =
+                        repoIds
+                        |> List.tryFind (fun repoId -> not (Map.containsKey repoId productConfig.Repos))
 
-    let depResults =
-        input.DependsOn |> List.map BacklogId.tryCreate
+                    match unknownRepo with
+                    | Some repoId -> Error(RepoNotInProduct repoId)
+                    | None ->
 
-    let depErrors = depResults |> List.choose (function Error _ -> Some () | Ok _ -> None)
-    match depErrors with
-    | _ :: _ -> Error(BacklogItemNotFound(BacklogId ""))
-    | [] ->
+                        let depResults = input.DependsOn |> List.map BacklogId.tryCreate
 
-    let deps = depResults |> List.choose (function Ok id -> Some id | Error _ -> None)
+                        let depErrors =
+                            depResults
+                            |> List.choose (function
+                                | Error _ -> Some()
+                                | Ok _ -> None)
 
-    Ok
-        { Id = backlogId
-          Title = input.Title
-          Repos = repoIds
-          Type = itemType
-          Priority = input.Priority
-          Summary = input.Summary
-          AcceptanceCriteria = input.AcceptanceCriteria
-          Dependencies = deps
-          CreatedAt = today }
+                        match depErrors with
+                        | _ :: _ -> Error(BacklogItemNotFound(BacklogId ""))
+                        | [] ->
+
+                            let deps =
+                                depResults
+                                |> List.choose (function
+                                    | Ok id -> Some id
+                                    | Error _ -> None)
+
+                            Ok
+                                { Id = backlogId
+                                  Title = input.Title
+                                  Repos = repoIds
+                                  Type = itemType
+                                  Priority = input.Priority
+                                  Summary = input.Summary
+                                  AcceptanceCriteria = input.AcceptanceCriteria
+                                  Dependencies = deps
+                                  CreatedAt = today }

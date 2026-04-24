@@ -32,7 +32,7 @@ let handle
                 match Portfolios.Query.loadAllDefinitions profile deps with
                 | Error e -> Error(formatPortfolioError e)
                 | Ok pairs ->
-                    let rows : ProductRow list =
+                    let rows: ProductRow list =
                         pairs
                         |> List.map (fun (_, definition) ->
                             { Id = ProductId.value definition.Id

@@ -27,7 +27,12 @@ let private mkProductConfig repos =
         |> List.map (fun (k, v) -> RepoId k, ({ Path = v; Url = None }: RepoConfig))
         |> Map.ofList }
 
-let private mkInput (backlogId: string) (title: string) (repos: string list) (itemType: string option) : Backlogs.Create.Input =
+let private mkInput
+    (backlogId: string)
+    (title: string)
+    (repos: string list)
+    (itemType: string option)
+    : Backlogs.Create.Input =
     { BacklogId = backlogId
       Title = title
       Repos = repos
@@ -44,7 +49,7 @@ let private mkInput (backlogId: string) (title: string) (repos: string list) (it
 [<Fact>]
 let ``type defaults to feature when omitted`` () =
     let productConfig = mkProductConfig [ "main-repo", "." ]
-    let input = mkInput "my-feature" "My Feature" ["main-repo"] None
+    let input = mkInput "my-feature" "My Feature" [ "main-repo" ] None
 
     match Backlogs.Create.execute productConfig input today with
     | Ok item -> Assert.Equal(Feature, item.Type)
@@ -53,7 +58,7 @@ let ``type defaults to feature when omitted`` () =
 [<Fact>]
 let ``explicit feature type is accepted`` () =
     let productConfig = mkProductConfig [ "main-repo", "." ]
-    let input = mkInput "my-feature" "My Feature" ["main-repo"] (Some "feature")
+    let input = mkInput "my-feature" "My Feature" [ "main-repo" ] (Some "feature")
 
     match Backlogs.Create.execute productConfig input today with
     | Ok item -> Assert.Equal(Feature, item.Type)
@@ -62,7 +67,7 @@ let ``explicit feature type is accepted`` () =
 [<Fact>]
 let ``bug type is accepted`` () =
     let productConfig = mkProductConfig [ "main-repo", "." ]
-    let input = mkInput "my-bug" "My Bug" ["main-repo"] (Some "bug")
+    let input = mkInput "my-bug" "My Bug" [ "main-repo" ] (Some "bug")
 
     match Backlogs.Create.execute productConfig input today with
     | Ok item -> Assert.Equal(Bug, item.Type)
@@ -78,6 +83,7 @@ let ``DuplicateBacklogId carries the id`` () =
     | Error e -> failwithf "unexpected: %A" e
     | Ok bid ->
         let err = DuplicateBacklogId bid
+
         match err with
         | DuplicateBacklogId id -> Assert.Equal("my-feature", BacklogId.value id)
         | other -> failwithf "unexpected case: %A" other
@@ -89,7 +95,7 @@ let ``DuplicateBacklogId carries the id`` () =
 [<Fact>]
 let ``unknown repo returns RepoNotInProduct with the repo id`` () =
     let productConfig = mkProductConfig [ "known-repo", "." ]
-    let input = mkInput "my-feature" "My Feature" ["unknown-repo"] None
+    let input = mkInput "my-feature" "My Feature" [ "unknown-repo" ] None
 
     match Backlogs.Create.execute productConfig input today with
     | Error(RepoNotInProduct(RepoId id)) -> Assert.Equal("unknown-repo", id)
@@ -111,7 +117,7 @@ let ``multi-repo product with missing repo returns RepoNotInProduct`` () =
 [<Fact>]
 let ``invalid item type returns InvalidItemType with the value`` () =
     let productConfig = mkProductConfig [ "main-repo", "." ]
-    let input = mkInput "my-feature" "My Feature" ["main-repo"] (Some "invalid-type")
+    let input = mkInput "my-feature" "My Feature" [ "main-repo" ] (Some "invalid-type")
 
     match Backlogs.Create.execute productConfig input today with
     | Error(InvalidItemType value) -> Assert.Equal("invalid-type", value)
@@ -130,7 +136,7 @@ let ``BacklogItemType.toString Refactor returns "refactor"`` () =
 [<Fact>]
 let ``error message for invalid type includes "refactor"`` () =
     let productConfig = mkProductConfig [ "main-repo", "." ]
-    let input = mkInput "my-feature" "My Feature" ["main-repo"] (Some "invalid-type")
+    let input = mkInput "my-feature" "My Feature" [ "main-repo" ] (Some "invalid-type")
 
     match Backlogs.Create.execute productConfig input today with
     | Error(InvalidItemType _) ->
@@ -146,6 +152,7 @@ let ``error message for invalid type includes "refactor"`` () =
 let private writeTaskYamlWithState (coordRoot: string) (backlogId: string) (taskId: string) (state: string) =
     let taskDir = Path.Combine(coordRoot, "BACKLOG", backlogId, "tasks", taskId)
     Directory.CreateDirectory(taskDir) |> ignore
+
     let yaml =
         $"""id: {taskId}
 source:
@@ -154,68 +161,91 @@ repo: main-repo
 state: {state}
 created_at: 2026-01-01
 """
+
     File.WriteAllText(Path.Combine(taskDir, "task.yaml"), yaml)
 
 [<Fact>]
 let ``mapTaskState round-trip for planned`` () =
-    let root = Path.Combine(Path.GetTempPath(), $"itr-taskstate-planned-{Guid.NewGuid():N}")
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-taskstate-planned-{Guid.NewGuid():N}")
+
     Directory.CreateDirectory(root) |> ignore
+
     try
         writeTaskYamlWithState root "my-feature" "my-task" "planned"
         let store = TaskStoreAdapter() :> ITaskStore
+
         let backlogId =
             match BacklogId.tryCreate "my-feature" with
             | Ok id -> id
             | Error e -> failwithf "%A" e
+
         match store.ListTasks root backlogId with
         | Error e -> failwithf "expected Ok, got %A" e
         | Ok [ (task, _) ] -> Assert.Equal(TaskState.Planned, task.State)
         | Ok tasks -> failwithf "expected 1 task, got %d" tasks.Length
     finally
-        if Directory.Exists(root) then Directory.Delete(root, true)
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
 
 [<Fact>]
 let ``mapTaskState round-trip for approved`` () =
-    let root = Path.Combine(Path.GetTempPath(), $"itr-taskstate-approved-{Guid.NewGuid():N}")
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-taskstate-approved-{Guid.NewGuid():N}")
+
     Directory.CreateDirectory(root) |> ignore
+
     try
         writeTaskYamlWithState root "my-feature" "my-task" "approved"
         let store = TaskStoreAdapter() :> ITaskStore
+
         let backlogId =
             match BacklogId.tryCreate "my-feature" with
             | Ok id -> id
             | Error e -> failwithf "%A" e
+
         match store.ListTasks root backlogId with
         | Error e -> failwithf "expected Ok, got %A" e
         | Ok [ (task, _) ] -> Assert.Equal(TaskState.Approved, task.State)
         | Ok tasks -> failwithf "expected 1 task, got %d" tasks.Length
     finally
-        if Directory.Exists(root) then Directory.Delete(root, true)
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
 
 [<Fact>]
 let ``mapTaskState round-trip for archived`` () =
-    let root = Path.Combine(Path.GetTempPath(), $"itr-taskstate-archived-{Guid.NewGuid():N}")
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-taskstate-archived-{Guid.NewGuid():N}")
+
     Directory.CreateDirectory(root) |> ignore
+
     try
         writeTaskYamlWithState root "my-feature" "my-task" "archived"
         let store = TaskStoreAdapter() :> ITaskStore
+
         let backlogId =
             match BacklogId.tryCreate "my-feature" with
             | Ok id -> id
             | Error e -> failwithf "%A" e
+
         match store.ListTasks root backlogId with
         | Error e -> failwithf "expected Ok, got %A" e
         | Ok [ (task, _) ] -> Assert.Equal(TaskState.Archived, task.State)
         | Ok tasks -> failwithf "expected 1 task, got %d" tasks.Length
     finally
-        if Directory.Exists(root) then Directory.Delete(root, true)
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
 
 // ---------------------------------------------------------------------------
 // BacklogItemStatus.compute tests (2.4)
 // ---------------------------------------------------------------------------
 
 let private mkTask (state: TaskState) : ItrTask =
-    let backlogId = match BacklogId.tryCreate "test-item" with Ok id -> id | Error e -> failwithf "%A" e
+    let backlogId =
+        match BacklogId.tryCreate "test-item" with
+        | Ok id -> id
+        | Error e -> failwithf "%A" e
+
     { Id = TaskId.create "t"
       SourceBacklog = backlogId
       Repo = RepoId "main-repo"
@@ -268,12 +298,14 @@ let ``compute with mixed Archived and Validated tasks yields Completed`` () =
 let private writeItemYaml (coordRoot: string) (backlogId: string) =
     let dir = Path.Combine(coordRoot, "BACKLOG", backlogId)
     Directory.CreateDirectory(dir) |> ignore
+
     let yaml =
         $"""id: {backlogId}
 title: Test Feature
 type: feature
 created_at: 2026-01-01
 """
+
     File.WriteAllText(Path.Combine(dir, "item.yaml"), yaml)
 
 /// Minimal stub IViewStore that returns Ok []
@@ -283,13 +315,17 @@ type StubViewStore() =
 
 [<Fact>]
 let ``getBacklogItemDetail returns detail for valid item with no tasks`` () =
-    let root = Path.Combine(Path.GetTempPath(), $"itr-detail-notasks-{Guid.NewGuid():N}")
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-detail-notasks-{Guid.NewGuid():N}")
+
     Directory.CreateDirectory(root) |> ignore
+
     try
         writeItemYaml root "my-feature"
         let backlogStore = BacklogStoreAdapter() :> IBacklogStore
         let taskStore = TaskStoreAdapter() :> ITaskStore
         let viewStore = StubViewStore() :> IViewStore
+
         let backlogId =
             match BacklogId.tryCreate "my-feature" with
             | Ok id -> id
@@ -303,17 +339,22 @@ let ``getBacklogItemDetail returns detail for valid item with no tasks`` () =
             Assert.Equal(BacklogItemStatus.Created, detail.Status)
             Assert.Equal(None, detail.ViewId)
     finally
-        if Directory.Exists(root) then Directory.Delete(root, true)
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
 
 [<Fact>]
 let ``getBacklogItemDetail returns BacklogItemNotFound for unknown id`` () =
-    let root = Path.Combine(Path.GetTempPath(), $"itr-detail-notfound-{Guid.NewGuid():N}")
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-detail-notfound-{Guid.NewGuid():N}")
+
     Directory.CreateDirectory(root) |> ignore
+
     try
         Directory.CreateDirectory(Path.Combine(root, "BACKLOG")) |> ignore
         let backlogStore = BacklogStoreAdapter() :> IBacklogStore
         let taskStore = TaskStoreAdapter() :> ITaskStore
         let viewStore = StubViewStore() :> IViewStore
+
         let backlogId =
             match BacklogId.tryCreate "no-such-item" with
             | Ok id -> id
@@ -323,12 +364,16 @@ let ``getBacklogItemDetail returns BacklogItemNotFound for unknown id`` () =
         | Error(BacklogItemNotFound _) -> Assert.True(true)
         | other -> failwithf "expected BacklogItemNotFound, got %A" other
     finally
-        if Directory.Exists(root) then Directory.Delete(root, true)
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
 
 [<Fact>]
 let ``getBacklogItemDetail with two tasks includes both tasks`` () =
-    let root = Path.Combine(Path.GetTempPath(), $"itr-detail-withtasks-{Guid.NewGuid():N}")
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-detail-withtasks-{Guid.NewGuid():N}")
+
     Directory.CreateDirectory(root) |> ignore
+
     try
         writeItemYaml root "my-feature"
         writeTaskYamlWithState root "my-feature" "task-a" "planning"
@@ -336,6 +381,7 @@ let ``getBacklogItemDetail with two tasks includes both tasks`` () =
         let backlogStore = BacklogStoreAdapter() :> IBacklogStore
         let taskStore = TaskStoreAdapter() :> ITaskStore
         let viewStore = StubViewStore() :> IViewStore
+
         let backlogId =
             match BacklogId.tryCreate "my-feature" with
             | Ok id -> id
@@ -343,10 +389,10 @@ let ``getBacklogItemDetail with two tasks includes both tasks`` () =
 
         match Backlogs.Query.getDetail backlogStore taskStore viewStore root backlogId with
         | Error e -> failwithf "expected Ok, got %A" e
-        | Ok detail ->
-            Assert.Equal(2, detail.Tasks.Length)
+        | Ok detail -> Assert.Equal(2, detail.Tasks.Length)
     finally
-        if Directory.Exists(root) then Directory.Delete(root, true)
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
 
 // ---------------------------------------------------------------------------
 // getBacklogItemDetail computed status tests (4.2)
@@ -354,13 +400,17 @@ let ``getBacklogItemDetail with two tasks includes both tasks`` () =
 
 [<Fact>]
 let ``getBacklogItemDetail with no tasks yields Created status`` () =
-    let root = Path.Combine(Path.GetTempPath(), $"itr-detail-status-created-{Guid.NewGuid():N}")
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-detail-status-created-{Guid.NewGuid():N}")
+
     Directory.CreateDirectory(root) |> ignore
+
     try
         writeItemYaml root "my-feature"
         let backlogStore = BacklogStoreAdapter() :> IBacklogStore
         let taskStore = TaskStoreAdapter() :> ITaskStore
         let viewStore = StubViewStore() :> IViewStore
+
         let backlogId =
             match BacklogId.tryCreate "my-feature" with
             | Ok id -> id
@@ -370,12 +420,16 @@ let ``getBacklogItemDetail with no tasks yields Created status`` () =
         | Error e -> failwithf "expected Ok, got %A" e
         | Ok detail -> Assert.Equal(BacklogItemStatus.Created, detail.Status)
     finally
-        if Directory.Exists(root) then Directory.Delete(root, true)
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
 
 [<Fact>]
 let ``getBacklogItemDetail with all approved tasks yields Approved status`` () =
-    let root = Path.Combine(Path.GetTempPath(), $"itr-detail-status-approved-{Guid.NewGuid():N}")
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-detail-status-approved-{Guid.NewGuid():N}")
+
     Directory.CreateDirectory(root) |> ignore
+
     try
         writeItemYaml root "my-feature"
         writeTaskYamlWithState root "my-feature" "task-a" "approved"
@@ -383,6 +437,7 @@ let ``getBacklogItemDetail with all approved tasks yields Approved status`` () =
         let backlogStore = BacklogStoreAdapter() :> IBacklogStore
         let taskStore = TaskStoreAdapter() :> ITaskStore
         let viewStore = StubViewStore() :> IViewStore
+
         let backlogId =
             match BacklogId.tryCreate "my-feature" with
             | Ok id -> id
@@ -392,7 +447,8 @@ let ``getBacklogItemDetail with all approved tasks yields Approved status`` () =
         | Error e -> failwithf "expected Ok, got %A" e
         | Ok detail -> Assert.Equal(BacklogItemStatus.Approved, detail.Status)
     finally
-        if Directory.Exists(root) then Directory.Delete(root, true)
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
 
 // ---------------------------------------------------------------------------
 // getBacklogItemDetail archived item tests
@@ -400,20 +456,33 @@ let ``getBacklogItemDetail with all approved tasks yields Approved status`` () =
 
 /// Write an archived backlog item under BACKLOG/_archive/<date>-<id>/item.yaml
 let private writeArchivedItemYaml (coordRoot: string) (backlogId: string) (date: string) =
-    let archiveDir = Path.Combine(coordRoot, "BACKLOG", "_archive", $"{date}-{backlogId}")
+    let archiveDir =
+        Path.Combine(coordRoot, "BACKLOG", "_archive", $"{date}-{backlogId}")
+
     Directory.CreateDirectory(archiveDir) |> ignore
+
     let yaml =
         $"""id: {backlogId}
 title: Archived Feature
 type: feature
 created_at: 2026-01-01
 """
+
     File.WriteAllText(Path.Combine(archiveDir, "item.yaml"), yaml)
 
 /// Write a task yaml under an archived backlog folder
-let private writeArchivedTaskYaml (coordRoot: string) (backlogId: string) (date: string) (taskId: string) (state: string) =
-    let taskDir = Path.Combine(coordRoot, "BACKLOG", "_archive", $"{date}-{backlogId}", "tasks", taskId)
+let private writeArchivedTaskYaml
+    (coordRoot: string)
+    (backlogId: string)
+    (date: string)
+    (taskId: string)
+    (state: string)
+    =
+    let taskDir =
+        Path.Combine(coordRoot, "BACKLOG", "_archive", $"{date}-{backlogId}", "tasks", taskId)
+
     Directory.CreateDirectory(taskDir) |> ignore
+
     let yaml =
         $"""id: {taskId}
 source:
@@ -422,18 +491,23 @@ repo: main-repo
 state: {state}
 created_at: 2026-01-01
 """
+
     File.WriteAllText(Path.Combine(taskDir, "task.yaml"), yaml)
 
 [<Fact>]
 let ``getBacklogItemDetail on archived item returns archived status`` () =
-    let root = Path.Combine(Path.GetTempPath(), $"itr-detail-archived-status-{Guid.NewGuid():N}")
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-detail-archived-status-{Guid.NewGuid():N}")
+
     Directory.CreateDirectory(root) |> ignore
+
     try
         writeArchivedItemYaml root "my-feature" "2026-03-01"
         writeArchivedTaskYaml root "my-feature" "2026-03-01" "task-a" "archived"
         let backlogStore = BacklogStoreAdapter() :> IBacklogStore
         let taskStore = TaskStoreAdapter() :> ITaskStore
         let viewStore = StubViewStore() :> IViewStore
+
         let backlogId =
             match BacklogId.tryCreate "my-feature" with
             | Ok id -> id
@@ -443,12 +517,16 @@ let ``getBacklogItemDetail on archived item returns archived status`` () =
         | Error e -> failwithf "expected Ok, got %A" e
         | Ok detail -> Assert.Equal(BacklogItemStatus.Archived, detail.Status)
     finally
-        if Directory.Exists(root) then Directory.Delete(root, true)
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
 
 [<Fact>]
 let ``getBacklogItemDetail on archived item with tasks returns all tasks`` () =
-    let root = Path.Combine(Path.GetTempPath(), $"itr-detail-archived-tasks-{Guid.NewGuid():N}")
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-detail-archived-tasks-{Guid.NewGuid():N}")
+
     Directory.CreateDirectory(root) |> ignore
+
     try
         writeArchivedItemYaml root "my-feature" "2026-03-01"
         writeArchivedTaskYaml root "my-feature" "2026-03-01" "task-a" "archived"
@@ -456,6 +534,7 @@ let ``getBacklogItemDetail on archived item with tasks returns all tasks`` () =
         let backlogStore = BacklogStoreAdapter() :> IBacklogStore
         let taskStore = TaskStoreAdapter() :> ITaskStore
         let viewStore = StubViewStore() :> IViewStore
+
         let backlogId =
             match BacklogId.tryCreate "my-feature" with
             | Ok id -> id
@@ -467,12 +546,16 @@ let ``getBacklogItemDetail on archived item with tasks returns all tasks`` () =
             Assert.Equal(2, detail.Tasks.Length)
             Assert.Equal(BacklogItemStatus.Archived, detail.Status)
     finally
-        if Directory.Exists(root) then Directory.Delete(root, true)
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)
 
 [<Fact>]
 let ``getBacklogItemDetail returns BacklogItemNotFound when not in active or archive`` () =
-    let root = Path.Combine(Path.GetTempPath(), $"itr-detail-notfound-anywhere-{Guid.NewGuid():N}")
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-detail-notfound-anywhere-{Guid.NewGuid():N}")
+
     Directory.CreateDirectory(root) |> ignore
+
     try
         Directory.CreateDirectory(Path.Combine(root, "BACKLOG", "_archive")) |> ignore
         // Write a different archived item so the archive dir exists but doesn't contain our id
@@ -480,6 +563,7 @@ let ``getBacklogItemDetail returns BacklogItemNotFound when not in active or arc
         let backlogStore = BacklogStoreAdapter() :> IBacklogStore
         let taskStore = TaskStoreAdapter() :> ITaskStore
         let viewStore = StubViewStore() :> IViewStore
+
         let backlogId =
             match BacklogId.tryCreate "my-feature" with
             | Ok id -> id
@@ -489,4 +573,5 @@ let ``getBacklogItemDetail returns BacklogItemNotFound when not in active or arc
         | Error(BacklogItemNotFound _) -> Assert.True(true)
         | other -> failwithf "expected BacklogItemNotFound, got %A" other
     finally
-        if Directory.Exists(root) then Directory.Delete(root, true)
+        if Directory.Exists(root) then
+            Directory.Delete(root, true)

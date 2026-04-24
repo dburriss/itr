@@ -20,18 +20,30 @@ let private makeTask id repo state =
 [<Fact>]
 let ``formatList Text outputs task id and state`` () =
     let task = makeTask "abc-repo-001" "repo1" TaskState.Planning
-    let rows : TaskListSummary list =
-        [ { Task = task; TaskYamlPath = "/some/task.yaml"; PlanMdPath = None } ]
-    let output = TestHelpers.captureOutput (fun () -> TaskFormatter.formatList Text rows)
+
+    let rows: TaskListSummary list =
+        [ { Task = task
+            TaskYamlPath = "/some/task.yaml"
+            PlanMdPath = None } ]
+
+    let output =
+        TestHelpers.captureOutput (fun () -> TaskFormatter.formatList Text rows)
+
     Assert.Contains("abc-repo-001", output)
     Assert.Contains("planning", output)
 
 [<Fact>]
 let ``formatList Json wraps in tasks object`` () =
     let task = makeTask "xyz-repo-002" "repo1" TaskState.Approved
-    let rows : TaskListSummary list =
-        [ { Task = task; TaskYamlPath = "/some/task.yaml"; PlanMdPath = Some "/some/plan.md" } ]
-    let output = TestHelpers.captureOutput (fun () -> TaskFormatter.formatList Json rows)
+
+    let rows: TaskListSummary list =
+        [ { Task = task
+            TaskYamlPath = "/some/task.yaml"
+            PlanMdPath = Some "/some/plan.md" } ]
+
+    let output =
+        TestHelpers.captureOutput (fun () -> TaskFormatter.formatList Json rows)
+
     Assert.Contains("tasks", output)
     Assert.Contains("xyz-repo-002", output)
     Assert.Contains("approved", output)
@@ -48,10 +60,18 @@ let ``formatList Text empty produces no output`` () =
 [<Fact>]
 let ``formatDetail Text outputs state and plan info`` () =
     let task = makeTask "task-detail-001" "repo1" TaskState.Planned
-    let detail : TaskDetailView =
-        { Task = task; Siblings = []; PlanExists = true; PlanApproved = false
-          TaskYamlPath = "/path/task.yaml"; PlanMdPath = Some "/path/plan.md" }
-    let output = TestHelpers.captureOutput (fun () -> TaskFormatter.formatDetail Text detail)
+
+    let detail: TaskDetailView =
+        { Task = task
+          Siblings = []
+          PlanExists = true
+          PlanApproved = false
+          TaskYamlPath = "/path/task.yaml"
+          PlanMdPath = Some "/path/plan.md" }
+
+    let output =
+        TestHelpers.captureOutput (fun () -> TaskFormatter.formatDetail Text detail)
+
     Assert.Contains("task-detail-001", output)
     Assert.Contains("planned", output)
     Assert.Contains("plan exists", output)
@@ -59,9 +79,17 @@ let ``formatDetail Text outputs state and plan info`` () =
 [<Fact>]
 let ``formatDetail Json contains id and planExists`` () =
     let task = makeTask "task-json-001" "repo1" TaskState.Approved
-    let detail : TaskDetailView =
-        { Task = task; Siblings = []; PlanExists = true; PlanApproved = true
-          TaskYamlPath = "/path/task.yaml"; PlanMdPath = None }
-    let output = TestHelpers.captureOutput (fun () -> TaskFormatter.formatDetail Json detail)
+
+    let detail: TaskDetailView =
+        { Task = task
+          Siblings = []
+          PlanExists = true
+          PlanApproved = true
+          TaskYamlPath = "/path/task.yaml"
+          PlanMdPath = None }
+
+    let output =
+        TestHelpers.captureOutput (fun () -> TaskFormatter.formatDetail Json detail)
+
     Assert.Contains("task-json-001", output)
     Assert.Contains("planExists", output)

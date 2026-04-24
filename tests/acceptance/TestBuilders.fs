@@ -9,7 +9,10 @@ open Itr.Domain
 
 [<RequireQualifiedAccess>]
 module A =
-    let backlogId str = BacklogId.tryCreate str |> Result.defaultWith (fun _ -> failwithf "invalid backlog id: %s" str)
+    let backlogId str =
+        BacklogId.tryCreate str
+        |> Result.defaultWith (fun _ -> failwithf "invalid backlog id: %s" str)
+
     let repoId str = RepoId str
     let taskId str = TaskId.create str
     let today () = DateOnly.FromDateTime(DateTime.UtcNow)
@@ -23,25 +26,32 @@ module A =
           Summary = None
           AcceptanceCriteria = []
           Dependencies = []
-          CreatedAt = today() }
+          CreatedAt = today () }
 
     let task (id: TaskId) (backlogId: BacklogId) : ItrTask =
         { Id = id
           SourceBacklog = backlogId
           Repo = RepoId "main-repo"
           State = TaskState.Planning
-          CreatedAt = today() }
+          CreatedAt = today () }
 
     let taskInState (id: TaskId) (backlogId: BacklogId) (state: TaskState) : ItrTask =
         { task id backlogId with State = state }
 
     let productDefinition (id: string) : ProductDefinition =
-        { Id = ProductId.tryCreate id |> Result.defaultWith (fun _ -> failwithf "invalid product id: %s" id)
+        { Id =
+            ProductId.tryCreate id
+            |> Result.defaultWith (fun _ -> failwithf "invalid product id: %s" id)
           Description = None
           Repos = Map.ofList [ "main-repo", { Path = "./"; Url = None } ]
-          Coordination = { Mode = "standalone"; Path = Some ".itr"; Repo = None }
+          Coordination =
+            { Mode = "standalone"
+              Path = Some ".itr"
+              Repo = None }
           Docs = Map.empty
-          CoordRoot = { Mode = Standalone; AbsolutePath = ".itr" } }
+          CoordRoot =
+            { Mode = Standalone
+              AbsolutePath = ".itr" } }
 
 // ---------------------------------------------------------------------------
 // Given.<Thing> — dependency setup helpers
@@ -65,7 +75,13 @@ module Given =
         store
 
     /// Seed the in-memory filesystem with a plan file for a given task.
-    let planFile (fs: InMemoryFileSystem) (coordRoot: string) (backlogId: BacklogId) (taskId: TaskId) (content: string) =
+    let planFile
+        (fs: InMemoryFileSystem)
+        (coordRoot: string)
+        (backlogId: BacklogId)
+        (taskId: TaskId)
+        (content: string)
+        =
         let path = ItrTask.planFile coordRoot backlogId taskId
         fs.Write path content
         fs

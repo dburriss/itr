@@ -21,22 +21,26 @@ let handle
     | Error e -> Error(formatTaskError e)
     | Ok allTaskTuples ->
         let allTasks = allTaskTuples |> List.map fst
+
         match allTasks |> List.tryFind (fun t -> t.Id = taskId) with
         | None -> Error(formatTaskError (TaskNotFound taskId))
         | Some task ->
-            let planPath = ItrTask.planFile coordRoot task.SourceBacklog (TaskId.create rawTaskId)
+            let planPath =
+                ItrTask.planFile coordRoot task.SourceBacklog (TaskId.create rawTaskId)
+
             let planExists = fileSystem.FileExists planPath
 
             let approveInput: Tasks.Approve.Input = { Task = task; PlanExists = planExists }
+
             match Tasks.Approve.execute approveInput with
             | Error e -> Error(formatTaskError e)
-            | Ok (updatedTask, wasAlreadyApproved) ->
+            | Ok(updatedTask, wasAlreadyApproved) ->
                 if wasAlreadyApproved then
                     printfn "Task '%s' is already approved." rawTaskId
                     Ok()
                 else
                     match taskStore.WriteTask coordRoot updatedTask with
                     | Error e -> Error(formatTaskError e)
-                    | Ok () ->
+                    | Ok() ->
                         printfn "Task '%s' approved." rawTaskId
                         Ok()

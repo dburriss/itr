@@ -1,7 +1,10 @@
 namespace Itr.Adapters
 
 /// Shared output format discriminated union, replacing ad-hoc `bool outputJson` parameters.
-type OutputFormat = Json | Text | Table
+type OutputFormat =
+    | Json
+    | Text
+    | Table
 
 [<RequireQualifiedAccess>]
 module OutputFormat =

@@ -8,12 +8,14 @@ type Input = { Task: ItrTask; PlanExists: bool }
 /// Returns (updatedTask, wasAlreadyApproved) on success.
 let execute (input: Input) : Result<ItrTask * bool, TaskError> =
     match input.Task.State with
-    | TaskState.Approved ->
-        Ok (input.Task, true)
+    | TaskState.Approved -> Ok(input.Task, true)
     | TaskState.Planned ->
         if input.PlanExists then
-            Ok ({ input.Task with State = TaskState.Approved }, false)
+            Ok(
+                { input.Task with
+                    State = TaskState.Approved },
+                false
+            )
         else
-            Error (MissingPlanArtifact input.Task.Id)
-    | other ->
-        Error (InvalidTaskState (input.Task.Id, other))
+            Error(MissingPlanArtifact input.Task.Id)
+    | other -> Error(InvalidTaskState(input.Task.Id, other))

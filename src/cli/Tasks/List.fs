@@ -26,9 +26,7 @@ let handle
             | Error _ -> Error $"Invalid backlog id '{s}': must match [a-z0-9][a-z0-9-]*")
         |> Option.defaultValue (Ok None)
 
-    let repoId =
-        listArgs.TryGetResult TaskListArgs.Repo_Id
-        |> Option.map RepoId
+    let repoId = listArgs.TryGetResult TaskListArgs.Repo_Id |> Option.map RepoId
 
     let stateResult =
         listArgs.TryGetResult TaskListArgs.State
@@ -65,7 +63,13 @@ let handle
         | Error e -> Error(formatTaskError e)
         | Ok allTasks ->
             let summaries = Tasks.Query.list allTasks
-            let filterInput: Tasks.Query.FilterInput = { BacklogId = backlogIdFilter; Repo = repoId; State = stateFilter; Exclude = excludeList }
+
+            let filterInput: Tasks.Query.FilterInput =
+                { BacklogId = backlogIdFilter
+                  Repo = repoId
+                  State = stateFilter
+                  Exclude = excludeList }
+
             let filtered = Tasks.Query.filter filterInput summaries
 
             let taskStatePriority state =
@@ -83,7 +87,7 @@ let handle
                 | "state" -> filtered |> List.sortByDescending (fun s -> taskStatePriority s.Task.State)
                 | _ -> filtered |> List.sortBy (fun s -> s.Task.CreatedAt)
 
-            let summaryRows : TaskListSummary list =
+            let summaryRows: TaskListSummary list =
                 ordered
                 |> List.map (fun s ->
                     { Task = s.Task

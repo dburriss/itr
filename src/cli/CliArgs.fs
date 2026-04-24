@@ -49,9 +49,10 @@ type ListArgs =
         member this.Usage =
             match this with
             | View _ -> "filter by view id"
-            | Status _ -> "filter by status: created | planning | planned | approved | in-progress | completed | archived"
+            | Status _ ->
+                "filter by status: created | planning | planned | approved | in-progress | completed | archived"
             | Type _ -> "filter by item type: feature | bug | chore | refactor | spike"
-             | Output _ -> "output mode: table (default) | json | text"
+            | Output _ -> "output mode: table (default) | json | text"
             | Exclude _ -> "exclude items with this status (can be repeated)"
             | Order_By _ -> "override sort order: created | priority | type"
 
@@ -63,8 +64,8 @@ type InfoArgs =
     interface IArgParserTemplate with
         member this.Usage =
             match this with
-             | Backlog_Id _ -> "backlog item id to inspect"
-             | Output _ -> "output mode: table (default) | json | text"
+            | Backlog_Id _ -> "backlog item id to inspect"
+            | Output _ -> "output mode: table (default) | json | text"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
 type BacklogArgs =
@@ -212,9 +213,11 @@ type TaskListArgs =
             match this with
             | Backlog_Id _ -> "filter by backlog item id"
             | Repo_Id _ -> "filter by repo id"
-             | State _ -> "filter by task state (planning | planned | approved | in_progress | implemented | validated | archived)"
-             | Output _ -> "output mode: table (default) | json | text"
-            | Exclude _ -> "exclude tasks with this state (planning | planned | approved | in_progress | implemented | validated | archived)"
+            | State _ ->
+                "filter by task state (planning | planned | approved | in_progress | implemented | validated | archived)"
+            | Output _ -> "output mode: table (default) | json | text"
+            | Exclude _ ->
+                "exclude tasks with this state (planning | planned | approved | in_progress | implemented | validated | archived)"
             | Order_By _ -> "sort order: created | state"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
@@ -225,8 +228,8 @@ type TaskInfoArgs =
     interface IArgParserTemplate with
         member this.Usage =
             match this with
-             | Task_Id _ -> "task id to inspect"
-             | Output _ -> "output mode: table (default) | json | text"
+            | Task_Id _ -> "task id to inspect"
+            | Output _ -> "output mode: table (default) | json | text"
 
 [<CliPrefix(CliPrefix.DoubleDash)>]
 type TaskPlanArgs =

@@ -22,8 +22,7 @@ let handle
     let format = listArgs.TryGetResult ListArgs.Output |> OutputFormat.tryParse
 
     let statusFilter =
-        listArgs.TryGetResult ListArgs.Status
-        |> Option.bind tryParseBacklogItemStatus
+        listArgs.TryGetResult ListArgs.Status |> Option.bind tryParseBacklogItemStatus
 
     let typeFilter =
         listArgs.TryGetResult ListArgs.Type
@@ -33,8 +32,7 @@ let handle
             | Error _ -> None)
 
     let excludeStatuses =
-        listArgs.GetResults ListArgs.Exclude
-        |> List.choose tryParseBacklogItemStatus
+        listArgs.GetResults ListArgs.Exclude |> List.choose tryParseBacklogItemStatus
 
     let orderBy = listArgs.TryGetResult ListArgs.Order_By
 

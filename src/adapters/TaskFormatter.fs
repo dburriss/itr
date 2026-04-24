@@ -55,13 +55,21 @@ module TaskFormatter =
                         let repo = RepoId.value s.Task.Repo
                         let state = taskStateToDisplayString s.Task.State
                         let taskYamlPath = s.TaskYamlPath.Replace("\\", "\\\\")
+
                         let planMdPathJson =
                             match s.PlanMdPath with
                             | Some p -> sprintf "\"%s\"" (p.Replace("\\", "\\\\"))
                             | None -> "null"
-                        sprintf "    { \"id\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\", \"taskYamlPath\": \"%s\", \"planMdPath\": %s }"
-                            id repo state taskYamlPath planMdPathJson)
+
+                        sprintf
+                            "    { \"id\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\", \"taskYamlPath\": \"%s\", \"planMdPath\": %s }"
+                            id
+                            repo
+                            state
+                            taskYamlPath
+                            planMdPathJson)
                     |> String.concat ",\n"
+
                 printfn "{ \"tasks\": ["
                 printfn "%s" items
                 printfn "] }"
@@ -110,15 +118,18 @@ module TaskFormatter =
             let siblingsJson =
                 detail.Siblings
                 |> List.map (fun s ->
-                    sprintf "    { \"id\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\" }"
+                    sprintf
+                        "    { \"id\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\" }"
                         (TaskId.value s.Id)
                         (RepoId.value s.Repo)
                         (taskStateToDisplayString s.State))
                 |> String.concat ",\n"
+
             let planMdPathJson =
                 match detail.PlanMdPath with
                 | Some p -> sprintf "\"%s\"" (p.Replace("\\", "\\\\"))
                 | None -> "null"
+
             printfn "{"
             printfn "  \"id\": \"%s\"," id
             printfn "  \"backlog\": \"%s\"," backlog
@@ -130,13 +141,19 @@ module TaskFormatter =
             printfn "  \"taskYamlPath\": \"%s\"," (detail.TaskYamlPath.Replace("\\", "\\\\"))
             printfn "  \"planMdPath\": %s," planMdPathJson
             printfn "  \"siblings\": ["
-            if not (List.isEmpty detail.Siblings) then printfn "%s" siblingsJson
+
+            if not (List.isEmpty detail.Siblings) then
+                printfn "%s" siblingsJson
+
             printfn "  ]"
             printfn "}"
         | Text ->
             let siblingsStr =
-                if detail.Siblings.IsEmpty then "-"
-                else detail.Siblings |> List.map (fun s -> TaskId.value s.Id) |> String.concat ","
+                if detail.Siblings.IsEmpty then
+                    "-"
+                else
+                    detail.Siblings |> List.map (fun s -> TaskId.value s.Id) |> String.concat ","
+
             printfn "id\t%s" id
             printfn "backlog\t%s" backlog
             printfn "repo\t%s" repo
@@ -169,10 +186,10 @@ module TaskFormatter =
                 sibTable.AddColumn("Id") |> ignore
                 sibTable.AddColumn("Repo") |> ignore
                 sibTable.AddColumn("State") |> ignore
+
                 detail.Siblings
                 |> List.iter (fun s ->
-                    sibTable.AddRow(
-                        TaskId.value s.Id,
-                        RepoId.value s.Repo,
-                        taskStateToDisplayString s.State) |> ignore)
+                    sibTable.AddRow(TaskId.value s.Id, RepoId.value s.Repo, taskStateToDisplayString s.State)
+                    |> ignore)
+
                 AnsiConsole.Write(sibTable)

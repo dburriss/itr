@@ -7,7 +7,10 @@ open Itr.Adapters
 type AppDeps() =
     let envAdapter = EnvironmentAdapter()
     let fsAdapter = FileSystemAdapter()
-    let portfolioConfigAdapter = PortfolioAdapter.PortfolioConfigAdapter(envAdapter, fsAdapter)
+
+    let portfolioConfigAdapter =
+        PortfolioAdapter.PortfolioConfigAdapter(envAdapter, fsAdapter)
+
     let productConfigAdapter = YamlAdapter.ProductConfigAdapter()
     let backlogStoreAdapter = YamlAdapter.BacklogStoreAdapter()
     let taskStoreAdapter = YamlAdapter.TaskStoreAdapter()

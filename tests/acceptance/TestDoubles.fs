@@ -12,25 +12,29 @@ open Itr.Domain
 type InMemoryFileSystem() =
     let files = Dictionary<string, string>()
 
-    member _.Write (path: string) (content: string) =
-        files.[path] <- content
+    member _.Write (path: string) (content: string) = files.[path] <- content
 
-    member _.Read (path: string) =
-        if files.ContainsKey(path) then Ok files.[path]
-        else Error (FileNotFound path)
+    member _.Read(path: string) =
+        if files.ContainsKey(path) then
+            Ok files.[path]
+        else
+            Error(FileNotFound path)
 
-    member _.Exists (path: string) = files.ContainsKey(path)
+    member _.Exists(path: string) = files.ContainsKey(path)
 
-    member _.DirectoryExists (path: string) =
+    member _.DirectoryExists(path: string) =
         files.Keys |> Seq.exists (fun k -> k.StartsWith(path))
 
-    member _.AllFiles () = files |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toList
+    member _.AllFiles() =
+        files |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toList
 
     interface IFileSystem with
         member this.ReadFile path = this.Read path
+
         member this.WriteFile path content =
             this.Write path content
             Ok()
+
         member this.FileExists path = this.Exists path
         member this.DirectoryExists path = this.DirectoryExists path
 
@@ -52,6 +56,7 @@ type InMemoryTaskStore() =
                 tasks.Values
                 |> Seq.filter (fun (t, _) -> t.SourceBacklog = backlogId)
                 |> Seq.toList
+
             Ok matching
 
         member _.ListArchivedTasks _coordRoot _backlogId = Ok []
@@ -62,8 +67,7 @@ type InMemoryTaskStore() =
 
         member _.ArchiveTask _coordRoot _backlogId _taskId _date = Ok()
 
-        member _.ListAllTasks _coordRoot =
-            Ok (tasks.Values |> Seq.toList)
+        member _.ListAllTasks _coordRoot = Ok(tasks.Values |> Seq.toList)
 
 // ---------------------------------------------------------------------------
 // In-memory backlog store double
@@ -77,15 +81,18 @@ type InMemoryBacklogStore() =
         let path = BacklogItem.itemFile coordRoot item.Id
         items.[BacklogId.value item.Id] <- (item, path)
 
-    member _.Get (backlogId: BacklogId) =
+    member _.Get(backlogId: BacklogId) =
         let key = BacklogId.value backlogId
         if items.ContainsKey(key) then Some items.[key] else None
 
     interface IBacklogStore with
         member this.LoadBacklogItem _coordRoot backlogId =
             let key = BacklogId.value backlogId
-            if items.ContainsKey(key) then Ok items.[key]
-            else Error (BacklogItemNotFound backlogId)
+
+            if items.ContainsKey(key) then
+                Ok items.[key]
+            else
+                Error(BacklogItemNotFound backlogId)
 
         member _.LoadArchivedBacklogItem _coordRoot _backlogId = Ok None
 
@@ -98,8 +105,7 @@ type InMemoryBacklogStore() =
             this.Add coordRoot item
             Ok()
 
-        member _.ListBacklogItems _coordRoot =
-            Ok (items.Values |> Seq.toList)
+        member _.ListBacklogItems _coordRoot = Ok(items.Values |> Seq.toList)
 
         member _.ListArchivedBacklogItems _coordRoot = Ok []
 
@@ -111,10 +117,10 @@ type InMemoryBacklogStore() =
 type InMemoryViewStore() =
     let views = System.Collections.Generic.List<BacklogView>()
 
-    member _.Add (view: BacklogView) = views.Add(view)
+    member _.Add(view: BacklogView) = views.Add(view)
 
     interface IViewStore with
-        member _.ListViews _coordRoot = Ok (views |> Seq.toList)
+        member _.ListViews _coordRoot = Ok(views |> Seq.toList)
 
 // ---------------------------------------------------------------------------
 // In-memory portfolio config double
@@ -124,7 +130,7 @@ type InMemoryViewStore() =
 type InMemoryPortfolioConfig(configPath: string) =
     let mutable portfolio: Portfolio option = None
 
-    member _.SetPortfolio (p: Portfolio) = portfolio <- Some p
+    member _.SetPortfolio(p: Portfolio) = portfolio <- Some p
 
     interface IPortfolioConfig with
         member _.ConfigPath() = configPath
@@ -132,7 +138,10 @@ type InMemoryPortfolioConfig(configPath: string) =
         member _.LoadConfig _path =
             match portfolio with
             | Some p -> Ok p
-            | None -> Ok { DefaultProfile = None; Profiles = Map.empty }
+            | None ->
+                Ok
+                    { DefaultProfile = None
+                      Profiles = Map.empty }
 
         member _.SaveConfig _path p =
             portfolio <- Some p
@@ -146,13 +155,14 @@ type InMemoryPortfolioConfig(configPath: string) =
 type InMemoryProductConfig() =
     let products = Dictionary<string, ProductDefinition>()
 
-    member _.Register (root: string) (def: ProductDefinition) =
-        products.[root] <- def
+    member _.Register (root: string) (def: ProductDefinition) = products.[root] <- def
 
     interface IProductConfig with
         member _.LoadProductConfig productRoot =
-            if products.ContainsKey(productRoot) then Ok products.[productRoot]
-            else Error (ProductConfigError(productRoot, "product.yaml not found"))
+            if products.ContainsKey(productRoot) then
+                Ok products.[productRoot]
+            else
+                Error(ProductConfigError(productRoot, "product.yaml not found"))
 
 // ---------------------------------------------------------------------------
 // In-memory environment double
@@ -176,7 +186,12 @@ type SpyAgentHarness(?response: string) =
     let configured = defaultArg response "# Plan\n\nGenerated plan.\n"
 
     member _.RecordedPrompts = prompts |> Seq.toList
-    member _.LastPrompt = if prompts.Count > 0 then Some prompts.[prompts.Count - 1] else None
+
+    member _.LastPrompt =
+        if prompts.Count > 0 then
+            Some prompts.[prompts.Count - 1]
+        else
+            None
 
     interface IAgentHarness with
         member _.Prompt prompt _debug =

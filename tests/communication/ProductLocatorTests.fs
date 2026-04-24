@@ -10,9 +10,14 @@ open Itr.Adapters
 
 type InMemoryFs(existingFiles: string list) =
     let files = System.Collections.Generic.HashSet<string>(existingFiles)
+
     interface IFileSystem with
         member _.ReadFile path =
-            if files.Contains(path) then Ok "" else Error(FileNotFound path)
+            if files.Contains(path) then
+                Ok ""
+            else
+                Error(FileNotFound path)
+
         member _.WriteFile path _ = Ok()
         member _.FileExists path = files.Contains(path)
         member _.DirectoryExists _ = true

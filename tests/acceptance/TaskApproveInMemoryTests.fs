@@ -29,7 +29,7 @@ let ``approve planned task with plan succeeds and transitions to approved`` () =
 
     match Tasks.Approve.execute input with
     | Error e -> failwithf "expected Ok, got Error: %A" e
-    | Ok (updatedTask, wasAlreadyApproved) ->
+    | Ok(updatedTask, wasAlreadyApproved) ->
         Assert.False(wasAlreadyApproved)
         Assert.Equal(TaskState.Approved, updatedTask.State)
 
@@ -48,7 +48,7 @@ let ``approve planned task without plan returns MissingPlanArtifact`` () =
 
     match Tasks.Approve.execute input with
     | Ok _ -> failwith "expected Error, got Ok"
-    | Error (MissingPlanArtifact id) -> Assert.Equal(taskId, id)
+    | Error(MissingPlanArtifact id) -> Assert.Equal(taskId, id)
     | Error e -> failwithf "unexpected error: %A" e
 
 [<Fact>]
@@ -67,7 +67,7 @@ let ``approve task in planning state returns InvalidTaskState`` () =
 
     match Tasks.Approve.execute input with
     | Ok _ -> failwith "expected Error, got Ok"
-    | Error (InvalidTaskState(id, current)) ->
+    | Error(InvalidTaskState(id, current)) ->
         Assert.Equal(taskId, id)
         Assert.Equal(TaskState.Planning, current)
     | Error e -> failwithf "unexpected error: %A" e
@@ -88,5 +88,4 @@ let ``approve already approved task returns wasAlreadyApproved true`` () =
 
     match Tasks.Approve.execute input with
     | Error e -> failwithf "expected Ok, got Error: %A" e
-    | Ok (_, wasAlreadyApproved) ->
-        Assert.True(wasAlreadyApproved)
+    | Ok(_, wasAlreadyApproved) -> Assert.True(wasAlreadyApproved)

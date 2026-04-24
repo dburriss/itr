@@ -30,12 +30,24 @@ module BacklogFormatter =
                     let status = backlogItemStatusToString s.Status
                     let viewId = s.ViewId |> Option.defaultValue ""
                     let createdAt = s.Item.CreatedAt.ToString("yyyy-MM-dd")
-                    sprintf """  { "id": "%s", "type": "%s", "priority": "%s", "status": "%s", "view": "%s", "taskCount": %d, "createdAt": "%s", "path": "%s" }"""
-                        id itemType priority status viewId s.TaskCount createdAt (s.Path.Replace("\\", "\\\\")))
+
+                    sprintf
+                        """  { "id": "%s", "type": "%s", "priority": "%s", "status": "%s", "view": "%s", "taskCount": %d, "createdAt": "%s", "path": "%s" }"""
+                        id
+                        itemType
+                        priority
+                        status
+                        viewId
+                        s.TaskCount
+                        createdAt
+                        (s.Path.Replace("\\", "\\\\")))
                 |> String.concat ",\n"
+
             printfn "["
+
             if not (List.isEmpty items) then
                 printfn "%s" jsonItems
+
             printfn "]"
         | Text ->
             items
@@ -47,7 +59,18 @@ module BacklogFormatter =
                 let viewId = s.ViewId |> Option.defaultValue "-"
                 let createdAt = s.Item.CreatedAt.ToString("yyyy-MM-dd")
                 let title = s.Item.Title
-                printfn "%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\t%s" id itemType priority status viewId s.TaskCount createdAt title s.Path)
+
+                printfn
+                    "%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\t%s"
+                    id
+                    itemType
+                    priority
+                    status
+                    viewId
+                    s.TaskCount
+                    createdAt
+                    title
+                    s.Path)
         | Table ->
             let table = Table()
             table.AddColumn("ID") |> ignore
@@ -67,7 +90,9 @@ module BacklogFormatter =
                 let status = backlogItemStatusToString s.Status
                 let viewId = s.ViewId |> Option.defaultValue "-"
                 let createdAt = s.Item.CreatedAt.ToString("yyyy-MM-dd")
-                table.AddRow(id, itemType, priority, status, viewId, string s.TaskCount, createdAt, s.Path) |> ignore)
+
+                table.AddRow(id, itemType, priority, status, viewId, string s.TaskCount, createdAt, s.Path)
+                |> ignore)
 
             AnsiConsole.Write(table)
 
@@ -91,19 +116,19 @@ module BacklogFormatter =
                 ac
                 |> List.map (fun s -> sprintf "    \"%s\"" (s.Replace("\"", "\\\"")))
                 |> String.concat ",\n"
+
             let depsJson =
-                deps_
-                |> List.map (fun s -> sprintf "    \"%s\"" s)
-                |> String.concat ",\n"
+                deps_ |> List.map (fun s -> sprintf "    \"%s\"" s) |> String.concat ",\n"
+
             let reposJson =
-                repos
-                |> List.map (fun s -> sprintf "    \"%s\"" s)
-                |> String.concat ",\n"
+                repos |> List.map (fun s -> sprintf "    \"%s\"" s) |> String.concat ",\n"
+
             let tasksJson =
                 detail.Tasks
                 |> List.map (fun t ->
                     let tid = TaskId.value t.Id
                     let repo = RepoId.value t.Repo
+
                     let state =
                         match t.State with
                         | TaskState.Planning -> "planning"
@@ -113,6 +138,7 @@ module BacklogFormatter =
                         | TaskState.Implemented -> "implemented"
                         | TaskState.Validated -> "validated"
                         | TaskState.Archived -> "archived"
+
                     sprintf "    { \"id\": \"%s\", \"repo\": \"%s\", \"state\": \"%s\" }" tid repo state)
                 |> String.concat ",\n"
 
@@ -124,17 +150,29 @@ module BacklogFormatter =
             printfn "  \"status\": \"%s\"," status
             printfn "  \"summary\": \"%s\"," (summary.Replace("\"", "\\\""))
             printfn "  \"acceptanceCriteria\": ["
-            if not (List.isEmpty ac) then printfn "%s" acJson
+
+            if not (List.isEmpty ac) then
+                printfn "%s" acJson
+
             printfn "  ],"
             printfn "  \"dependencies\": ["
-            if not (List.isEmpty deps_) then printfn "%s" depsJson
+
+            if not (List.isEmpty deps_) then
+                printfn "%s" depsJson
+
             printfn "  ],"
             printfn "  \"repos\": ["
-            if not (List.isEmpty repos) then printfn "%s" reposJson
+
+            if not (List.isEmpty repos) then
+                printfn "%s" reposJson
+
             printfn "  ],"
             printfn "  \"createdAt\": \"%s\"," createdAt
             printfn "  \"tasks\": ["
-            if not (List.isEmpty detail.Tasks) then printfn "%s" tasksJson
+
+            if not (List.isEmpty detail.Tasks) then
+                printfn "%s" tasksJson
+
             printfn "  ],"
             printfn "  \"path\": \"%s\"" (detail.Path.Replace("\\", "\\\\"))
             printfn "}"
@@ -144,12 +182,21 @@ module BacklogFormatter =
             let reposStr = if repos.IsEmpty then "-" else String.concat "," repos
             let depsStr = if deps_.IsEmpty then "-" else String.concat "," deps_
             let summaryStr = summary.Replace('\n', ' ').Replace('\r', ' ')
+
             let acStr =
-                if ac.IsEmpty then "-"
-                else ac |> List.map (fun s -> s.Replace('\n', ' ').Replace('\r', ' ')) |> String.concat ","
+                if ac.IsEmpty then
+                    "-"
+                else
+                    ac
+                    |> List.map (fun s -> s.Replace('\n', ' ').Replace('\r', ' '))
+                    |> String.concat ","
+
             let tasksStr =
-                if detail.Tasks.IsEmpty then "-"
-                else detail.Tasks |> List.map (fun t -> TaskId.value t.Id) |> String.concat ","
+                if detail.Tasks.IsEmpty then
+                    "-"
+                else
+                    detail.Tasks |> List.map (fun t -> TaskId.value t.Id) |> String.concat ","
+
             printfn "id\t%s" id
             printfn "title\t%s" item.Title
             printfn "type\t%s" itemType
@@ -191,6 +238,7 @@ module BacklogFormatter =
             |> List.iter (fun t ->
                 let tid = TaskId.value t.Id
                 let repo = RepoId.value t.Repo
+
                 let state =
                     match t.State with
                     | TaskState.Planning -> "planning"
@@ -200,6 +248,7 @@ module BacklogFormatter =
                     | TaskState.Implemented -> "implemented"
                     | TaskState.Validated -> "validated"
                     | TaskState.Archived -> "archived"
+
                 tasksTable.AddRow(tid, repo, state) |> ignore)
 
             AnsiConsole.Write(tasksTable)

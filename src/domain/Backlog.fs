@@ -70,38 +70,57 @@ module BacklogItemStatus =
     /// Priority order:
     ///   Archived > Completed > InProgress > Approved > Planned > Planning > Created
     let compute (tasks: ItrTask list) : BacklogItemStatus =
-        if tasks.IsEmpty then Created
+        if tasks.IsEmpty then
+            Created
         else
             let states = tasks |> List.map (fun t -> t.State)
-            let allArchived =
-                states |> List.forall (fun s -> s = TaskState.Archived)
-            if allArchived then Archived
+            let allArchived = states |> List.forall (fun s -> s = TaskState.Archived)
+
+            if allArchived then
+                Archived
             else
-            let allDone =
-                states |> List.forall (fun s ->
-                    s = TaskState.Implemented || s = TaskState.Validated || s = TaskState.Archived)
-            if allDone then Completed
-            else
-            let anyInProgress = states |> List.exists (fun s -> s = TaskState.InProgress)
-            if anyInProgress then InProgress
-            else
-            let allApprovedOrBeyond =
-                states |> List.forall (fun s ->
-                    s = TaskState.Approved || s = TaskState.Implemented || s = TaskState.Validated || s = TaskState.Archived)
-            if allApprovedOrBeyond then Approved
-            else
-            let allPlannedOrBeyond =
-                states |> List.forall (fun s ->
-                    s = TaskState.Planned || s = TaskState.Approved ||
-                    s = TaskState.Implemented || s = TaskState.Validated || s = TaskState.Archived)
-            if allPlannedOrBeyond then Planned
-            else Planning
+                let allDone =
+                    states
+                    |> List.forall (fun s ->
+                        s = TaskState.Implemented || s = TaskState.Validated || s = TaskState.Archived)
+
+                if allDone then
+                    Completed
+                else
+                    let anyInProgress = states |> List.exists (fun s -> s = TaskState.InProgress)
+
+                    if anyInProgress then
+                        InProgress
+                    else
+                        let allApprovedOrBeyond =
+                            states
+                            |> List.forall (fun s ->
+                                s = TaskState.Approved
+                                || s = TaskState.Implemented
+                                || s = TaskState.Validated
+                                || s = TaskState.Archived)
+
+                        if allApprovedOrBeyond then
+                            Approved
+                        else
+                            let allPlannedOrBeyond =
+                                states
+                                |> List.forall (fun s ->
+                                    s = TaskState.Planned
+                                    || s = TaskState.Approved
+                                    || s = TaskState.Implemented
+                                    || s = TaskState.Validated
+                                    || s = TaskState.Archived)
+
+                            if allPlannedOrBeyond then Planned else Planning
 
 [<RequireQualifiedAccess>]
 module BacklogItemType =
     let tryParse (value: string) : Result<BacklogItemType, BacklogError> =
         match value with
-        | null | "" | "feature" -> Ok Feature
+        | null
+        | ""
+        | "feature" -> Ok Feature
         | "bug" -> Ok Bug
         | "chore" -> Ok Chore
         | "refactor" -> Ok Refactor
@@ -128,9 +147,12 @@ module BacklogItem =
 type IBacklogStore =
     /// Load a backlog item from <coordRoot>/BACKLOG/<backlog-id>/item.yaml
     abstract LoadBacklogItem: coordRoot: string -> backlogId: BacklogId -> Result<BacklogItem * string, BacklogError>
+
     /// Load an archived backlog item by scanning <coordRoot>/BACKLOG/_archive/ for a folder whose item.yaml has a matching id.
     /// Returns Ok(Some(item, path)) if found, Ok None if not present, Error on parse failure.
-    abstract LoadArchivedBacklogItem: coordRoot: string -> backlogId: BacklogId -> Result<(BacklogItem * string) option, BacklogError>
+    abstract LoadArchivedBacklogItem:
+        coordRoot: string -> backlogId: BacklogId -> Result<(BacklogItem * string) option, BacklogError>
+
     /// Archive a backlog item by moving <coordRoot>/BACKLOG/<backlog-id>/ to <coordRoot>/BACKLOG/_archive/<date>-<backlog-id>/
     abstract ArchiveBacklogItem: coordRoot: string -> backlogId: BacklogId -> date: string -> Result<unit, BacklogError>
     /// Check whether a backlog item already exists at <coordRoot>/BACKLOG/<backlog-id>/item.yaml

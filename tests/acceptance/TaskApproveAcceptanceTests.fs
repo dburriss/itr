@@ -14,7 +14,9 @@ open Itr.Domain.Backlogs
 // ---------------------------------------------------------------------------
 
 let private mkRoot () =
-    let root = Path.Combine(Path.GetTempPath(), $"itr-task-approve-tests-{Guid.NewGuid():N}")
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-task-approve-tests-{Guid.NewGuid():N}")
+
     Directory.CreateDirectory(root) |> ignore
     root
 
@@ -31,16 +33,22 @@ let private writeTaskYaml
     (taskId: string)
     (backlogId: string)
     (repo: string)
-    (state: string) =
-    let taskDir = Path.Combine(coordRoot, "BACKLOG", backlogFolder, "tasks", taskFolderName)
+    (state: string)
+    =
+    let taskDir =
+        Path.Combine(coordRoot, "BACKLOG", backlogFolder, "tasks", taskFolderName)
+
     Directory.CreateDirectory(taskDir) |> ignore
-    let yaml = $"""id: {taskId}
+
+    let yaml =
+        $"""id: {taskId}
 source:
   backlog: {backlogId}
 repo: {repo}
 state: {state}
 created_at: 2026-01-15
 """
+
     File.WriteAllText(Path.Combine(taskDir, "task.yaml"), yaml)
 
 let private writePlanMd (coordRoot: string) (backlogId: string) (taskId: string) =
@@ -55,6 +63,7 @@ let private writePlanMd (coordRoot: string) (backlogId: string) (taskId: string)
 [<Fact>]
 let ``approveTask integration writes task state to approved`` () =
     let root = mkRoot ()
+
     try
         writeItemYaml root "my-feature"
         writeTaskYaml root "my-feature" "my-feature" "my-feature" "my-feature" "main-repo" "planned"
@@ -66,25 +75,27 @@ let ``approveTask integration writes task state to approved`` () =
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let taskId = TaskId.create "my-feature"
+
             match allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) with
             | None -> failwith "task not found"
-            | Some (task, _) ->
-                let planPath = Path.Combine(root, "BACKLOG", "my-feature", "tasks", "my-feature", "plan.md")
+            | Some(task, _) ->
+                let planPath =
+                    Path.Combine(root, "BACKLOG", "my-feature", "tasks", "my-feature", "plan.md")
+
                 let planExists = File.Exists(planPath)
 
                 match Tasks.Approve.execute { Task = task; PlanExists = planExists } with
                 | Error e -> failwithf "approveTask failed: %A" e
-                | Ok (updatedTask, _) ->
+                | Ok(updatedTask, _) ->
                     match taskStore.WriteTask root updatedTask with
                     | Error e -> failwithf "WriteTask failed: %A" e
-                    | Ok () ->
+                    | Ok() ->
                         match taskStore.ListAllTasks root with
                         | Error e -> failwithf "reload failed: %A" e
                         | Ok reloadedTasks ->
                             match reloadedTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) with
                             | None -> failwith "task not found after write"
-                            | Some (reloaded, _) ->
-                                Assert.Equal(TaskState.Approved, reloaded.State)
+                            | Some(reloaded, _) -> Assert.Equal(TaskState.Approved, reloaded.State)
     finally
         Directory.Delete(root, true)
 
@@ -95,6 +106,7 @@ let ``approveTask integration writes task state to approved`` () =
 [<Fact>]
 let ``approveTask returns MissingPlanArtifact when plan md does not exist`` () =
     let root = mkRoot ()
+
     try
         writeItemYaml root "my-feature"
         writeTaskYaml root "my-feature" "my-feature" "my-feature" "my-feature" "main-repo" "planned"
@@ -106,16 +118,18 @@ let ``approveTask returns MissingPlanArtifact when plan md does not exist`` () =
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let taskId = TaskId.create "my-feature"
+
             match allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) with
             | None -> failwith "task not found"
-            | Some (task, _) ->
-                let planPath = Path.Combine(root, "BACKLOG", "my-feature", "tasks", "my-feature", "plan.md")
+            | Some(task, _) ->
+                let planPath =
+                    Path.Combine(root, "BACKLOG", "my-feature", "tasks", "my-feature", "plan.md")
+
                 let planExists = File.Exists(planPath)
 
                 match Tasks.Approve.execute { Task = task; PlanExists = planExists } with
                 | Ok _ -> failwith "expected Error, got Ok"
-                | Error (MissingPlanArtifact id) ->
-                    Assert.Equal(taskId, id)
+                | Error(MissingPlanArtifact id) -> Assert.Equal(taskId, id)
                 | Error e -> failwithf "unexpected error: %A" e
     finally
         Directory.Delete(root, true)
@@ -127,6 +141,7 @@ let ``approveTask returns MissingPlanArtifact when plan md does not exist`` () =
 [<Fact>]
 let ``approveTask returns InvalidTaskState when task is in planning state`` () =
     let root = mkRoot ()
+
     try
         writeItemYaml root "my-feature"
         writeTaskYaml root "my-feature" "my-feature" "my-feature" "my-feature" "main-repo" "planning"
@@ -138,15 +153,18 @@ let ``approveTask returns InvalidTaskState when task is in planning state`` () =
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let taskId = TaskId.create "my-feature"
+
             match allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) with
             | None -> failwith "task not found"
-            | Some (task, _) ->
-                let planPath = Path.Combine(root, "BACKLOG", "my-feature", "tasks", "my-feature", "plan.md")
+            | Some(task, _) ->
+                let planPath =
+                    Path.Combine(root, "BACKLOG", "my-feature", "tasks", "my-feature", "plan.md")
+
                 let planExists = File.Exists(planPath)
 
                 match Tasks.Approve.execute { Task = task; PlanExists = planExists } with
                 | Ok _ -> failwith "expected Error, got Ok"
-                | Error (InvalidTaskState (id, current)) ->
+                | Error(InvalidTaskState(id, current)) ->
                     Assert.Equal(taskId, id)
                     Assert.Equal(TaskState.Planning, current)
                 | Error e -> failwithf "unexpected error: %A" e

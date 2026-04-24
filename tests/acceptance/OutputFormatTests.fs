@@ -14,20 +14,35 @@ open Itr.Domain.Backlogs
 // ---------------------------------------------------------------------------
 
 let private mkRoot () =
-    let root = Path.Combine(Path.GetTempPath(), $"itr-output-format-tests-{Guid.NewGuid():N}")
+    let root =
+        Path.Combine(Path.GetTempPath(), $"itr-output-format-tests-{Guid.NewGuid():N}")
+
     Directory.CreateDirectory(root) |> ignore
     root
 
-let private writeTaskYaml (coordRoot: string) (backlogFolder: string) (taskFolderName: string) (taskId: string) (backlogId: string) (repo: string) (state: string) =
-    let taskDir = Path.Combine(coordRoot, "BACKLOG", backlogFolder, "tasks", taskFolderName)
+let private writeTaskYaml
+    (coordRoot: string)
+    (backlogFolder: string)
+    (taskFolderName: string)
+    (taskId: string)
+    (backlogId: string)
+    (repo: string)
+    (state: string)
+    =
+    let taskDir =
+        Path.Combine(coordRoot, "BACKLOG", backlogFolder, "tasks", taskFolderName)
+
     Directory.CreateDirectory(taskDir) |> ignore
-    let yaml = $"""id: {taskId}
+
+    let yaml =
+        $"""id: {taskId}
 source:
   backlog: {backlogId}
 repo: {repo}
 state: {state}
 created_at: 2026-01-01
 """
+
     File.WriteAllText(Path.Combine(taskDir, "task.yaml"), yaml)
 
 let private writeItemYaml (coordRoot: string) (backlogId: string) (repos: string list) =
@@ -41,11 +56,15 @@ let private writeItemYamlFull (coordRoot: string) (backlogId: string) (repos: st
     let dir = Path.Combine(coordRoot, "BACKLOG", backlogId)
     Directory.CreateDirectory(dir) |> ignore
     let repoLines = repos |> List.map (fun r -> $"  - {r}") |> String.concat "\n"
+
     let priorityLine =
         match priority with
         | Some p -> $"priority: {p}\n"
         | None -> ""
-    let yaml = $"id: {backlogId}\ntitle: Item {backlogId}\nrepos:\n{repoLines}\n{priorityLine}"
+
+    let yaml =
+        $"id: {backlogId}\ntitle: Item {backlogId}\nrepos:\n{repoLines}\n{priorityLine}"
+
     File.WriteAllText(Path.Combine(dir, "item.yaml"), yaml)
 
 let private taskStateToString (state: TaskState) =
@@ -75,11 +94,13 @@ let private backlogStatusToString (s: BacklogItemStatus) =
 [<Fact>]
 let ``task list text output contains tab-separated fields`` () =
     let root = mkRoot ()
+
     try
         writeItemYaml root "feat-a" [ "repo-1" ]
         writeTaskYaml root "feat-a" "feat-a" "feat-a" "feat-a" "repo-1" "planning"
 
         let store = TaskStoreAdapter() :> ITaskStore
+
         match store.ListAllTasks root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
@@ -105,7 +126,7 @@ let ``task list text output contains tab-separated fields`` () =
             Assert.Equal("feat-a", parts.[0]) // id
             Assert.Equal("repo-1", parts.[1]) // repo
             Assert.Equal("planning", parts.[2]) // state
-            Assert.Equal("no", parts.[3])      // planApproved
+            Assert.Equal("no", parts.[3]) // planApproved
     finally
         Directory.Delete(root, true)
 
@@ -116,6 +137,7 @@ let ``task list text output contains tab-separated fields`` () =
 [<Fact>]
 let ``backlog list text output contains tab-separated fields`` () =
     let root = mkRoot ()
+
     try
         writeItemYamlFull root "feat-a" [ "repo-1" ] (Some "high")
 
@@ -126,7 +148,14 @@ let ``backlog list text output contains tab-separated fields`` () =
         match Backlogs.Query.loadSnapshot backlogStore taskStore viewStore root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok snapshot ->
-            let items = Backlogs.Query.list { ViewId = None; Status = None; ItemType = None; ExcludeStatuses = []; OrderBy = None } snapshot
+            let items =
+                Backlogs.Query.list
+                    { ViewId = None
+                      Status = None
+                      ItemType = None
+                      ExcludeStatuses = []
+                      OrderBy = None }
+                    snapshot
 
             // Simulate text output: <id>\t<type>\t<priority>\t<status>\t<view>\t<tasks>\t<created>\t<title>
             let lines =
@@ -139,15 +168,25 @@ let ``backlog list text output contains tab-separated fields`` () =
                     let viewId = s.ViewId |> Option.defaultValue "-"
                     let createdAt = s.Item.CreatedAt.ToString("yyyy-MM-dd")
                     let title = s.Item.Title
-                    sprintf "%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s" id itemType priority status viewId s.TaskCount createdAt title)
+
+                    sprintf
+                        "%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s"
+                        id
+                        itemType
+                        priority
+                        status
+                        viewId
+                        s.TaskCount
+                        createdAt
+                        title)
 
             Assert.Equal(1, lines.Length)
             let line = lines.[0]
             Assert.Contains("\t", line)
             let parts = line.Split('\t')
             Assert.Equal(8, parts.Length)
-            Assert.Equal("feat-a", parts.[0])    // id
-            Assert.Equal("high", parts.[2])      // priority (index 2, before status)
+            Assert.Equal("feat-a", parts.[0]) // id
+            Assert.Equal("high", parts.[2]) // priority (index 2, before status)
             Assert.Equal("Item feat-a", parts.[7]) // title at end
     finally
         Directory.Delete(root, true)
@@ -159,27 +198,43 @@ let ``backlog list text output contains tab-separated fields`` () =
 [<Fact>]
 let ``task info text output contains key-value lines`` () =
     let root = mkRoot ()
+
     try
         writeItemYaml root "feat-a" [ "repo-1" ]
         writeTaskYaml root "feat-a" "feat-a" "feat-a" "feat-a" "repo-1" "approved"
 
         let store = TaskStoreAdapter() :> ITaskStore
+
         match store.ListAllTasks root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
             let taskId = TaskId.create "feat-a"
             let allTasksList = allTasks |> List.map fst
-            let taskYamlPath = allTasks |> List.tryFind (fun (t, _) -> t.Id = taskId) |> Option.map snd |> Option.defaultValue ""
-            match Tasks.Query.getDetail { TaskId = taskId; AllTasks = allTasksList; TaskYamlPath = taskYamlPath } with
+
+            let taskYamlPath =
+                allTasks
+                |> List.tryFind (fun (t, _) -> t.Id = taskId)
+                |> Option.map snd
+                |> Option.defaultValue ""
+
+            match
+                Tasks.Query.getDetail
+                    { TaskId = taskId
+                      AllTasks = allTasksList
+                      TaskYamlPath = taskYamlPath }
+            with
             | Error e -> failwithf "expected Ok, got Error: %A" e
             | Ok detail ->
                 let task = detail.Task
                 let createdAt = task.CreatedAt.ToString("yyyy-MM-dd")
                 let planExistsStr = if detail.PlanExists then "yes" else "no"
                 let planApprovedStr = if detail.PlanApproved then "yes" else "no"
+
                 let siblingsStr =
-                    if detail.Siblings.IsEmpty then "-"
-                    else detail.Siblings |> List.map (fun s -> TaskId.value s.Id) |> String.concat ","
+                    if detail.Siblings.IsEmpty then
+                        "-"
+                    else
+                        detail.Siblings |> List.map (fun s -> TaskId.value s.Id) |> String.concat ","
 
                 // Simulate text output: key\tvalue lines
                 let lines =
@@ -197,7 +252,11 @@ let ``task info text output contains key-value lines`` () =
                 for line in lines do
                     Assert.Contains("\t", line)
 
-                let toMap = lines |> List.map (fun l -> let p = l.Split('\t') in (p.[0], p.[1])) |> Map.ofList
+                let toMap =
+                    lines
+                    |> List.map (fun l -> let p = l.Split('\t') in (p.[0], p.[1]))
+                    |> Map.ofList
+
                 Assert.Equal("feat-a", toMap.["id"])
                 Assert.Equal("feat-a", toMap.["backlog"])
                 Assert.Equal("repo-1", toMap.["repo"])
@@ -216,6 +275,7 @@ let ``task info text output contains key-value lines`` () =
 [<Fact>]
 let ``backlog info text output contains key-value lines`` () =
     let root = mkRoot ()
+
     try
         writeItemYamlFull root "feat-a" [ "repo-1" ] (Some "medium")
 
@@ -242,12 +302,21 @@ let ``backlog info text output contains key-value lines`` () =
                 let summary = item.Summary |> Option.defaultValue ""
                 let ac = item.AcceptanceCriteria
                 let summaryStr = summary.Replace('\n', ' ').Replace('\r', ' ')
+
                 let acStr =
-                    if ac.IsEmpty then "-"
-                    else ac |> List.map (fun s -> s.Replace('\n', ' ').Replace('\r', ' ')) |> String.concat ","
+                    if ac.IsEmpty then
+                        "-"
+                    else
+                        ac
+                        |> List.map (fun s -> s.Replace('\n', ' ').Replace('\r', ' '))
+                        |> String.concat ","
+
                 let tasksStr =
-                    if detail.Tasks.IsEmpty then "-"
-                    else detail.Tasks |> List.map (fun t -> TaskId.value t.Id) |> String.concat ","
+                    if detail.Tasks.IsEmpty then
+                        "-"
+                    else
+                        detail.Tasks |> List.map (fun t -> TaskId.value t.Id) |> String.concat ","
+
                 let createdAt = item.CreatedAt.ToString("yyyy-MM-dd")
 
                 // Simulate text output (matches handler order)
@@ -271,7 +340,11 @@ let ``backlog info text output contains key-value lines`` () =
                 for line in lines do
                     Assert.Contains("\t", line)
 
-                let toMap = lines |> List.map (fun l -> let p = l.Split('\t') in (p.[0], p.[1])) |> Map.ofList
+                let toMap =
+                    lines
+                    |> List.map (fun l -> let p = l.Split('\t') in (p.[0], p.[1]))
+                    |> Map.ofList
+
                 Assert.Equal("feat-a", toMap.["id"])
                 Assert.Equal("Item feat-a", toMap.["title"])
                 Assert.Equal("medium", toMap.["priority"])
@@ -291,11 +364,13 @@ let ``backlog info text output contains key-value lines`` () =
 [<Fact>]
 let ``text output has no ANSI sequences`` () =
     let root = mkRoot ()
+
     try
         writeItemYaml root "feat-a" [ "repo-1" ]
         writeTaskYaml root "feat-a" "feat-a" "feat-a" "feat-a" "repo-1" "planning"
 
         let store = TaskStoreAdapter() :> ITaskStore
+
         match store.ListAllTasks root with
         | Error e -> failwithf "expected Ok, got Error: %A" e
         | Ok allTasks ->
